@@ -8,10 +8,26 @@ from torch import Tensor
 QualityMode = Literal["off", "raw", "full_group", "hard_valid"]
 
 
-def group_advantages(rewards: Tensor, group_size: int, eps: float = 1e-6) -> Tensor:
+def group_advantages(
+    rewards: Tensor,
+    group_size: int,
+    eps: float = 1e-6,
+    valid: Tensor | None = None,
+) -> Tensor:
     """Normalize scalar rewards in contiguous response groups using sample standard deviation."""
 
     groups = _groups(rewards, group_size)
+    if valid is not None:
+        if valid.dtype != torch.bool or valid.shape != rewards.shape:
+            raise ValueError("valid must be boolean and match rewards")
+        selected = valid.reshape_as(groups)
+        count = selected.sum(dim=-1, keepdim=True)
+        mask = selected.to(rewards.dtype)
+        mean = (groups * mask).sum(dim=-1, keepdim=True) / count.clamp_min(1)
+        var = ((groups - mean).square() * mask).sum(dim=-1, keepdim=True) / (count - 1).clamp_min(1)
+        std = var.sqrt()
+        out = torch.where((count >= 2) & (std > eps) & selected, (groups - mean) / (std + eps), 0.0)
+        return out.reshape_as(rewards)
     if group_size < 2:
         return torch.zeros_like(rewards)
     mean = groups.mean(dim=-1, keepdim=True)

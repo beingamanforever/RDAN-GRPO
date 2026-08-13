@@ -57,9 +57,10 @@ def test_rdan_pipeline_end_to_end() -> None:
     assert strict_rewards.aon[0] == 0
     assert not strict_quality.valid[0] and not strict_quality.hard_pass[0]
 
-    response = group_advantages(rewards.csr, group_size=4)
-    assert response[:4].mean().item() == pytest.approx(0.0, abs=1e-6)
-    assert response[:4].std().item() == pytest.approx(1.0, abs=1e-5)
+    response = group_advantages(rewards.csr, group_size=4, valid=rewards.valid)
+    assert response[:3].mean().item() == pytest.approx(0.0, abs=1e-6)
+    assert response[:3].std().item() == pytest.approx(1.0, abs=1e-5)
+    assert response[3].item() == 0.0
 
     token_mask = torch.tensor(
         [[True, True, True, True, False]] * 4
