@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "qwen_evidence",
+  "compact": {
+    "storage": "git",
+    "root": "results",
+    "required": [
+      "resolved_configs",
+      "environment_lock",
+      "model_hash",
+      "tokenizer_hash",
+      "data_hash",
+      "evaluator_hash",
+      "eval_cards",
+      "result_schema",
+      "sha256_manifest"
+    ]
+  },
+  "large": {
+    "storage": "huggingface",
+    "dataset_repository": "beingamanforever/RDAN-GRPO-Qwen3-4B-evidence",
+    "model_repository": "beingamanforever/RDAN-GRPO-Qwen3-4B",
+    "required": [
+      "raw_generations",
+      "judge_records",
+      "decomposed_rewards",
+      "decomposed_advantages",
+      "failure_records",
+      "checkpoints",
+      "bootstrap_samples"
+    ]
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "manifest_covers": "all_compact_and_large_artifacts"
+  }
+}

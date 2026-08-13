@@ -1,0 +1,47 @@
+{
+  "schema_version": 2,
+  "smoothing_window": 3,
+  "zero_tolerance": 0.000001,
+  "formats": ["svg", "png"],
+  "dpi": 120,
+  "eval_metrics": ["ifeval", "ifbench", "muldimif", "advancedif", "olympiad_avg4"],
+  "sensitivity_parameter": "token_beta",
+  "figures": {
+    "rtt_fig3_sensitivity": ["macro_instruction_following"],
+    "rtt_fig4_checkpoint_eval": [
+      "eval/ifeval",
+      "eval/ifbench",
+      "eval/muldimif",
+      "entropy",
+      "length",
+      "reward_selected"
+    ],
+    "rtt_fig5_training": ["rollout_accuracy", "entropy", "kl", "clip"],
+    "papo_fig2_reward_hacking": ["reward_selected", "length", "eval/olympiad_avg4"],
+    "papo_fig4_advantage_health": ["adv_zero_ratio", "adv_std", "adv_positive_ratio"],
+    "papo_fig8_correct_advantage": ["correct_adv_min", "correct_adv_std"],
+    "papo_fig9_advantage_components": [
+      "outcome_adv_std",
+      "process_adv_nonzero_std",
+      "process_active_group_ratio",
+      "correct_adv_mean",
+      "wrong_adv_mean"
+    ]
+  },
+  "stop_indicators": [
+    "format_collapse",
+    "no_hard_variance",
+    "zero_advantage",
+    "clip_saturated",
+    "calibration_invalid",
+    "evaluator_invalid",
+    "credit_leakage",
+    "token_invalid",
+    "nonfinite",
+    "halted"
+  ],
+  "paper_reference": {
+    "papo_fig9_process_active_final": 0.4844,
+    "papo_fig9_process_active_peak": 0.5234
+  }
+}

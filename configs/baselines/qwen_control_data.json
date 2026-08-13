@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "id": "qwen_reconstructed_control_data_v1",
+  "source": {
+    "dataset": "sastpg/HIR-16K",
+    "revision": "2a95f69eb56cc47edc16a45f939cde479673a4cb",
+    "path": "HIR_trainv1.jsonl",
+    "bytes": 53147812,
+    "records": 16968,
+    "sha256": "465a01c19dc29e2c8d1cf183ccf3135872f7ec94ef10b20b7eb35603164c183b",
+    "row_ids_sha256": "c65b58ecd4458858153bf4fdd37b83e7a99dba6e04c8fe2258b67ad933e42497"
+  },
+  "source_sha256": {
+    "hir_source": "465a01c19dc29e2c8d1cf183ccf3135872f7ec94ef10b20b7eb35603164c183b",
+    "hir_processed": "d6690a29cd4f24a3627dd8d48e78953191d0c97ad6acb92cdaf2bf5f1b67568a",
+    "taxonomy": "21cbabc011bad4637f78deea38d648ed3b1b740b7f2a57d64f38e73d8b3406ca"
+  },
+  "teacher": {
+    "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+    "catalog_url": "https://openrouter.ai/api/v1/models",
+    "public_alias": "openai/gpt-5.6-luna",
+    "model": "openai/gpt-5.6-luna-20260709",
+    "revision": "openai/gpt-5.6-luna-20260709",
+    "response_models": [
+      "openai/gpt-5.6-luna-20260709"
+    ],
+    "request": {
+      "max_tokens": 4096,
+      "seed": 240520,
+      "reasoning": {
+        "effort": "medium",
+        "exclude": true
+      },
+      "provider": {
+        "order": [
+          "openai"
+        ],
+        "only": [
+          "openai"
+        ],
+        "allow_fallbacks": false,
+        "require_parameters": true,
+        "data_collection": "deny",
+        "zdr": false
+      }
+    },
+    "required_parameters": [
+      "max_tokens",
+      "reasoning",
+      "seed"
+    ],
+    "timeout_seconds": 600,
+    "retry": {
+      "maximum_attempts": 3,
+      "backoff_seconds": [
+        1,
+        2
+      ]
+    },
+    "api_key_env": "OPENROUTER_API_KEY"
+  },
+  "candidates": {
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "served_name": "qwen3-4b-instruct-2507",
+    "request": {
+      "temperature": 0.99,
+      "top_p": 0.99,
+      "top_k": 100,
+      "max_tokens": 4096,
+      "seed": 240520,
+      "n": 8,
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "timeout_seconds": 600
+  },
+  "evidence": {
+    "authoritative_evaluator": {
+      "path": "configs/artifacts/hir_evaluator_certificate.json",
+      "id": "hir_evaluator_certificate_v1",
+      "sha256": "24cf5aa6d8cac4d45c8103f6555f0293721a2ac8120f489ff93bce0d9951d516"
+    },
+    "evaluator_implementation": {
+      "path": "configs/artifacts/hir_route_implementation.json",
+      "id": "hir_route_implementation_v1",
+      "sha256": "87a387b91fbba2f44c933931bfe40dab1c56127560d0a24717ec9195a0857e01"
+    },
+    "judge_calibration": {
+      "path": "configs/artifacts/qwen_judge_calibration.json",
+      "id": "qwen_judge_calibration_v1"
+    },
+    "leakage_detector": {
+      "path": "src/rdan_grpo/control_data.py",
+      "id": "control_data_exact_leakage_v1"
+    }
+  }
+}

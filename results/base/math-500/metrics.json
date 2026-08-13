@@ -1,0 +1,46 @@
+{
+  "benchmark": "math_500",
+  "correct": 2181,
+  "malformed": 246,
+  "micro_accuracy": 0.8724,
+  "per_completion": [
+    {
+      "accuracy": 0.872,
+      "completion_index": 0,
+      "correct": 436,
+      "seed": 1701,
+      "total": 500
+    },
+    {
+      "accuracy": 0.864,
+      "completion_index": 1,
+      "correct": 432,
+      "seed": 1702,
+      "total": 500
+    },
+    {
+      "accuracy": 0.878,
+      "completion_index": 2,
+      "correct": 439,
+      "seed": 1703,
+      "total": 500
+    },
+    {
+      "accuracy": 0.878,
+      "completion_index": 3,
+      "correct": 439,
+      "seed": 1704,
+      "total": 500
+    },
+    {
+      "accuracy": 0.87,
+      "completion_index": 4,
+      "correct": 435,
+      "seed": 1705,
+      "total": 500
+    }
+  ],
+  "schema_version": 1,
+  "total": 2500,
+  "truncated": 274
+}

@@ -1,9 +1,14 @@
+import copy
+import json
 import math
+from dataclasses import asdict, replace
+from pathlib import Path
 
 import pytest
 import torch
 
 from rdan_grpo import (
+    build_judge_request,
     clipped_actor_loss,
     compose_advantages,
     extract_quality,
@@ -12,9 +17,127 @@ from rdan_grpo import (
     score_rubrics,
     token_advantages,
 )
+from rdan_grpo.hir import audit_hir, classify_hir_row
+from rdan_grpo.program import ProgramContractError, check_program, validate_program
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_rdan_pipeline_end_to_end() -> None:
+    program = check_program(ROOT / "configs/program/qwen_first.json")
+    assert program.program["counts"] == {
+        "tuning_runs": 9,
+        "confirmation_runs": 27,
+        "trainable_runs": 36,
+        "evaluation_suites": 37,
+    }
+    secret = "sk-" + "or-v1-" + "x" * 24
+    broken = replace(program, judge=program.judge | {"api_key": secret})
+    with pytest.raises(ProgramContractError, match="literal credential field is forbidden"):
+        validate_program(broken)
+
+    changed = copy.deepcopy(program.data)
+    changed["source"]["sha256"] = "0" * 64
+    with pytest.raises(ProgramContractError, match="source manifest pin"):
+        validate_program(replace(program, data=changed))
+    changed = copy.deepcopy(program.taxonomy)
+    changed["static_rtt_route_audit"]["unsupported"] = 798
+    with pytest.raises(ProgramContractError, match="unsupported hard-route inventory"):
+        validate_program(replace(program, taxonomy=changed))
+    changed = copy.deepcopy(program.taxonomy)
+    changed["taxonomy_digest"]["sha256"] = "0" * 64
+    with pytest.raises(ProgramContractError, match="taxonomy hash"):
+        validate_program(replace(program, taxonomy=changed))
+    changed = copy.deepcopy(program.taxonomy)
+    changed["expected"]["hard"] -= 1
+    with pytest.raises(ProgramContractError, match="taxonomy counts"):
+        validate_program(replace(program, taxonomy=changed))
+    changed = copy.deepcopy(program.program)
+    changed["readiness"]["scalar_training"] = "blocked_until_route_partition_and_evaluator_certification"
+    with pytest.raises(ProgramContractError, match="unsupported hard routes must block scalar training"):
+        validate_program(replace(program, program=changed))
+    changed = copy.deepcopy(program.program)
+    changed["seeds"]["confirmation"][0] = changed["seeds"]["tuning"]
+    with pytest.raises(ProgramContractError, match="confirmation seeds are invalid|seeds must be disjoint"):
+        validate_program(replace(program, program=changed))
+    changed = copy.deepcopy(program.baselines)
+    changed["sft"]["readiness"] = "ready"
+    with pytest.raises(ProgramContractError, match="pending sft data must block training"):
+        validate_program(replace(program, baselines=changed))
+    changed = copy.deepcopy(program.compute)
+    changed["target_topology"]["count"] = 8
+    with pytest.raises(ProgramContractError, match="target A100 topology"):
+        validate_program(replace(program, compute=changed))
+    changed = copy.deepcopy(program.compute)
+    changed["cost_accounting"]["total_project_gpu_hours"] = 5100
+    with pytest.raises(ProgramContractError, match="GPU-hour accounting"):
+        validate_program(replace(program, compute=changed))
+    changed = copy.deepcopy(program.compute)
+    changed["run_matrix"]["runnable_benchmark_executions"] = 110
+    with pytest.raises(ProgramContractError, match="compute run matrix"):
+        validate_program(replace(program, compute=changed))
+
+    request = build_judge_request(
+        program.judge,
+        program.judge_prompt,
+        "Answer briefly.",
+        "Done.",
+        [{"id": 1, "text": "Be concise."}],
+        240520,
+    )
+    assert request["provider"] == {
+        "order": ["openai"],
+        "require_parameters": True,
+        "allow_fallbacks": False,
+        "data_collection": "deny",
+        "zdr": False,
+    }
+    assert request["model"] == "openai/gpt-5.6-luna"
+    assert all(parameter in request for parameter in program.judge["required_parameters"])
+    assert "api_key" not in request and "Answer briefly." in request["messages"][0]["content"]
+
+    fixture = [
+        {
+            "id": 1,
+            "source": "type1",
+            "criteria": ["Use two bullets."],
+            "ground_truth": {"instruction_id_list": ["format:bullets"], "kwargs": [{}]},
+        },
+        {
+            "id": 2,
+            "source": "type2",
+            "criteria": ["Use three pronouns."],
+            "ground_truth": {"instruction_id_list": ["count:pronouns"], "kwargs": [{"N": 3}]},
+        },
+        {
+            "id": 3,
+            "source": "type3",
+            "criteria": ["Use a table."],
+            "ground_truth": {"constraints": [["Format", "Table", "Use a table"]]},
+        },
+        {
+            "id": 4,
+            "source": "type4",
+            "criteria": ["End with done.", "Be concise."],
+            "ground_truth": {
+                "checker": ["[rule] Specific_Sentence: End with done.", "[llm] Style: Be concise."],
+                "functions": ["def check_following(): pass", "def check_following(): pass"],
+            },
+        },
+    ]
+    lines = [json.dumps(row) for row in fixture]
+    audit = asdict(audit_hir(lines))
+    assert audit["rows"] == 4 and audit["hard"] == 4 and audit["soft"] == 1
+    assert classify_hir_row(fixture[-1]) == (True, False)
+    invalid = fixture[-1] | {
+        "ground_truth": {
+            "checker": ["[unknown] End with done.", "[llm] Be concise."],
+            "functions": ["def check_following(): pass", "def check_following(): pass"],
+        }
+    }
+    with pytest.raises(ValueError, match="unknown type4 checker prefix"):
+        classify_hir_row(invalid)
+
     scores = torch.tensor(
         [
             [1.0, 1.0, -1.0, 1.0],
@@ -46,7 +169,7 @@ def test_rdan_pipeline_end_to_end() -> None:
     assert rewards.csr[0].item() == pytest.approx(0.75)
     assert rewards.signed_csr[0].item() == pytest.approx(0.5)
     assert rewards.csr[3].item() == rewards.signed_csr[3].item() == 0.0
-    assert quality.hard_pass[:8].tolist() == [True, True, False, False, True, False, False, False]
+    assert quality.hard_pass[:8].tolist() == [True, True, False, True, True, False, False, False]
     assert quality.quality[:4].tolist() == [0.5, 1.0, 1.0, 0.0]
     assert not quality.valid[3] and quality.quality[3] == 0
 
@@ -55,7 +178,7 @@ def test_rdan_pipeline_end_to_end() -> None:
     strict_rewards = score_rubrics(nonbinary, rubric_mask, eval_mask)
     strict_quality = extract_quality(nonbinary, rubric_mask, eval_mask, hard_mask)
     assert strict_rewards.aon[0] == 0
-    assert not strict_quality.valid[0] and not strict_quality.hard_pass[0]
+    assert strict_quality.quality_valid[0] and not strict_quality.hard_pass[0] and not strict_quality.eligible[0]
 
     response = group_advantages(rewards.csr, group_size=4, valid=rewards.valid)
     assert response[:3].mean().item() == pytest.approx(0.0, abs=1e-6)
@@ -84,10 +207,10 @@ def test_rdan_pipeline_end_to_end() -> None:
     expected = torch.tensor([[-math.sqrt(1.5), 0.0, math.sqrt(1.5), 0.0]])
     assert torch.allclose(example, expected, atol=2e-6)
 
-    q_off = quality_advantages(quality.quality, quality.hard_pass, group_size=4, mode="off")
-    q_raw = quality_advantages(quality.quality, quality.hard_pass, group_size=4, mode="raw")
-    q_full = quality_advantages(quality.quality, quality.hard_pass, group_size=4, mode="full_group")
-    q_subset = quality_advantages(quality.quality, quality.hard_pass, group_size=4, mode="hard_valid")
+    q_off = quality_advantages(quality.quality, quality.eligible, group_size=4, mode="off")
+    q_raw = quality_advantages(quality.quality, quality.eligible, group_size=4, mode="raw")
+    q_full = quality_advantages(quality.quality, quality.eligible, group_size=4, mode="full_group")
+    q_subset = quality_advantages(quality.quality, quality.eligible, group_size=4, mode="hard_valid")
     assert bool((q_off == 0).all())
     assert torch.equal(q_raw, quality.quality)
     assert torch.allclose(q_subset[:2], torch.tensor([-math.sqrt(0.5), math.sqrt(0.5)]), atol=3e-6)
@@ -96,6 +219,26 @@ def test_rdan_pipeline_end_to_end() -> None:
     assert bool((q_full[8:] == 0).all())
     assert quality_advantages(torch.tensor([0.2]), torch.tensor([True]), 1, mode="full_group").item() == 0
     assert q_raw[3] == 0 and q_full[3] <= 0 and q_subset[3] == 0
+
+    edge_scores = torch.tensor([[1.0, float("nan")], [-1.0, 1.0], [1.0, 0.0], [0.0, float("nan")]])
+    edge_mask = torch.tensor([[True, True], [True, True], [True, False], [False, True]])
+    edge_eval = torch.tensor([[True, False], [True, True], [True, False], [False, False]])
+    edge_hard = torch.tensor([[True, False], [True, False], [True, False], [False, False]])
+    edge = extract_quality(edge_scores, edge_mask, edge_eval, edge_hard)
+    assert edge.hard_pass.tolist() == [True, False, True, False]
+    assert edge.quality_valid.tolist() == [False, True, False, False]
+    assert edge.eligible.tolist() == [False, False, False, False]
+    assert edge.quality.tolist() == [0.0, 1.0, 0.0, 0.0]
+
+    soft_only = extract_quality(
+        torch.tensor([[1.0, 0.5]]),
+        torch.tensor([[True, True]]),
+        torch.tensor([[True, True]]),
+        torch.tensor([[False, False]]),
+    )
+    assert not soft_only.hard_pass.item()
+    assert soft_only.quality_valid.item()
+    assert not soft_only.eligible.item()
 
     rtt = (response.unsqueeze(-1) + 0.3 * token) * token_mask
     off = compose_advantages(response, token, q_off, token_mask, beta=0.3, quality_weight=0.7)

@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "id": "dpo_reconstructed",
+  "control_kind": "reconstructed_control",
+  "reproduction_claim": "not_rtt_paper_reproduction",
+  "initial_checkpoint": "qwen3_4b",
+  "data": {
+    "manifest_id": "pending",
+    "sha256": "pending",
+    "status": "pending",
+    "teacher": {
+      "model_id": "pending",
+      "revision": "pending"
+    },
+    "candidate_generation": {
+      "candidate_model": "qwen3_4b",
+      "candidate_revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "temperature": 0.99,
+      "top_p": 0.99,
+      "top_k": 100,
+      "max_new_tokens": 4096,
+      "seed": 240520,
+      "candidates_per_prompt": 8
+    },
+    "filtering": {
+      "preference_order": [
+        "authoritative_hard_pass",
+        "soft_quality",
+        "deterministic_tie_break"
+      ],
+      "require_distinct_pair": true,
+      "require_valid_preferred_soft_judgment": true,
+      "reject_ambiguous_ties": true,
+      "reject_prompt_or_reference_leakage": true,
+      "freeze_before_training": true
+    }
+  },
+  "training": {
+    "seed": {
+      "source": "program_confirmation_seed"
+    },
+    "hardware": {
+      "gpu_count": 1,
+      "first_gpu": "NVIDIA A10G",
+      "first_memory_gb": 24,
+      "fallback_memory_gb": 48,
+      "fallback_requires_sealed_gate_failure": true
+    },
+    "qlora": {
+      "bits": 4,
+      "quant_type": "nf4",
+      "double_quant": true,
+      "compute_dtype": "bfloat16",
+      "rank": 64,
+      "alpha": 128,
+      "dropout": 0.05,
+      "target_modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ]
+    },
+    "max_sequence_length": 4096,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.03,
+    "weight_decay": 0,
+    "max_grad_norm": 1,
+    "gradient_checkpointing": true,
+    "per_device_batch_size": 1,
+    "gradient_accumulation_steps": 16,
+    "optimizer": "paged_adamw_8bit",
+    "loss": {
+      "type": "sigmoid",
+      "beta": 0.1,
+      "reference_free": false,
+      "label_smoothing": 0
+    }
+  },
+  "readiness": "blocked_until_frozen_data_manifest"
+}
