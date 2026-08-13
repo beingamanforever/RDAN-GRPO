@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+/.local-rdan/
+/artifacts/
+/checkpoints/
+/data/
+/output/
+/wandb/
