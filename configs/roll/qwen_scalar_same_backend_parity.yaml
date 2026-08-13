@@ -1,0 +1,54 @@
+defaults:
+  - qwen_scalar_train
+  - _self_
+
+exp_name: qwen-rdan-same-backend-parity-s240520
+logging_dir: ./output/qwen-rdan-same-backend-parity-s240520/logs
+output_dir: ./output/qwen-rdan-same-backend-parity-s240520
+track_with: stdout
+tracker_kwargs: {}
+
+async_pipeline: false
+async_generation_ratio: 0
+generate_opt_level: 0
+is_num_return_sequences_expand: false
+max_steps: 1
+num_return_sequences_in_group: 8
+rewards: null
+
+actor_train:
+  worker_cls: rdan_grpo.roll_same_backend_live.ReceiptedFSDP2ActorWorker
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      transformer_impl: huggingface
+  device_mapping: [0, 1]
+  num_gpus_per_worker: 1
+  infer_batch_size: 1
+
+actor_infer:
+  worker_cls: rdan_grpo.roll_same_backend_live.ReceiptedSynchronousHFInferWorker
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    do_sample: true
+    max_new_tokens: ${response_length}
+    num_beams: 1
+    num_return_sequences: ${num_return_sequences_in_group}
+    temperature: 1.0
+    top_k: 0
+    top_p: 1.0
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config:
+      transformer_impl: huggingface
+  device_mapping: [0, 1]
+  num_gpus_per_worker: 1
+  max_concurrency: 1
+  infer_batch_size: 1

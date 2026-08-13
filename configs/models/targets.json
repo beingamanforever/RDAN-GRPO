@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-08-13",
+  "models": [
+    {
+      "id": "qwen3_4b",
+      "model": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "priority": 1,
+      "lane": "complete_qwen_first_program"
+    },
+    {
+      "id": "llama3_2_3b",
+      "model": "meta-llama/Llama-3.2-3B-Instruct",
+      "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "priority": 2,
+      "lane": "transfer_after_access_and_backend_parity"
+    },
+    {
+      "id": "granite3_1_2b",
+      "model": "ibm-granite/granite-3.1-2b-instruct",
+      "revision": "bbc2aed595bd38bd770263dc3ab831db9794441d",
+      "priority": 3,
+      "lane": "transfer_after_hf_or_fsdp_backend_parity"
+    },
+    {
+      "id": "ministral3_3b",
+      "model": "mistralai/Ministral-3-3B-Instruct-2512",
+      "revision": "b35d4dfe56c142746f54dbd64f579faab2744308",
+      "priority": 4,
+      "lane": "evaluation_only_until_runtime_migration"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "identity": {
+    "benchmark": "math_500",
+    "config_sha256": "2965482de1067f4bd364072adf5f46a1d6f9d50e31727a91c094cea9d57f416d",
+    "dataset_revision": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+    "dataset_sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132",
+    "harness": {
+      "ood.py": "7622b4f9ed28cc2b4f9cc8dfeb69ade9789160ae2407674a2c6653b4fd1b8147",
+      "run_ood_eval.py": "2999ec8086f6a55010cddb8e40a42d838e14f32c88f94b9bada5897324996cc6"
+    },
+    "model": {
+      "name": "Qwen/Qwen3-4B-Instruct-2507",
+      "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "snapshot_commit": "cdbee75f17c01a7cc42f958dc650907174af0554",
+      "snapshot_path": "/home/ubuntu/aman/RDAN-GRPO/cache/huggingface/hub/models--Qwen--Qwen3-4B-Instruct-2507/snapshots/cdbee75f17c01a7cc42f958dc650907174af0554"
+    },
+    "protocol_sha256": "b0b5852ebd3c649c7104e8a7ed7682ed948ca1cdcb5d861f454525388c8ebaed",
+    "renderer_sha256": "fd070514f6b20de55e5a2b6ef2387b4b9ee7ce5ef1d7b13ef37e059c3258a125",
+    "scorer": {
+      "antlr_version": "4.9.3",
+      "module": "/home/ubuntu/aman/rdan-ood-runtime/math-verify/src/math_verify/__init__.py",
+      "revision": "ba3d3aaff23b3f4cac7a14672b4f6e293d97c98b"
+    },
+    "server_sha256": "27840aa88da6219b52cf3594217054a9f713173b8c899f34a2da21456909b25e"
+  },
+  "sha256": "a844707cf5cef7469fe18c5ae98ba4ac60b2274efba86fe900dfdc93db53a437"
+}

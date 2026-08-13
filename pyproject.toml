@@ -8,10 +8,11 @@ version = "0.1.0"
 description = "A compact reward and advantage core for RDAN-GRPO experiments"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["torch>=2.1"]
+dependencies = ["datasets==3.1.0", "openai==2.20.0", "pyyaml>=6", "torch>=2.1"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.11"]
+dev = ["matplotlib>=3.8", "pytest>=8", "ruff>=0.11"]
+plots = ["matplotlib>=3.8"]
 
 [tool.ruff]
 line-length = 119

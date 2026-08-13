@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "benchmark": "ifeval",
+  "state": "identity_certified_but_generation_nondeterminism_unresolved",
+  "primary_run": "qwen-base-ifeval-certified-s42",
+  "records": 541,
+  "certified_primary": {
+    "strict_instruction_accuracy": 0.8391866913123844,
+    "loose_instruction_accuracy": 0.8724584103512015,
+    "artifact_manifest_sha256": "8477173851fc28562878a1550af79521b955696601fb715b462d8e8ec922d58c"
+  },
+  "initial_uncertified_run": {
+    "run": "qwen-base-ifeval-s42",
+    "strict_instruction_accuracy": 0.8317929759704251,
+    "loose_instruction_accuracy": 0.878003696857671
+  },
+  "concurrency_12_crosscheck": {
+    "run": "qwen-base-ifeval-crosscheck-s42",
+    "exact_response_matches": 106,
+    "different_responses": 435,
+    "strict_instruction_outcome_changes": 16,
+    "loose_instruction_outcome_changes": 13
+  },
+  "concurrency_4_crosscheck": {
+    "run": "qwen-base-ifeval-crosscheck-c4-s42",
+    "exact_response_matches": 108,
+    "different_responses": 433,
+    "strict_instruction_outcome_changes": 14,
+    "loose_instruction_outcome_changes": 16
+  },
+  "interpretation": "The pinned checkpoint and generation controls still produced hardware-sensitive response text, so trained methods must use the same certified runtime protocol and report sensitivity separately."
+}

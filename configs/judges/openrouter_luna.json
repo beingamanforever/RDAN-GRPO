@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "id": "openrouter_luna",
+  "provider": "openrouter",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "catalog_url": "https://openrouter.ai/api/v1/models",
+  "endpoints_url": "https://openrouter.ai/api/v1/models/openai/gpt-5.6-luna/endpoints",
+  "model": "openai/gpt-5.6-luna",
+  "expected_canonical_slug": "openai/gpt-5.6-luna-20260709",
+  "catalog_checked_on": "2026-08-13",
+  "api_key_env": "OPENROUTER_API_KEY",
+  "prompt": {
+    "path": "rubric_prompt.txt",
+    "sha256": "4ba60be95b42c143ddfa750220d35c0f93a547fcc33e078c73c30cee69512552"
+  },
+  "required_parameters": [
+    "max_tokens",
+    "reasoning_effort",
+    "response_format",
+    "seed"
+  ],
+  "catalog_snapshot": {
+    "context_length": 1050000,
+    "max_completion_tokens": 128000,
+    "pricing_per_token": {
+      "prompt": "0.0000001",
+      "completion": "0.0000006",
+      "input_cache_read": "0.00000001",
+      "input_cache_write": "0.000000125"
+    },
+    "supported_parameters": [
+      "include_reasoning",
+      "max_completion_tokens",
+      "max_tokens",
+      "reasoning",
+      "reasoning_effort",
+      "response_format",
+      "seed",
+      "structured_outputs",
+      "tool_choice",
+      "tools"
+    ]
+  },
+  "seed_source": "program_seed",
+  "request": {
+    "max_tokens": 2048,
+    "reasoning_effort_source": "calibration_certificate",
+    "one_call_per_response": true,
+    "include_all_soft_rubrics": true
+  },
+  "calibration": {
+    "reasoning_effort_candidates": [
+      "none",
+      "low",
+      "medium"
+    ],
+    "total_calls": 200,
+    "total_cases": 76,
+    "debug_canary_cases": 1,
+    "frozen_labeled_cases": 49,
+    "heldout_cases": 26,
+    "calls_per_labeled_case": 3,
+    "heldout_duplicates": 2,
+    "selection_rule": "paired_bootstrap_noninferiority_then_lowest_effort",
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 240520,
+    "noninferiority_margin": -0.02,
+    "freeze_selected_effort_before_training": true
+  },
+  "load_plan": {
+    "rollouts_per_rl_run": 256000,
+    "hir_rows": 16968,
+    "hir_rows_with_soft_rubrics": 6362,
+    "expected_soft_judge_calls_per_rl_run_ceiling": 95985,
+    "maximum_judge_calls_per_rl_run": 256000,
+    "measure_before_training": [
+      "input_tokens",
+      "output_tokens",
+      "p50_latency_seconds",
+      "p95_latency_seconds",
+      "invalid_rate",
+      "retry_rate"
+    ]
+  },
+  "routing": {
+    "order": [
+      "openai"
+    ],
+    "require_parameters": true,
+    "allow_fallbacks": false,
+    "data_collection": "deny",
+    "zdr": false
+  },
+  "preflight": {
+    "catalog_canonical_slug_must_equal": "openai/gpt-5.6-luna-20260709",
+    "request_model_must_equal": "openai/gpt-5.6-luna",
+    "provider_tag_must_equal": "openai",
+    "response_model_must_be_one_of": [
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.6-luna-20260709"
+    ]
+  },
+  "result_validation": {
+    "require_exact_rubric_ids": true,
+    "require_unique_rubric_ids": true,
+    "archive_per_judgment": [
+      "generation_id",
+      "selected_endpoint",
+      "provider",
+      "model",
+      "finish_reason",
+      "service_tier",
+      "schema_id",
+      "rubric_ids",
+      "tokens",
+      "reasoning_effort",
+      "latency_ms",
+      "cost",
+      "generation_metadata_polls",
+      "error",
+      "request_sha256"
+    ],
+    "refusal_or_transport_failure": "invalid_zero_credit",
+    "schema_failure": "invalid_zero_credit"
+  },
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "rubric_judgment",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rubrics"
+        ],
+        "properties": {
+          "rubrics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "score",
+                "reason"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "score": {
+                  "type": "integer",
+                  "enum": [
+                    -1,
+                    1
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,6 @@
 {
+  "schema_version": 1,
+  "id": "hir_16k",
   "dataset": "sastpg/HIR-16K",
   "revision": "2a95f69eb56cc47edc16a45f939cde479673a4cb",
   "license": "Apache-2.0",

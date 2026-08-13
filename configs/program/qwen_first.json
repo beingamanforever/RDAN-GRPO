@@ -1,0 +1,480 @@
+{
+  "artifact_config": "../artifacts/qwen_evidence.json",
+  "baseline_configs": {
+    "dpo": "../baselines/dpo_reconstructed.json",
+    "sft": "../baselines/sft_reconstructed.json"
+  },
+  "benchmarks": [
+    {
+      "enabled": true,
+      "id": "ifeval"
+    },
+    {
+      "enabled": true,
+      "id": "ifbench"
+    },
+    {
+      "enabled": true,
+      "id": "muldimif"
+    },
+    {
+      "blocked_until": "adapter_and_evaluator_certification",
+      "enabled": false,
+      "id": "advancedif"
+    },
+    {
+      "enabled": true,
+      "id": "math_500",
+      "scope": "evaluation_only_ood"
+    },
+    {
+      "enabled": true,
+      "execution_state": "blocked_gated_access",
+      "id": "gpqa",
+      "scope": "evaluation_only_ood",
+      "transition_gate": "revision_hash_and_access_manifest_frozen"
+    },
+    {
+      "enabled": true,
+      "id": "mmlu_pro",
+      "scope": "evaluation_only_ood"
+    }
+  ],
+  "compute_config": "../compute/qwen_a100_2x.json",
+  "counts": {
+    "confirmation_runs": 27,
+    "evaluation_suites": 37,
+    "trainable_runs": 36,
+    "tuning_runs": 9
+  },
+  "data_config": "../data/hir.json",
+  "eval_config": "../eval/benchmarks.json",
+  "execution_priority": [
+    {
+      "methods": [
+        "rtt_papo_response"
+      ],
+      "stage": "rtt_papo_response",
+      "status": "blocked_until_no_update_gates_pass",
+      "token_beta": 0
+    },
+    {
+      "methods": [
+        "rl_csr"
+      ],
+      "stage": "rl_csr",
+      "status": "blocked_until_rtt_papo_response_evidence"
+    },
+    {
+      "methods": [
+        "rl_aon"
+      ],
+      "stage": "rl_aon",
+      "status": "blocked_until_rl_csr_evidence"
+    },
+    {
+      "methods": [
+        "rl_mix"
+      ],
+      "stage": "response_mix",
+      "status": "blocked_until_rl_aon_evidence"
+    },
+    {
+      "produces": "frozen_token_labels",
+      "stage": "token_label_generation",
+      "status": "blocked_until_response_only_program_pass"
+    },
+    {
+      "consumes": "frozen_token_labels",
+      "produces": "cross_linked_discriminator_checkpoint",
+      "stage": "discriminator_training",
+      "status": "blocked_until_token_labels_frozen"
+    },
+    {
+      "consumes": "cross_linked_discriminator_checkpoint",
+      "produces": "discriminator_certificate",
+      "stage": "discriminator_certification",
+      "status": "blocked_until_discriminator_checkpoint_frozen"
+    },
+    {
+      "methods": [
+        "rtt_aon",
+        "rtt_csr"
+      ],
+      "stage": "token_policy_runs",
+      "status": "blocked_until_discriminator_certification"
+    },
+    {
+      "methods": [
+        "rdan_full"
+      ],
+      "stage": "full_rdan",
+      "status": "blocked_until_rtt_aon_and_rtt_csr_evidence"
+    }
+  ],
+  "hard_route_policy": {
+    "evaluator_certificate": {
+      "certificate_id": "hir_evaluator_certificate_v1",
+      "path": "configs/artifacts/hir_evaluator_certificate.json",
+      "sha256": "b84dfd35fe48723c9d47b24f61299c681bbf417d1f721c71a4d336afd24fb408",
+      "status": "frozen"
+    },
+    "exclusion_manifest": {
+      "manifest_id": "hir_hard_route_exclusions_v1",
+      "path": "configs/artifacts/hir_hard_route_exclusions.json",
+      "sha256": "313a6eb9030db5c536ae6a6f85d141ce62891cff06c3a1cb241398160728c632",
+      "status": "frozen"
+    },
+    "implementation_manifest": {
+      "manifest_id": "hir_route_implementation_v1",
+      "path": "configs/artifacts/hir_route_implementation.json",
+      "sha256": "af54813451e0dfb480b64b2f399ad60fdc3563bacdce69f88291f5533394761a",
+      "status": "frozen"
+    },
+    "route_resolution": {
+      "path": "configs/artifacts/hir_route_resolution.json",
+      "sha256": "7f29fa1b4029e88f6c8fc46212029a2d1104a2ac933725b7d22937c50ad69a03",
+      "status": "frozen"
+    }
+  },
+  "id": "qwen_first",
+  "judge_config": "../judges/openrouter_luna.json",
+  "launch_train_config": {
+    "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
+    "preflight_sha256": "e4bd887cc4135cc94ac8a06c2500f53ccffa656ad3e7fdd0290c9c399e8ab278",
+    "purpose": "500_step_recipe_with_stop_after_step_pilot_gate",
+    "sha256": "48e67c466ea3914951322d68313c8b92fe3ff541eb0e8d5d9f4f62ce4230c3c8"
+  },
+  "lifecycle_artifacts": {
+    "discriminator_certificate": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_discriminator_certificate.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "discriminator_checkpoint": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_discriminator_checkpoint.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "gpqa_access": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/gpqa_access.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "judge_calibration": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_judge_calibration.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "no_update": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_no_update_certificate.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "response_data": {
+      "artifact_id": "qwen_hir_rubrichub_if_hybrid_v1",
+      "path": "configs/artifacts/qwen_merged_rl_data_manifest.json",
+      "sha256": "33f8e027e5186159c36cef48d877de7c053374e351240d04b1916f6be6ea4810",
+      "status": "frozen"
+    },
+    "runtime_parity": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_runtime_parity.json",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "scalar_data": {
+      "artifact_id": "qwen_scalar_data_v1",
+      "path": "configs/artifacts/qwen_scalar_data_manifest.json",
+      "sha256": "1b3aa62fdb51f99120cdf67b20a2f0baeda70159831c14528807eb6732eae3fa",
+      "status": "frozen"
+    },
+    "token_labels": {
+      "artifact_id": "pending",
+      "path": "configs/artifacts/qwen_token_labels.json",
+      "sha256": "pending",
+      "status": "pending"
+    }
+  },
+  "methods": [
+    {
+      "id": "base",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "none"
+      },
+      "trainable": false
+    },
+    {
+      "id": "rl_aon",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "off",
+        "quality_weight": 0,
+        "response_normalization": "group_once",
+        "response_reward": "aon",
+        "token_beta": 0
+      },
+      "trainable": true
+    },
+    {
+      "id": "rl_csr",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "off",
+        "quality_weight": 0,
+        "response_normalization": "group_once",
+        "response_reward": "csr",
+        "token_beta": 0
+      },
+      "trainable": true
+    },
+    {
+      "id": "rl_mix",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "off",
+        "quality_weight": 0,
+        "response_mix": {
+          "aon_weight_candidates": [
+            0.25,
+            0.5,
+            0.75
+          ],
+          "aon_weight_source": "dev_selection",
+          "csr_weight": "one_minus_aon"
+        },
+        "response_normalization": "group_once_after_raw_mix",
+        "response_reward": "aon_csr_raw_mix",
+        "token_beta": 0
+      },
+      "trainable": true
+    },
+    {
+      "id": "rtt_papo_response",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "hard_valid_conditional_with_soft_only_extension",
+        "quality_weight": {
+          "candidates": [
+            0.25,
+            0.5,
+            1.0
+          ],
+          "source": "dev_selection"
+        },
+        "response_normalization": "group_once",
+        "response_reward": "aon_with_vacuous_soft_only_gate",
+        "token_beta": 0
+      },
+      "trainable": true
+    },
+    {
+      "id": "sft",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "sft"
+      },
+      "trainable": true
+    },
+    {
+      "id": "dpo",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "dpo"
+      },
+      "trainable": true
+    },
+    {
+      "id": "rtt_aon",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "off",
+        "quality_weight": 0,
+        "response_normalization": "group_once",
+        "response_reward": "aon",
+        "token_beta": 0.5
+      },
+      "trainable": true
+    },
+    {
+      "id": "rtt_csr",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "off",
+        "quality_weight": 0,
+        "response_normalization": "group_once",
+        "response_reward": "csr",
+        "token_beta": 0.5
+      },
+      "trainable": true
+    },
+    {
+      "id": "rdan_full",
+      "initial_checkpoint": "qwen3_4b",
+      "objective": {
+        "kind": "rl",
+        "quality": "hard_valid_conditional",
+        "quality_weight": {
+          "candidates": [
+            0.25,
+            0.5,
+            1.0
+          ],
+          "source": "dev_selection"
+        },
+        "response_normalization": "group_once",
+        "response_reward": "aon",
+        "token_beta": 0.5
+      },
+      "trainable": true
+    }
+  ],
+  "model_config": "../models/qwen3_4b.json",
+  "ood_evaluation": {
+    "aggregation": "average_accuracy_across_independent_completions",
+    "chat_template": "model_default",
+    "checkpoint_scope": "selected_checkpoints_only",
+    "completion_sampling": "independent_per_item",
+    "dataset_scope": "full_official_dataset",
+    "generation": {
+      "completions_per_item": 5,
+      "temperature": 0.7,
+      "top_k": 20,
+      "top_p": 0.8
+    },
+    "parsing": "benchmark_primary_strict_scorer",
+    "phase": "post_training_evaluation_only",
+    "prompt_source": "RTT Table 7",
+    "protocol_source": "RTT Appendix B.1 and Table 7",
+    "selection_use": "forbidden"
+  },
+  "pilot": {
+    "gates": {
+      "clipped_ratio_must_be_below": 1.0,
+      "hard_invalid_positive_quality_credit": 0,
+      "minimum_active_quality_group_rate": 0.1,
+      "reject_quality_gain_with_authoritative_accuracy_loss": true,
+      "require_checkpoint": true,
+      "require_finite_gradients": true,
+      "require_nonzero_useful_reward_variance": true,
+      "require_resume_generation": true
+    },
+    "preflight": {
+      "optimizer_updates": 0,
+      "prompt_count": {
+        "maximum": 1024,
+        "minimum": 256
+      },
+      "responses_per_prompt": 8
+    },
+    "steps": 20
+  },
+  "readiness": {
+    "advancedif": "blocked_until_adapter_and_evaluator_certification",
+    "baselines": "blocked_until_frozen_data_manifests",
+    "candidate_tuning": "blocked_until_frozen_dev_split",
+    "confirmation": "blocked_until_immutable_selection_artifact",
+    "gpqa": "blocked_until_revision_hash_and_access_manifest_frozen",
+    "judge": "blocked_until_frozen_calibration",
+    "launch": "blocked_until_all_launch_artifacts_frozen",
+    "scalar_training": "ready",
+    "token_training": "blocked_until_labels_discriminator_and_scalar_program_pass"
+  },
+  "rl_recipe": {
+    "clip_high": 0.27,
+    "clip_low": 0.2,
+    "dtype": "bf16",
+    "generation": {
+      "temperature": 0.99,
+      "top_k": 100,
+      "top_p": 0.99
+    },
+    "group_size": 8,
+    "kl_coefficient": 0,
+    "learning_rate": 1e-06,
+    "max_model_len": 8000,
+    "max_steps": 500,
+    "ppo_epochs": 1,
+    "prompt_length": 2048,
+    "response_length": 4096,
+    "rollout_batch_size": 64,
+    "save_steps": 20,
+    "source_repository": "https://github.com/TURLEing/Rubrics-To-Tokens",
+    "source_revision": "b1ab2fba9bece98674e5fa6e6c808d9d63235778",
+    "warmup_steps": 20,
+    "weight_decay": 0
+  },
+  "same_backend_configs": {
+    "diagnostic": {
+      "path": "configs/roll/qwen_rtt_papo_response_parity.yaml",
+      "sha256": "debdef5089dba32317610a0248a2b491e3ce596ccdc7da76d90c32cddbf6ed3e"
+    },
+    "production": {
+      "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
+      "sha256": "48e67c466ea3914951322d68313c8b92fe3ff541eb0e8d5d9f4f62ce4230c3c8",
+      "status": "frozen"
+    }
+  },
+  "schema_version": 1,
+  "seeds": {
+    "confirmation": [
+      240521,
+      240522,
+      240523
+    ],
+    "tuning": 240520
+  },
+  "selection": {
+    "candidates": {
+      "rdan_full": [
+        0.25,
+        0.5,
+        1.0
+      ],
+      "rl_mix": [
+        0.25,
+        0.5,
+        0.75
+      ],
+      "rtt_papo_response": [
+        0.25,
+        0.5,
+        1.0
+      ]
+    },
+    "dev_split": {
+      "manifest_id": "pending",
+      "path": "configs/artifacts/qwen_dev_split.json",
+      "required_status": "frozen",
+      "sha256": "pending",
+      "status": "pending"
+    },
+    "immutable_artifact": {
+      "artifact_id": "pending",
+      "must_record": [
+        "dev_split_manifest",
+        "candidate_metrics",
+        "selected_values",
+        "selection_rule",
+        "created_at_utc"
+      ],
+      "path": "configs/artifacts/qwen_selection.json",
+      "sha256": "pending",
+      "status": "pending"
+    }
+  },
+  "targets_config": "../models/targets.json",
+  "taxonomy_config": "../data/hir_taxonomy.json"
+}

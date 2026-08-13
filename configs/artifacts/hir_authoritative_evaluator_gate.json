@@ -1,0 +1,21 @@
+{
+  "blocked_sources": {
+    "type1": "official benchmark tests are not linked by parity evidence to every RTT reward route",
+    "type2": "official benchmark tests are not linked by parity evidence to every RTT reward route",
+    "type3": "no labeled family test corpus or reward-route parity evidence is present in pinned RTT"
+  },
+  "certified_families": [
+    {
+      "route": "embedded_check_following",
+      "source": "type4"
+    }
+  ],
+  "counts": {
+    "blocked_families": 43,
+    "certified_families": 1
+  },
+  "id": "hir_authoritative_evaluator_gate_v1",
+  "schema_version": 1,
+  "status": "certified_subset",
+  "type4_certificate_sha256": "bc4940823fe1e39568612fcf190d9d8119b1fb5196169af287705a1baa77ce91"
+}

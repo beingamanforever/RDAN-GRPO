@@ -1,0 +1,115 @@
+defaults:
+  - qwen_scalar_train
+  - _self_
+
+exp_name: qwen-rtt-papo-response-train-s240520
+logging_dir: ./output/qwen-rtt-papo-response-train-s240520/logs
+output_dir: ./output/qwen-rtt-papo-response-train-s240520
+rollout_dump_dir: ./.local-rdan/rollouts/qwen-rtt-papo-response-train-s240520
+checkpoint_config:
+  type: file_system
+  output_dir: ./.local-rdan/checkpoints/qwen-rtt-papo-response-train-s240520
+track_with: rdan_wandb
+tracker_kwargs: {}
+
+async_pipeline: false
+async_generation_ratio: 0
+generate_opt_level: 0
+is_num_return_sequences_expand: false
+enable_reference: false
+enable_old_logprobs_recompute: true
+init_kl_coef: 0
+rollout_batch_size: 64
+num_return_sequences_in_group: 8
+max_steps: 500
+save_steps: 20
+
+pretrain: ${oc.env:RDAN_MODEL_SNAPSHOT}
+actor_train:
+  worker_cls: rdan_grpo.roll_response_workers.ResponseActorWorker
+  model_args:
+    model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: false
+    dtype: bf16
+  training_args:
+    learning_rate: 1.0e-6
+    weight_decay: 0
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 32
+    warmup_steps: 20
+    num_train_epochs: 50
+  data_args:
+    template: qwen3_nothinking
+    file_name: [data/qwen_hir_rubrichub_if_hybrid.jsonl]
+    domain_interleave_probs:
+      llm_judge: 1.0
+    dataset_dir: .
+    messages: messages
+    interleave_probs: "1.0"
+    preprocessing_num_workers: 16
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      transformer_impl: huggingface
+  device_mapping: [0, 1]
+  world_size: 2
+  num_gpus_per_worker: 1
+  infer_batch_size: 4
+
+actor_infer:
+  worker_cls: rdan_grpo.roll_response_workers.ResponseInferWorker
+  model_args:
+    model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    do_sample: true
+    max_new_tokens: ${response_length}
+    num_beams: 1
+    num_return_sequences: ${num_return_sequences_in_group}
+    temperature: 1.0
+    top_k: 0
+    top_p: 1.0
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config:
+      transformer_impl: huggingface
+  device_mapping: [0, 1]
+  world_size: 2
+  num_gpus_per_worker: 1
+  max_concurrency: 1
+  infer_batch_size: 4
+
+rewards:
+  llm_judge:
+    worker_cls: rdan_grpo.roll_reward.RTTCompatibleRubricRewardWorker
+    world_size: 8
+    device_mapping: null
+    max_concurrency: 1
+    judge_model_type: api
+    judge_model_name: openai/gpt-5.6-luna
+    judge_api_url: https://openrouter.ai/api/v1
+    tag_included: [llm_judge]
+    model_args:
+      model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
+      disable_gradient_checkpointing: true
+      dtype: bf16
+    generating_args:
+      max_new_tokens: 512
+      top_p: 0.01
+      top_k: 1
+      num_beams: 1
+      temperature: 0.01
+      num_return_sequences: 1
+    data_args:
+      template: native
+    strategy_args:
+      strategy_name: hf_infer
+    infer_batch_size: 8
+
+rdan_response:
+  method: rtt_papo_response
+  quality_weight: 0.5
+  mix_weight: null

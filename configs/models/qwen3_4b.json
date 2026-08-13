@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "qwen3_4b",
+  "source": "huggingface",
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+  "architecture": {
+    "parameters": 4022468096,
+    "dtype": "bfloat16",
+    "layers": 36,
+    "hidden_size": 2560,
+    "attention_heads": 32,
+    "kv_heads": 8,
+    "head_dim": 128,
+    "native_context": 262144
+  },
+  "runtime": {
+    "transformers_minimum": "4.51.0",
+    "vllm_minimum": "0.8.5",
+    "rtt_released_vllm": "0.8.4",
+    "status": "requires_parity_proven_runtime_lock"
+  },
+  "tokenizer": {
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "use_fast": true
+  },
+  "chat_template": {
+    "source": "pinned_tokenizer",
+    "enable_thinking": false
+  }
+}

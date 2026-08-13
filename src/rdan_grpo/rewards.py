@@ -18,11 +18,17 @@ class RubricRewards:
 
 @dataclass(frozen=True)
 class QualityScores:
-    """Hard-pass eligibility, soft quality, and evaluator validity per response."""
+    """Independent hard and soft validity, soft quality, and conditional eligibility."""
 
     hard_pass: Tensor
     quality: Tensor
-    valid: Tensor
+    quality_valid: Tensor
+    eligible: Tensor
+
+    @property
+    def valid(self) -> Tensor:
+        """Return soft-quality validity for compatibility with the original API."""
+        return self.quality_valid
 
 
 def score_rubrics(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor) -> RubricRewards:
@@ -48,9 +54,9 @@ def score_rubrics(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor) -> Rub
 def extract_quality(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor, hard_mask: Tensor) -> QualityScores:
     """Extract deterministic hard-pass eligibility and mean unit soft quality.
 
-    The rubric configuration must contain at least one hard and one soft rubric.
-    Each response must also activate at least one rubric of each kind.
-    Evaluator failures and malformed active scores invalidate the response and force its quality to zero.
+    Hard-only responses can pass but are not quality-eligible because they have no soft score.
+    Soft-only responses cannot pass the independent authoritative gate and are never quality-eligible.
+    Hard evaluator failure affects only ``hard_pass`` and soft judge failure affects only ``quality_valid``.
     """
 
     _check_score_inputs(scores, rubric_mask, eval_mask)
@@ -59,14 +65,22 @@ def extract_quality(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor, hard
 
     hard = rubric_mask & hard_mask
     soft = rubric_mask & ~hard_mask
-    hard_binary = ((scores == -1) | (scores == 1) | ~hard).all(dim=-1)
-    valid = _response_valid(scores, rubric_mask, eval_mask) & hard.any(dim=-1) & soft.any(dim=-1) & hard_binary
-    hard_pass = valid & ((scores == 1) | ~hard).all(dim=-1)
+    active = rubric_mask.any(dim=-1)
+    hard_valid = ((eval_mask & torch.isfinite(scores) & ((scores == -1) | (scores == 1))) | ~hard).all(dim=-1)
+    hard_pass = active & hard.any(dim=-1) & hard_valid & ((scores == 1) | ~hard).all(dim=-1)
+    quality_valid = soft.any(dim=-1) & (
+        (eval_mask & torch.isfinite(scores) & (scores >= -1) & (scores <= 1)) | ~soft
+    ).all(dim=-1)
     count = soft.sum(dim=-1).clamp_min(1)
     unit = torch.where(soft & torch.isfinite(scores), (scores + 1.0) / 2.0, 0.0)
     quality = unit.sum(dim=-1) / count
-    quality = torch.where(valid, quality, 0.0)
-    return QualityScores(hard_pass=hard_pass, quality=quality, valid=valid)
+    quality = torch.where(quality_valid, quality, 0.0)
+    return QualityScores(
+        hard_pass=hard_pass,
+        quality=quality,
+        quality_valid=quality_valid,
+        eligible=hard_pass & quality_valid,
+    )
 
 
 def _check_score_inputs(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor) -> None:

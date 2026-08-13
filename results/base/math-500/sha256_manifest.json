@@ -1,0 +1,31 @@
+{
+  "algorithm": "sha256",
+  "files": [
+    {
+      "bytes": 483,
+      "path": "command.json",
+      "sha256": "ac1acf6d6aaf6cc5f0c9aa691a1bb067bcabe327bc8350761b39435cc52b1dd4"
+    },
+    {
+      "bytes": 822,
+      "path": "metrics.json",
+      "sha256": "02d10e3be83fba0658c87da47b2c478e2eca59af555e201a0b1f29acdcada42e"
+    },
+    {
+      "bytes": 10713583,
+      "path": "records.jsonl",
+      "sha256": "f0d156b0cf4f5847d27c3286cabc97b1302ccb7e090a26707c116985d3af35a3"
+    },
+    {
+      "bytes": 1064,
+      "path": "rescore.json",
+      "sha256": "6b9a71f639aee6f94c8bb0a8f35623a264fb03454673a6febbf2fd854f2e2aee"
+    },
+    {
+      "bytes": 1421,
+      "path": "resume_identity.json",
+      "sha256": "b0945b8b157dfbd99582318b0bddec7ed1eaedaed792e913150207e7a64e5d98"
+    }
+  ],
+  "schema_version": 1
+}

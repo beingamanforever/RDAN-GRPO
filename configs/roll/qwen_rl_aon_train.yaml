@@ -1,0 +1,16 @@
+defaults:
+  - qwen_rtt_papo_response_train
+  - _self_
+
+exp_name: qwen-rl-aon-train-s240520
+logging_dir: ./output/qwen-rl-aon-train-s240520/logs
+output_dir: ./output/qwen-rl-aon-train-s240520
+rollout_dump_dir: ./.local-rdan/rollouts/qwen-rl-aon-train-s240520
+checkpoint_config:
+  type: file_system
+  output_dir: ./.local-rdan/checkpoints/qwen-rl-aon-train-s240520
+
+rdan_response:
+  method: rl_aon
+  quality_weight: null
+  mix_weight: null

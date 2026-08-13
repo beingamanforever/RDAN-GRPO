@@ -1,0 +1,39 @@
+defaults:
+  - qwen_rl_aon_train
+  - _self_
+
+exp_name: qwen-rl-aon-preflight-s240520
+logging_dir: ./output/qwen-rl-aon-preflight-s240520/logs
+output_dir: ./output/qwen-rl-aon-preflight-s240520
+track_with: stdout
+tracker_kwargs: {}
+max_steps: 0
+generate_opt_level: 0
+force_disable_old_logprobs_recompute: true
+actor_train:
+  device_mapping: "[]"
+validation:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    max_new_tokens: ${response_length}
+    top_p: 0.99
+    top_k: 100
+    num_beams: 1
+    temperature: 0.99
+    num_return_sequences: 8
+  data_args:
+    template: qwen3_nothinking
+    file_name: [data/qwen_hir_rubrichub_if_hybrid.jsonl]
+    messages: messages
+    preprocessing_num_workers: 16
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config:
+      transformer_impl: huggingface
+  infer_batch_size: 4
+hydra:
+  run:
+    dir: .
+  output_subdir: null

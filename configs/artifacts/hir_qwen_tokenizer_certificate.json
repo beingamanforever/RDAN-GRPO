@@ -1,0 +1,107 @@
+{
+  "evidence": {
+    "bytes": 4399216,
+    "path": "data/hir-certificates/hir_qwen_tokenizer_evidence.jsonl",
+    "records": 16968,
+    "sha256": "3e02d2b954843214faf5a449ae0c5f8f4363cda27f4995b88797a660be0ec509"
+  },
+  "generator": {
+    "path": "scripts/certify_hir_tokenizer.py",
+    "sha256": "d758b750abe305985cdc60627945bafa9fdc58d8fab99de845135123ed0fb3c7"
+  },
+  "id": "hir_qwen3_4b_instruct_2507_tokenizer_v1",
+  "results": {
+    "accepted": 16962,
+    "accepted_row_ids_sha256": "8eb0105c5767e4709ad54dc53a2d78d483bc160a272ba4aac9bec220c5cea07c",
+    "input_row_ids_sha256": "c65b58ecd4458858153bf4fdd37b83e7a99dba6e04c8fe2258b67ad933e42497",
+    "input_rows": 16968,
+    "largest_accepted_input_tokens": 2008,
+    "rejected": 6,
+    "rejected_rows": [
+      {
+        "accepted": false,
+        "input_ids_sha256": "e68c57cd1840cb05f9ce0ee8a94d05842837c56b3fbfac9ee6640d2994c79b52",
+        "input_tokens": 2330,
+        "messages_sha256": "64075e4a06f3690623036ad70324d3bb7f77f9ecad04bc358b37e8519e55ebae",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 9604,
+        "source": "type3"
+      },
+      {
+        "accepted": false,
+        "input_ids_sha256": "fe8f4445579fe50a9951dfd92932ab9ca76211c4944edc8bc6966880deaacca1",
+        "input_tokens": 2064,
+        "messages_sha256": "1309512946f3b8b1c839b0dd181be2d9bd984dee247622fe0f9c31dfd2563e97",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 9776,
+        "source": "type3"
+      },
+      {
+        "accepted": false,
+        "input_ids_sha256": "00296e5120f2813eed815ba185c26d28184dc3c9a6819a061f00e386580205c5",
+        "input_tokens": 2053,
+        "messages_sha256": "12c74fe02ef92b9dec6c0327bff4ea1de39e8c66c5d66889a7f2ee2e3ea3fa52",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 9854,
+        "source": "type3"
+      },
+      {
+        "accepted": false,
+        "input_ids_sha256": "7d0d843ca0c7a4a07ab2a439eb9e9b8215f91e03572f6deb838b29fd312afc2b",
+        "input_tokens": 2432,
+        "messages_sha256": "55d2dc4a977c7fe2fca10b55038718f87f7aee3dba06afc002430e2b9507d1d8",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 9943,
+        "source": "type3"
+      },
+      {
+        "accepted": false,
+        "input_ids_sha256": "65561ce0ab8df30f4e9bc176c7eedc39f45582443e4b4b21ac1dc07da459692d",
+        "input_tokens": 2269,
+        "messages_sha256": "82efed728c2e3ca09c62fabbe25798b4732fe54de042084c67da7ac3d875dae1",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 10531,
+        "source": "type3"
+      },
+      {
+        "accepted": false,
+        "input_ids_sha256": "5cd39f1a66633829d158b291b55d60beb9c0ad21be459a2ac1607d9968f0e5d1",
+        "input_tokens": 2610,
+        "messages_sha256": "01fd8aef3f236054e6270977f36b614066cf1d34a75803e93078fc58956724e5",
+        "reason": "input_tokens_exceed_prompt_length",
+        "row_id": 11279,
+        "source": "type4"
+      }
+    ]
+  },
+  "runtime": {
+    "implementation": "CPython",
+    "python": "3.11.15",
+    "transformers": "4.57.0"
+  },
+  "schema_version": 1,
+  "source": {
+    "bytes": 99445903,
+    "path": "data/HIR_trainv1_rubrics_processed.jsonl",
+    "records": 16968,
+    "sha256": "d6690a29cd4f24a3627dd8d48e78953191d0c97ad6acb92cdaf2bf5f1b67568a"
+  },
+  "status": "frozen",
+  "tokenizer": {
+    "acceptance": "5 < input_tokens <= 2048",
+    "chat_template": {
+      "add_generation_prompt": true,
+      "enable_thinking": false,
+      "messages": "one_user_message",
+      "tokenize": false,
+      "tokenizer_add_special_tokens": true
+    },
+    "files_sha256": {
+      "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "tokenizer_config.json": "a62ff0a2472a0fa1b8eaabcb57c59b58afa42a22831dc141400b6e0cf2b65ce3"
+    },
+    "model": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554",
+    "transformers_version": "4.57.0"
+  }
+}

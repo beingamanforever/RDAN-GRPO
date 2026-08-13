@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "rtt_source": {
+    "repository": "https://github.com/TURLEing/Rubrics-To-Tokens",
+    "revision": "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
+  },
+  "benchmarks": [
+    {
+      "id": "ifeval",
+      "records": 541,
+      "input_path": "Benchmark/instruction_following_eval/data/input_data.jsonl",
+      "sha256": "67ffeee0fcb87c317c5b08a2de85557b4a7e96ada6178aa645b4954fe4b53d49",
+      "data_license": "Apache-2.0",
+      "enabled": true
+    },
+    {
+      "id": "ifbench",
+      "records": 294,
+      "input_path": "Benchmark/IFBench/data/IFBench_test.jsonl",
+      "sha256": "11c3d683dcc7f4908a4d3cacd05c9a8bbd5484af2f8fde969e7abe2b8bad3e34",
+      "data_license": "ODC-BY-1.0",
+      "enabled": true
+    },
+    {
+      "id": "muldimif",
+      "records": 1200,
+      "input_path": "Benchmark/MulDimIF/Data/test.json",
+      "sha256": "37de38b3eb8eec449f3f95dcc0bb0b4fa63a9351988a44d7b232d13348711c5b",
+      "data_license": "CC-BY-4.0",
+      "enabled": true
+    },
+    {
+      "id": "advancedif",
+      "records": 1645,
+      "repository": "https://github.com/facebookresearch/AdvancedIF",
+      "repository_revision": "f9d30137c4139d4d9af260ae28108b5afae828c0",
+      "dataset": "facebook/AdvancedIF",
+      "dataset_revision": "e20cba9b94b59c027dfab00b29244e8bc42e4ab4",
+      "data_license": "CC-BY-NC-4.0",
+      "enabled": false,
+      "blocked_until": "adapter_and_evaluator_certification"
+    },
+    {
+      "id": "math_500",
+      "scope": "evaluation_only_ood",
+      "records": 500,
+      "dataset": "HuggingFaceH4/MATH-500",
+      "dataset_config": "default",
+      "split": "test",
+      "dataset_revision": "6e4ed1a2a79af7d8630a6b768ec859cb5af4d3be",
+      "input_path": "test.jsonl",
+      "sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132",
+      "data_license": "MIT",
+      "prompt": "Question: {}\nPlease reason step by step, and put your final answer within \\boxed{}.",
+      "scorer": {
+        "answer": "last_boxed",
+        "package": "math-verify",
+        "revision": "ba3d3aaff23b3f4cac7a14672b4f6e293d97c98b",
+        "antlr_version": "4.9.3"
+      },
+      "enabled": true
+    },
+    {
+      "id": "gpqa",
+      "scope": "evaluation_only_ood",
+      "records": 448,
+      "dataset": "Idavidrein/gpqa",
+      "dataset_config": "gpqa_main",
+      "split": "train",
+      "dataset_revision": "pending_gated_access",
+      "sha256": "pending_gated_access",
+      "data_license": "CC-BY-4.0",
+      "prompt": "Question: {}\nAnswer the multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of choices. Think step by step before answering.",
+      "option_permutation": {
+        "source_revision": "56686c06f5e19865c153de0fdb11be3890014df7",
+        "seed": 0,
+        "freeze_per_item_across_completions_and_checkpoints": true
+      },
+      "scorer": {
+        "primary": "strict_last_line",
+        "regex": "^Answer:\\s*([A-D])\\s*$",
+        "malformed": "incorrect"
+      },
+      "privacy": "never_commit_or_publish_prompts_or_responses",
+      "enabled": true,
+      "execution_state": "blocked_gated_access"
+    },
+    {
+      "id": "mmlu_pro",
+      "scope": "evaluation_only_ood",
+      "records": 12032,
+      "dataset": "TIGER-Lab/MMLU-Pro",
+      "dataset_config": "default",
+      "split": "test",
+      "dataset_revision": "b189ec765aa7ed75c8acfea42df31fdae71f97be",
+      "input_path": "data/test-00000-of-00001.parquet",
+      "sha256": "0e24a191921c2f453518a537a8b2117bd137e7714d4ef1565e9ba06c1ecb9ad8",
+      "data_license": "MIT",
+      "prompt": "Question: {}\nAnswer the multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of choices. Think step by step before answering.",
+      "options": {
+        "remove_literal_na": true,
+        "reshuffle": false
+      },
+      "scorer": {
+        "primary": "strict_last_line",
+        "regex": "^Answer:\\s*([A-J])\\s*$",
+        "malformed": "incorrect",
+        "random_guess_fallback": false
+      },
+      "version_note": "current_pinned_dataset_not_claimed_as_the_unreleased_rtt_snapshot",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "schema_version": 2,
+  "model": {
+    "name": "Qwen/Qwen3-4B-Instruct-2507",
+    "revision": "cdbee75f17c01a7cc42f958dc650907174af0554"
+  },
+  "state": "certified_base_complete",
+  "primary": {
+    "ifeval": {
+      "run": "qwen-base-ifeval-certified-s42",
+      "records": 541,
+      "strict_instruction": {
+        "correct": 454,
+        "total": 541,
+        "accuracy": 0.8391866913123844
+      },
+      "loose_instruction": {
+        "correct": 472,
+        "total": 541,
+        "accuracy": 0.8724584103512015
+      },
+      "strict_rubric": {
+        "correct": 742,
+        "total": 834,
+        "accuracy": 0.8896882494004796
+      },
+      "loose_rubric": {
+        "correct": 760,
+        "total": 834,
+        "accuracy": 0.9112709832134293
+      },
+      "artifact_manifest_sha256": "8477173851fc28562878a1550af79521b955696601fb715b462d8e8ec922d58c",
+      "server_identity_sha256": "27840aa88da6219b52cf3594217054a9f713173b8c899f34a2da21456909b25e",
+      "harness_sha256": "4aac5a92957bf9af9b20587ce900dbd3f77980bf7a5ca36c57ab121531ddd2cf"
+    },
+    "ifbench": {
+      "run": "qwen-base-ifbench-certified-s42",
+      "records": 294,
+      "strict_instruction": {
+        "correct": 92,
+        "total": 294,
+        "accuracy": 0.3129251700680272
+      },
+      "loose_instruction": {
+        "correct": 99,
+        "total": 294,
+        "accuracy": 0.336734693877551
+      },
+      "strict_rubric": {
+        "correct": 113,
+        "total": 335,
+        "accuracy": 0.3373134328358209
+      },
+      "loose_rubric": {
+        "correct": 123,
+        "total": 335,
+        "accuracy": 0.36716417910447763
+      },
+      "artifact_manifest_sha256": "8ba509d48d04a5eb7e50c9791fc5474ef0c320a1632a56ccb663c72c5533ae8a",
+      "server_identity_sha256": "4f5483be5e1a604d2f319938ad5075e924b3c8d28352703283f8493af2762710",
+      "harness_sha256": "c4ca8af5ecf7233960d12b2362d74fa081b7e0259ed5553745a4384113c35ee3"
+    },
+    "muldimif": {
+      "run": "qwen-base-muldimif-certified-s42",
+      "records": 1200,
+      "overall": {
+        "correct": 681,
+        "total": 1200,
+        "accuracy": 0.5675
+      },
+      "artifact_manifest_sha256": "bfda2764b8299d4eba7345e250c11b34b988398d9a7dc68a5d8f653dc862d23e",
+      "server_identity_sha256": "1a8ff80a1ad656d8bce6cda20efd27c9d97b9b6cc7f5064c530cbe6dc23ec305",
+      "harness_sha256": "4aac5a92957bf9af9b20587ce900dbd3f77980bf7a5ca36c57ab121531ddd2cf"
+    }
+  },
+  "uncertified_sensitivity": {
+    "ifeval": {
+      "strict_instruction_accuracy": 0.8317929759704251,
+      "loose_instruction_accuracy": 0.878003696857671
+    },
+    "ifbench": {
+      "strict_instruction_accuracy": 0.29931972789115646,
+      "loose_instruction_accuracy": 0.32653061224489793
+    },
+    "muldimif": {
+      "accuracy": 0.5741666666666667
+    }
+  },
+  "certification": {
+    "model_files_hashed": true,
+    "tokenizer_and_template_hashed": true,
+    "server_command_recorded": true,
+    "runtime_packages_recorded": true,
+    "native_scorer_recorded": true,
+    "all_manifest_entries_verified": true,
+    "credential_scan_matches": 0
+  },
+  "external_artifacts": {
+    "repository": "beingamanforever/RDAN-GRPO-Qwen3-4B-evidence",
+    "state": "blocked_huggingface_token_lacks_write_permission",
+    "raw_rows_committed_to_git": true
+  }
+}

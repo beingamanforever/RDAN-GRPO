@@ -1,0 +1,14 @@
+defaults:
+  - qwen_scalar_train
+  - _self_
+
+exp_name: qwen-rdan-scalar-parity-receipt-s240520
+logging_dir: ./output/qwen-rdan-scalar-parity-receipt-s240520/logs
+output_dir: ./output/qwen-rdan-scalar-parity-receipt-s240520
+track_with: stdout
+tracker_kwargs: {}
+
+actor_infer:
+  strategy_args:
+    strategy_config:
+      worker_extension_cls: rdan_grpo.roll_weight_receipt.ReceiptWorkerV1

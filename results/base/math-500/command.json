@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "scripts/run_ood_eval.py",
+    "--benchmark",
+    "math_500",
+    "--data",
+    "/home/ubuntu/aman/rdan-ood-data/math_500/test.jsonl",
+    "--api-base",
+    "<redacted>",
+    "--server-manifest",
+    "/home/ubuntu/aman/RDAN-GRPO/artifacts/qwen-a10g-server-identity.json",
+    "--output-dir",
+    "/home/ubuntu/aman/artifacts/ood/qwen-base/math-500",
+    "--math-verify-root",
+    "/home/ubuntu/aman/rdan-ood-runtime/math-verify",
+    "--concurrency",
+    "2"
+  ]
+}

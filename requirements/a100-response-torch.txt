@@ -1,0 +1,4 @@
+# PyTorch 2.8 CUDA 12.9 is the exact RTT torch280 profile.
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0

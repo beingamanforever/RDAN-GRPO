@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "scripts/rescore_math_artifact.py",
+    "--source-dir",
+    "/home/ubuntu/aman/artifacts/ood/qwen-base/math-500-sealed-source",
+    "--output-dir",
+    "/home/ubuntu/aman/artifacts/ood/qwen-base/math-500-rescored-v2",
+    "--data",
+    "/home/ubuntu/aman/rdan-ood-data/math_500/test.jsonl",
+    "--math-verify-root",
+    "/home/ubuntu/aman/rdan-ood-runtime/math-verify"
+  ],
+  "changed_rows": 361,
+  "correction": "boxed_latex_parse_v1",
+  "dataset_sha256": "35dc41080a3680858b27fa7e0533d2d547825316fc5dafe5d316f4ccc5a06132",
+  "harness_sha256": "d74dd7ec49c5af4d326ab7c9e85d6614e3a810634fd670f408d6222acb704ca8",
+  "schema_version": 1,
+  "scorer": {
+    "antlr_version": "4.9.3",
+    "module": "/home/ubuntu/aman/rdan-ood-runtime/math-verify/src/math_verify/__init__.py",
+    "revision": "ba3d3aaff23b3f4cac7a14672b4f6e293d97c98b"
+  },
+  "source_manifest_sha256": "8fd8d7defe086bcf22050d7b05136bdaed3cf5b54be7179c8bfbfac7412612e1",
+  "source_records_sha256": "23d6767ff67483b384e3a31e327c681a476bf3ac278d09b00a365a4241eb1686",
+  "total": 2500
+}
