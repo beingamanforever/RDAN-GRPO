@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rdan-grpo"
+version = "0.1.0"
+description = "A compact reward and advantage core for RDAN-GRPO experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.11"]
+
+[tool.ruff]
+line-length = 119
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.data-files]
+"share/doc/rdan-grpo" = ["THIRD_PARTY_NOTICES.md", "third_party/licenses/RTT-APACHE-2.0.txt"]
