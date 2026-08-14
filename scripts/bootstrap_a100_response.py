@@ -118,6 +118,7 @@ _PIN = re.compile(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==([^\s\\]+)")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _REVISION = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 _AMBIENT_PROBE = r"""
 import importlib.util
@@ -1556,7 +1557,8 @@ def _static_gpu_report(
 
 
 def _parse_topology(output: str, contract: RuntimeContract) -> dict[str, str]:
-    lines = [line.split() for line in output.splitlines() if line.strip()]
+    clean = _ANSI_ESCAPE.sub("", output)
+    lines = [line.split() for line in clean.splitlines() if line.strip()]
     header = next((fields for fields in lines if fields and fields[0] == "GPU0"), None)
     gpu_columns = [] if header is None else [field for field in header if re.fullmatch(r"GPU\d+", field)]
     rows = {fields[0]: fields for fields in lines if fields and re.fullmatch(r"GPU\d+", fields[0])}

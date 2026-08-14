@@ -345,6 +345,19 @@ def test_check_passes_without_exposing_secrets(contract: tuple[Any, FakeRunner, 
     assert all("PIP_CONSTRAINT" not in item for item in runner.envs)
 
 
+def test_parse_topology_strips_ansi_header_and_accepts_nvlink() -> None:
+    output = (
+        "\t\x1b[4mGPU0\tGPU1\tCPU Affinity\tNUMA Affinity\tGPU NUMA ID\x1b[0m\n"
+        "GPU0\t X \t NV12\t0-31\t0\tN/A\n"
+        "GPU1\tNV12\t X \t0-31\t0\tN/A\n"
+    )
+
+    assert BOOTSTRAP._parse_topology(output, RUNTIME) == {
+        "gpu0_to_gpu1": "NV12",
+        "gpu1_to_gpu0": "NV12",
+    }
+
+
 @pytest.mark.parametrize(
     ("missing", "capability"),
     [
