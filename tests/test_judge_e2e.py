@@ -317,22 +317,30 @@ def test_paired_bootstrap_selection_is_deterministic_and_prefers_lower_noninferi
 
 def test_calibration_cases_freeze_heldout_labels_and_production_profile(tmp_path: Path) -> None:
     cases_path = ROOT / "configs/judges/qwen_judge_calibration_cases.jsonl"
-    cases = calibrate_judge._load_cases(cases_path)
+    cases = calibrate_judge._load_cases(cases_path, require_human_review=True)
     assert calibrate_judge._corpus_summary(cases) == calibrate_judge.EXPECTED_CORPUS_SUMMARY
     heldout = next(case for case in cases if case["split"] == "heldout")
     heldout.pop("expected_scores")
     changed = tmp_path / "changed.jsonl"
     changed.write_text("".join(json.dumps(case, ensure_ascii=False) + "\n" for case in cases), encoding="utf-8")
     with pytest.raises(ValueError, match="frozen expected score"):
-        calibrate_judge._load_cases(changed)
+        calibrate_judge._load_cases(changed, require_human_review=True)
 
     labeled_012 = next(case for case in cases if case["case_id"] == "labeled-012")
     assert labeled_012["expected_scores"]["1"] == labeled_012["expected_scores"]["10"] == -1
     assert next(case for case in cases if case["case_id"] == "labeled-002")["expected_scores"]["1"] == -1
 
 
-def test_calibration_runner_requires_human_reviewed_provenance(tmp_path: Path) -> None:
-    cases_path = ROOT / "configs/judges/qwen_judge_calibration_cases.jsonl"
+def test_calibration_runner_requires_human_reviewed_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_path = ROOT / "configs/judges/qwen_judge_calibration_cases.jsonl"
+    cases = [json.loads(line) for line in source_path.read_text(encoding="utf-8").splitlines()]
+    for case in cases:
+        case["provenance"]["review_status"] = "not_human_reviewed"
+    cases_path = tmp_path / "not_reviewed_cases.jsonl"
+    cases_path.write_text("".join(json.dumps(case, ensure_ascii=False) + "\n" for case in cases), encoding="utf-8")
+    monkeypatch.setattr(calibrate_judge, "CASES", cases_path.resolve())
     with pytest.raises(ValueError, match="human_reviewed"):
         calibrate_judge.run_calibration(cases_path, tmp_path / "raw.jsonl", tmp_path / "certificate.json", "redacted")
 
