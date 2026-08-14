@@ -19,6 +19,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from rdan_grpo.response_dataset import load_response_dataset  # noqa: E402
 from rdan_grpo.response_identity import response_data_identity  # noqa: E402
 
 RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
@@ -344,17 +345,16 @@ def _verify_all(args: argparse.Namespace, manifest_path: Path) -> None:
         "--model-path",
         str(args.snapshot),
     )
-    try:
-        import datasets
+    merged = manifest["outputs"]["merged_eligible"]
+    _verify_response_dataset(ROOT / merged["path"], merged["records"])
 
-        dataset = datasets.load_dataset(
-            "json",
-            data_files=[str(ROOT / manifest["outputs"]["merged_eligible"]["path"])],
-            split="train",
-        )
+
+def _verify_response_dataset(path: Path, expected_records: int) -> None:
+    try:
+        dataset = load_response_dataset(path)
     except Exception as error:
         raise PreparationError(f"merged response data is not loadable by datasets: {error}") from error
-    if len(dataset) != manifest["outputs"]["merged_eligible"]["records"]:
+    if len(dataset) != expected_records:
         raise PreparationError("loaded response dataset row count differs")
 
 

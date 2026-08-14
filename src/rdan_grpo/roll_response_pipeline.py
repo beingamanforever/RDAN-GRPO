@@ -12,7 +12,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
-import datasets
 import numpy as np
 import ray
 import torch
@@ -26,6 +25,8 @@ from roll.pipeline.base_pipeline import BasePipeline
 from roll.pipeline.rlvr.rlvr_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
 from roll.utils.worker_state import WorkerState
 
+from rdan_grpo.response_dataset import canonical_json as _canonical_json
+from rdan_grpo.response_dataset import load_response_dataset as _load_jsonl_response_dataset
 from rdan_grpo.response_pilot_lifecycle import CompletedResponseRun, _complete_response_run
 from rdan_grpo.roll_response_checkpoint import (
     CheckpointIdentity,
@@ -581,67 +582,19 @@ def _load_domain_dataset(config: Any, tokenizer: Any) -> tuple[str, Any]:
     return domain, selected.with_transform(_restore_rubrics)
 
 
-def _load_response_dataset(data_args: Any) -> datasets.Dataset:
+def _load_response_dataset(data_args: Any) -> Any:
     """Load response JSONL without exposing heterogeneous objects to Arrow."""
 
-    names = data_args.file_name if isinstance(data_args.file_name, list) else [data_args.file_name]
-    dataset_dir = Path(getattr(data_args, "dataset_dir", "."))
-    rows: list[dict[str, Any]] = []
-    for name in names:
-        path = Path(name)
-        path = path if path.is_absolute() else dataset_dir / path
-        if path.suffix not in {".json", ".jsonl"} or path.is_symlink() or not path.is_file():
-            raise ValueError(f"response dataset must be a regular JSONL file: {path}")
-        with path.open(encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                if not line.strip():
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError as error:
-                    raise ValueError(f"invalid response dataset JSON at {path}:{line_number}") from error
-                rows.append(_serialize_response_row(row, path, line_number))
-    if not rows:
-        raise ValueError("response dataset is empty")
-    return datasets.Dataset.from_list(rows)
-
-
-def _serialize_response_row(row: Any, path: Path, line_number: int) -> dict[str, Any]:
-    if not isinstance(row, dict):
-        raise ValueError(f"response dataset row must be an object at {path}:{line_number}")
-    required = ("id", "prompt", "rubrics", "source", "ground_truth")
-    if any(field not in row for field in required):
-        raise ValueError(f"response dataset row is missing required fields at {path}:{line_number}")
-    if isinstance(row["id"], bool) or not isinstance(row["id"], (int, str)) or not str(row["id"]):
-        raise ValueError(f"response dataset id is invalid at {path}:{line_number}")
-    if not isinstance(row["prompt"], str) or not row["prompt"].strip() or not isinstance(row["source"], str):
-        raise ValueError(f"response dataset prompt or source is invalid at {path}:{line_number}")
-    rubrics = row["rubrics"]
-    if not isinstance(rubrics, list) or not rubrics or any(not isinstance(rubric, dict) for rubric in rubrics):
-        raise ValueError(f"response dataset rubrics are invalid at {path}:{line_number}")
-    truth = row["ground_truth"]
-    if isinstance(truth, str):
-        try:
-            truth = json.loads(truth)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"response dataset ground_truth is invalid at {path}:{line_number}") from error
-    if not isinstance(truth, dict):
-        raise ValueError(f"response dataset ground_truth must be an object at {path}:{line_number}")
-    normalized = dict(row)
-    normalized["id"] = str(row["id"])
-    normalized["rubrics"] = _canonical_json(rubrics)
-    normalized["ground_truth"] = _canonical_json(truth)
-    return normalized
+    return _load_jsonl_response_dataset(
+        data_args.file_name,
+        dataset_dir=getattr(data_args, "dataset_dir", "."),
+    )
 
 
 def _restore_rubrics(batch: dict[str, list[Any]]) -> dict[str, list[Any]]:
     restored = dict(batch)
     restored["rubrics"] = [json.loads(value) for value in batch["rubrics"]]
     return restored
-
-
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _validate_inputs(config: Any, response: ResponseConfig, identity: CheckpointIdentity, stop: int | None) -> None:

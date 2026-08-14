@@ -184,14 +184,28 @@ def test_receipts_bracket_generation_training_and_atomic_promotion() -> None:
     assert "promote_checkpoint" in save_checkpoint
 
 
-def test_mixed_hir_rubrichub_rows_reach_reward_contract_without_arrow_loss(
+def test_mixed_response_rows_reach_reward_contract_without_arrow_loss(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     module = _load_pipeline(monkeypatch)
-    hir = {
-        "id": 7,
+    type1 = {
+        "id": 1,
+        "source": "type1",
+        "prompt": "Type 1 prompt",
+        "rubrics": [{"id": 1, "category": "", "description": "Use English.", "weight": 1}],
+        "ground_truth": {"constraint_pattern": ["language:response_language"]},
+    }
+    type3 = {
+        "id": "3",
+        "source": "type3",
+        "prompt": "Type 3 prompt",
+        "rubrics": [{"id": 1, "category": "", "description": "Use JSON.", "weight": 1}],
+        "ground_truth": {"constraint_pattern": "detectable_format:json_format"},
+    }
+    type4 = {
+        "id": 4,
         "source": "type4",
-        "prompt": "HIR prompt",
+        "prompt": "Type 4 prompt",
         "rubrics": [{"id": 1, "category": "", "description": "Use two paragraphs.", "weight": 1}],
         "ground_truth": {"checker": ["[rule] Paragraphs"], "functions": ["def check_following(): pass"]},
     }
@@ -230,22 +244,21 @@ def test_mixed_hir_rubrichub_rows_reach_reward_contract_without_arrow_loss(
         "ground_truth": rubrichub_truth,
     }
     path = tmp_path / "mixed.jsonl"
-    path.write_text("\n".join(json.dumps(row) for row in (hir, rubrichub)) + "\n", encoding="utf-8")
+    rows = (type1, type3, type4, rubrichub)
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
     dataset = module._load_response_dataset(SimpleNamespace(file_name=str(path), dataset_dir="."))
-    assert dataset[0]["id"] == "7"
-    assert dataset[0]["prompt"] == hir["prompt"]
-    assert dataset[1]["prompt"] == rubrichub["prompt"]
-    assert dataset[0]["source"] == hir["source"]
-    assert dataset[1]["source"] == rubrichub["source"]
-    assert dataset[0]["ground_truth"] == module._canonical_json(hir["ground_truth"])
-    assert dataset[1]["ground_truth"] == module._canonical_json(rubrichub_truth)
-    assert json.loads(dataset[0]["ground_truth"]) == hir["ground_truth"]
-    assert json.loads(dataset[1]["ground_truth"]) == rubrichub_truth
-    assert dataset[0]["rubrics"] == module._canonical_json(hir["rubrics"])
+    assert dataset[0]["id"] == "1"
+    assert [dataset[index]["prompt"] for index in range(4)] == [row["prompt"] for row in rows]
+    assert [dataset[index]["source"] for index in range(4)] == [row["source"] for row in rows]
+    assert [json.loads(dataset[index]["ground_truth"]) for index in range(4)] == [row["ground_truth"] for row in rows]
+    assert dataset[0]["ground_truth"] == module._canonical_json(type1["ground_truth"])
+    assert dataset[1]["ground_truth"] == module._canonical_json(type3["ground_truth"])
+    assert dataset[2]["ground_truth"] == module._canonical_json(type4["ground_truth"])
+    assert dataset[3]["ground_truth"] == module._canonical_json(rubrichub_truth)
+    assert dataset[0]["rubrics"] == module._canonical_json(type1["rubrics"])
     restored = dataset.with_transform(module._restore_rubrics)
-    assert restored[0]["rubrics"] == hir["rubrics"]
-    assert restored[1]["rubrics"] == rubrichub_rubrics
+    assert [restored[index]["rubrics"] for index in range(4)] == [row["rubrics"] for row in rows]
 
 
 def test_builder_preserves_json_canonical_worker_paths(monkeypatch: pytest.MonkeyPatch) -> None:

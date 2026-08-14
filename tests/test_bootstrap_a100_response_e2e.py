@@ -848,6 +848,45 @@ def test_data_python_launcher_is_regular_and_executes(tmp_path: Path) -> None:
     assert not launcher.is_symlink()
 
 
+def test_prepare_verifies_mixed_response_rows_and_rejects_count_mismatch(tmp_path: Path) -> None:
+    rows = [
+        {
+            "id": 1,
+            "source": "type1",
+            "prompt": "Type 1 prompt",
+            "rubrics": [{"id": 1, "description": "Use English."}],
+            "ground_truth": {"constraint_pattern": ["language:response_language"]},
+        },
+        {
+            "id": "3",
+            "source": "type3",
+            "prompt": "Type 3 prompt",
+            "rubrics": [{"id": 1, "description": "Use JSON."}],
+            "ground_truth": {"constraint_pattern": "detectable_format:json_format"},
+        },
+        {
+            "id": 4,
+            "source": "type4",
+            "prompt": "Type 4 prompt",
+            "rubrics": [{"id": 1, "description": "Use two paragraphs."}],
+            "ground_truth": {"checker": ["[rule] Paragraphs"], "functions": ["def check_following(): pass"]},
+        },
+        {
+            "id": "rubrichub-1",
+            "source": "rubrichub_instruction_following",
+            "prompt": "RubricHub prompt",
+            "rubrics": [{"id": 1, "description": "Use exactly two paragraphs."}],
+            "ground_truth": {"hard_mask": [True], "rubric_routes": [{"rubric_index": 0}]},
+        },
+    ]
+    path = tmp_path / "mixed.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    PREPARE._verify_response_dataset(path, len(rows))
+    with pytest.raises(PREPARE.PreparationError, match="row count differs"):
+        PREPARE._verify_response_dataset(path, len(rows) + 1)
+
+
 def test_resolve_lock_writes_only_a_candidate(
     contract: tuple[Any, FakeRunner, dict[str, str]], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
