@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "id": "qwen_a100_2x",
   "rtt_released_topology": {
     "source_config": "examples/rubrics2tokens/rubric2token_config_qwen3.yaml",
@@ -38,9 +38,60 @@
     "model": "NVIDIA A100",
     "count": 2,
     "minimum_memory_gib_each": 79,
-    "actor_train_devices": [0, 1],
-    "actor_infer_devices": [0, 1],
+    "actor_train_devices": [
+      0,
+      1
+    ],
+    "actor_infer_devices": [
+      0,
+      1
+    ],
     "placement": "colocated_synchronous_time_share"
+  },
+  "response_runtime": {
+    "profile": "fsdp2-hf-sdpa-2xa100",
+    "host": {
+      "minimum_ram_gib": 192,
+      "minimum_free_disk_gib": 512
+    },
+    "platform": {
+      "system": "Linux",
+      "machines": [
+        "x86_64",
+        "AMD64"
+      ],
+      "receipt": "Ubuntu-24.04-x86_64",
+      "container_contract": "../../requirements/a100-response-container.json"
+    },
+    "gpu": {
+      "topology_contract": "target_topology",
+      "minimum_driver": "575.57.08",
+      "cuda_runtime": "12.9",
+      "nccl_package": "nvidia-nccl-cu12",
+      "require_idle": true,
+      "supported_links": [
+        "NV",
+        "PIX",
+        "PXB",
+        "PHB",
+        "NODE",
+        "SYS"
+      ]
+    },
+    "packages": {
+      "index_url": "https://pypi.org/simple",
+      "torch_index_url": "https://download.pytorch.org/whl/cu129",
+      "torch_backend": "cu129",
+      "contracts": [
+        "../../requirements/a100-response-linux-py312.lock",
+        "../../requirements/a100-response-flash.txt"
+      ],
+      "allowed_local_suffixes": {
+        "torch": "cu129",
+        "torchaudio": "cu129",
+        "torchvision": "cu129"
+      }
+    }
   },
   "analytical_memory": {
     "evidence": "calculated_not_measured",

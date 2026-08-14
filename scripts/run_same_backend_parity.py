@@ -12,7 +12,7 @@ import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -22,10 +22,10 @@ if str(SRC_ROOT) not in sys.path:
 from rdan_grpo.fsdp_hf_receipt import (
     RTT_REVISION,
     FSDPHFReceiptError,
-    canonical_sha256,
     verify_fsdp_hf_checkout,
 )
 from rdan_grpo.program import MODEL_NAME, MODEL_REVISION
+from rdan_grpo.response_identity import canonical_resolved_config_sha256, clean_repository_revision
 from rdan_grpo.runtime_parity import (
     FSDP2_HF_PROFILE,
     ParityError,
@@ -37,6 +37,21 @@ from rdan_grpo.runtime_parity import (
 )
 
 RTT_ROOT_ENV = "RTT_ROOT"
+
+
+class _ParityPaths(NamedTuple):
+    rtt_root: Path
+    config: Path
+    production_config: Path
+    preflight_config: Path
+    snapshot: Path
+
+
+class _ParityConfigs(NamedTuple):
+    pipeline: Any
+    resolved_sha256: str
+    production_resolved_sha256: str
+    preflight_resolved_sha256: str
 
 
 class _ReceiptFailureBoundary:
@@ -56,106 +71,122 @@ def main() -> int:
     rtt_root = args.rtt_root or _required_path(RTT_ROOT_ENV)
     rtt_boundary_sha256 = verify_fsdp_hf_checkout(rtt_root)
     generation_source_identity = verify_transformers_generation_boundary()
-    config_path = _regular_file(args.config, "config")
-    production_config_path = _regular_file(args.production_config, "production config")
-    if production_config_path == config_path:
-        raise ParityError("diagnostic and production configs must be different files")
-    snapshot = _snapshot(args.snapshot)
-    sys.path.insert(0, str(rtt_root.resolve()))
+    paths = _parity_paths(args, rtt_root)
+    configs = _load_parity_configs(paths)
+    artifact = _run_parity(
+        args,
+        paths,
+        configs,
+        rtt_boundary_sha256,
+        generation_source_identity,
+    )
+    print(json.dumps(artifact, sort_keys=True))
+    return 0
 
-    from hydra import compose, initialize_config_dir
-    from omegaconf import OmegaConf
+
+def _parity_paths(args: argparse.Namespace, rtt_root: Path) -> _ParityPaths:
+    config = _regular_file(args.config, "config")
+    production = _regular_file(args.production_config, "production config")
+    if production == config:
+        raise ParityError("diagnostic and production configs must be different files")
+    return _ParityPaths(
+        rtt_root=rtt_root,
+        config=config,
+        production_config=production,
+        preflight_config=_regular_file(args.preflight_config, "preflight config"),
+        snapshot=_snapshot(args.snapshot),
+    )
+
+
+def _load_parity_configs(paths: _ParityPaths) -> _ParityConfigs:
+    sys.path.insert(0, str(paths.rtt_root.resolve()))
     from roll.datasets.chat_template import register_chat_template
-    from roll.distributed.scheduler.initialize import init
     from roll.pipeline.rlvr.rubric_config import RLVRConfig
 
     from rdan_grpo.roll_compat import install_rtt_compat, load_sync_hf_rlvr_config
-    from rdan_grpo.roll_same_backend_live import (
-        build_fsdp_hf_receipt_link,
-        build_same_backend_pipeline,
-        raw_fsdp_hf_receipt_link,
-    )
 
-    install_rtt_compat(rtt_root)
+    install_rtt_compat(paths.rtt_root)
 
     @register_chat_template("qwen3_nothinking")
-    def qwen3_nothinking(tokenizer, conversation, tools=None, documents=None, **kwargs):
+    def qwen3_nothinking(
+        tokenizer: Any,
+        conversation: Any,
+        tools: Any = None,
+        documents: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Render Qwen3 messages with thinking disabled for parity."""
+
         kwargs["tokenize"] = False
         kwargs["add_generation_prompt"] = kwargs.get("add_generation_prompt", True)
         kwargs["enable_thinking"] = False
         return tokenizer.apply_chat_template(conversation, tools, documents, **kwargs)
 
-    with initialize_config_dir(version_base=None, config_dir=str(config_path.parent)):
-        config = compose(config_name=config_path.stem)
+    payload = _compose_config(paths.config, "same-backend parity")
+    production = _compose_config(paths.production_config, "same-backend production")
+    preflight = _compose_config(paths.preflight_config, "same-backend preflight")
+    _validate_production_config(production, paths.snapshot)
+    pipeline = load_sync_hf_rlvr_config(paths.rtt_root, RLVRConfig, payload)
+    _validate_snapshot_config(pipeline, paths.snapshot)
+    pipeline.track_with = "stdout"
+    pipeline.tracker_kwargs = {}
+    return _ParityConfigs(
+        pipeline,
+        canonical_resolved_config_sha256(payload),
+        canonical_resolved_config_sha256(production),
+        canonical_resolved_config_sha256(preflight),
+    )
+
+
+def _compose_config(path: Path, name: str) -> dict[str, Any]:
+    from hydra import compose, initialize_config_dir
+    from omegaconf import OmegaConf
+
+    with initialize_config_dir(version_base=None, config_dir=str(path.parent)):
+        config = compose(config_name=path.stem)
     payload = OmegaConf.to_container(config, resolve=True)
     if not isinstance(payload, dict):
-        raise ParityError("same-backend parity config must resolve to an object")
-    resolved_config_sha256 = canonical_sha256(payload)
-    pipeline_config = load_sync_hf_rlvr_config(rtt_root, RLVRConfig, payload)
-    _validate_snapshot_config(pipeline_config, snapshot)
-    with initialize_config_dir(version_base=None, config_dir=str(production_config_path.parent)):
-        production_config = compose(config_name=production_config_path.stem)
-    production_payload = OmegaConf.to_container(production_config, resolve=True)
-    _validate_production_config(production_payload, snapshot)
-    pipeline_config.track_with = "stdout"
-    pipeline_config.tracker_kwargs = {}
+        raise ParityError(f"{name} config must resolve to an object")
+    return payload
 
+
+def _run_parity(
+    args: argparse.Namespace,
+    paths: _ParityPaths,
+    configs: _ParityConfigs,
+    rtt_boundary_sha256: str,
+    generation_source_identity: Mapping[str, str],
+) -> Mapping[str, Any]:
+    clean_repository_revision(REPO_ROOT)
     import ray
+    from roll.distributed.scheduler.initialize import init
+
+    from rdan_grpo.roll_same_backend_live import build_same_backend_pipeline
 
     try:
         init()
-        pipeline = build_same_backend_pipeline(pipeline_config)
+        pipeline = build_same_backend_pipeline(configs.pipeline)
         identity = build_runtime_identity(
-            snapshot,
+            paths.snapshot,
             pipeline.tokenizer,
             model=MODEL_NAME,
             revision=MODEL_REVISION,
         )
-        try:
-            pipeline.seal_weight_receipt(
-                args.weight_receipt_output,
-                model_identity=identity,
-                resolved_config_sha256=resolved_config_sha256,
-                rtt_revision=RTT_REVISION,
-                rtt_boundary_sha256=rtt_boundary_sha256,
-                generation_source_identity=generation_source_identity,
-            )
-        except (FSDPHFReceiptError, RuntimeError, ValueError):
-            receipt_link = raw_fsdp_hf_receipt_link(args.weight_receipt_output, resolved_config_sha256)
-            _seal_receipt_failure(
-                pipeline_config,
-                identity,
-                config_path,
-                resolved_config_sha256,
-                receipt_link,
-                production_config_path,
-                args,
-            )
-            raise
-        try:
-            receipt_link = build_fsdp_hf_receipt_link(args.weight_receipt_output, resolved_config_sha256)
-        except FSDPHFReceiptError:
-            receipt_link = raw_fsdp_hf_receipt_link(args.weight_receipt_output, resolved_config_sha256)
-            _seal_receipt_failure(
-                pipeline_config,
-                identity,
-                config_path,
-                resolved_config_sha256,
-                receipt_link,
-                production_config_path,
-                args,
-                code="receipt_linkage_failed",
-            )
-            raise
+        receipt_link = _seal_and_link_receipt(
+            pipeline, identity, args, paths, configs, rtt_boundary_sha256, generation_source_identity
+        )
         artifact = run_runtime_parity(
             pipeline,
             identity,
-            pipeline_config=pipeline_config,
-            train_config_sha256=_file_sha256(config_path),
-            resolved_config_sha256=resolved_config_sha256,
+            pipeline_config=configs.pipeline,
+            train_config_sha256=_file_sha256(paths.config),
+            resolved_config_sha256=configs.resolved_sha256,
             rtt_revision=RTT_REVISION,
             weight_receipt=receipt_link,
-            production_train_config_sha256=_file_sha256(production_config_path),
+            production_train_config_sha256=_file_sha256(paths.production_config),
+            production_resolved_config_sha256=configs.production_resolved_sha256,
+            preflight_train_config_sha256=_file_sha256(paths.preflight_config),
+            preflight_resolved_config_sha256=configs.preflight_resolved_sha256,
             responses=args.responses,
             failure_output=args.failure_output,
             backend_profile=FSDP2_HF_PROFILE,
@@ -165,8 +196,62 @@ def main() -> int:
         _seal_success(args, artifact)
     finally:
         ray.shutdown()
-    print(json.dumps(artifact, sort_keys=True))
-    return 0
+    return artifact
+
+
+def _seal_and_link_receipt(
+    pipeline: Any,
+    identity: RuntimeIdentity,
+    args: argparse.Namespace,
+    paths: _ParityPaths,
+    configs: _ParityConfigs,
+    rtt_boundary_sha256: str,
+    generation_source_identity: Mapping[str, str],
+) -> Mapping[str, str]:
+    from rdan_grpo.roll_same_backend_live import build_fsdp_hf_receipt_link, raw_fsdp_hf_receipt_link
+
+    try:
+        pipeline.seal_weight_receipt(
+            args.weight_receipt_output,
+            model_identity=identity,
+            resolved_config_sha256=configs.resolved_sha256,
+            rtt_revision=RTT_REVISION,
+            rtt_boundary_sha256=rtt_boundary_sha256,
+            generation_source_identity=generation_source_identity,
+        )
+    except (FSDPHFReceiptError, RuntimeError, ValueError):
+        receipt = raw_fsdp_hf_receipt_link(args.weight_receipt_output, configs.resolved_sha256)
+        _seal_failure_from_context(configs, identity, paths, receipt, args)
+        raise
+    try:
+        return build_fsdp_hf_receipt_link(args.weight_receipt_output, configs.resolved_sha256)
+    except FSDPHFReceiptError:
+        receipt = raw_fsdp_hf_receipt_link(args.weight_receipt_output, configs.resolved_sha256)
+        _seal_failure_from_context(configs, identity, paths, receipt, args, code="receipt_linkage_failed")
+        raise
+
+
+def _seal_failure_from_context(
+    configs: _ParityConfigs,
+    identity: RuntimeIdentity,
+    paths: _ParityPaths,
+    receipt: Mapping[str, str],
+    args: argparse.Namespace,
+    code: str = "receipt_failed",
+) -> None:
+    _seal_receipt_failure(
+        configs.pipeline,
+        identity,
+        paths.config,
+        configs.resolved_sha256,
+        receipt,
+        paths.production_config,
+        configs.production_resolved_sha256,
+        paths.preflight_config,
+        configs.preflight_resolved_sha256,
+        args,
+        code=code,
+    )
 
 
 def _seal_receipt_failure(
@@ -176,6 +261,9 @@ def _seal_receipt_failure(
     resolved_config_sha256: str,
     receipt_link: Mapping[str, str],
     production_config_path: Path,
+    production_resolved_config_sha256: str,
+    preflight_config_path: Path,
+    preflight_resolved_config_sha256: str,
     args: argparse.Namespace,
     code: str = "receipt_failed",
 ) -> None:
@@ -191,6 +279,9 @@ def _seal_receipt_failure(
             rtt_revision=RTT_REVISION,
             weight_receipt=receipt_link,
             production_train_config_sha256=_file_sha256(production_config_path),
+            production_resolved_config_sha256=production_resolved_config_sha256,
+            preflight_train_config_sha256=_file_sha256(preflight_config_path),
+            preflight_resolved_config_sha256=preflight_resolved_config_sha256,
             responses=args.responses,
             failure_output=args.failure_output,
             backend_profile=FSDP2_HF_PROFILE,
@@ -210,6 +301,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--production-config", type=Path, required=True)
+    parser.add_argument("--preflight-config", type=Path, required=True)
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--failure-output", type=Path, required=True)

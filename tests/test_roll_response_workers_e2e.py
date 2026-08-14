@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 import torch
 
@@ -16,9 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeData:
-    def __init__(self, values: torch.Tensor, meta_info: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        values: torch.Tensor,
+        meta_info: dict[str, Any] | None = None,
+        non_tensor_batch: dict[str, Any] | None = None,
+        batch: dict[str, torch.Tensor] | None = None,
+    ) -> None:
         self.values = values
         self.meta_info = meta_info or {}
+        self.non_tensor_batch = non_tensor_batch or {}
+        self.batch = batch or _clip_batch(values, self.meta_info)
 
     def __len__(self) -> int:
         return self.values.shape[0]
@@ -28,16 +37,24 @@ class FakeData:
 
     @staticmethod
     def concat(values: list[FakeData]) -> FakeData:
-        return FakeData(torch.cat([value.values for value in values]), dict(values[0].meta_info))
+        keys = set().union(*(value.non_tensor_batch for value in values))
+        non_tensor = {key: np.concatenate([value.non_tensor_batch[key] for value in values]) for key in keys}
+        return FakeData(torch.cat([value.values for value in values]), dict(values[0].meta_info), non_tensor)
 
 
 class FakeActorWorker:
     def loss_func(self, data: FakeData, output_tensor: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
         del output_tensor
-        return data.values.float().mean(), {"actor/ppo_ratio_clipfrac": data.meta_info.get("clip", 0.0)}
+        return data.values.float().mean(), {"actor/ppo_ratio_clipfrac": 0.0}
 
     def train_step(self, data: FakeData) -> FakeData:
-        self.loss_func(data, data.values)
+        default = (
+            torch.ones_like(data.values, dtype=torch.float32)
+            if data.meta_info.get("clip") == 1.0
+            else torch.zeros_like(data.values, dtype=torch.float32)
+        )
+        logits = data.meta_info.get("current_log_probs", default)
+        self.loss_func(data, logits)
         if data.meta_info.get("optimizer", True):
             self.strategy.optimizer.step()
         self.strategy.scheduler.step()
@@ -138,8 +155,29 @@ def _actor(module: types.ModuleType, rank: int = 0) -> Any:
         optimizer=Stepper(),
         scheduler=Stepper(),
         model=SimpleNamespace(parameters=lambda: [parameter]),
+        op_compute_log_probs=lambda **kwargs: kwargs["logits"].reshape(1, -1).float(),
+    )
+    worker.pipeline_config = SimpleNamespace(
+        importance_sampling="token",
+        use_pg_clip_range=True,
+        pg_clip=0.2,
+        pg_clip_low=0.2,
+        pg_clip_high=0.27,
     )
     return worker
+
+
+def _clip_batch(values: torch.Tensor, meta_info: dict[str, Any]) -> dict[str, torch.Tensor]:
+    current = values.reshape(1, -1).float()
+    if meta_info.get("clip") == 1.0:
+        current = torch.full_like(current, 1.0)
+    mask = torch.ones_like(current, dtype=torch.bool)
+    return {
+        "input_ids": torch.zeros((1, current.shape[1] + 1), dtype=torch.long),
+        "response_mask": torch.cat([torch.zeros((1, 1), dtype=torch.bool), mask], dim=1),
+        "final_response_mask": mask,
+        "old_log_probs": torch.zeros_like(current),
+    }
 
 
 def test_actor_counts_exact_successful_calls_and_blocks_scheduler_drift(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,6 +227,27 @@ def test_actor_blocks_full_clipping_before_optimizer_mutation(monkeypatch: pytes
     assert worker.strategy.optimizer.calls == worker.strategy.scheduler.calls == 0
     assert worker.rdan_train_counters()["skipped_optimizer_steps"] == 1
     assert worker.rdan_training_state()["update_skipped"] is True
+
+
+def test_actor_ignores_padding_when_every_response_token_is_clipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_workers(monkeypatch)
+    worker = _actor(module)
+    mask = torch.tensor([[True, False, False, False]])
+    data = FakeData(
+        torch.tensor([1.0, 0.0, 0.0, 0.0]),
+        {"current_log_probs": torch.tensor([1.0, 0.0, 0.0, 0.0])},
+        batch={
+            "input_ids": torch.zeros((1, 5), dtype=torch.long),
+            "response_mask": torch.tensor([[False, True, False, False, False]]),
+            "final_response_mask": mask,
+            "old_log_probs": torch.zeros((1, 4)),
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="fully clipped optimizer update"):
+        worker.train_step(data)
+
+    assert worker.strategy.optimizer.calls == 0
 
 
 def test_actor_blocks_nonfinite_gradient_before_optimizer_mutation(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -269,10 +328,39 @@ def test_inference_microbatches_remain_prompt_major(monkeypatch: pytest.MonkeyPa
     worker.worker_config = SimpleNamespace(infer_batch_size=2)
     worker.calls = []
 
-    output = worker.generate(FakeData(torch.tensor([0, 1, 2, 3, 4])))
+    worker.rank_info = SimpleNamespace(dp_rank=1)
+    output = worker.generate(FakeData(torch.tensor([0, 1, 2, 3, 4]), {"global_step": 7}))
 
     assert worker.calls == [[0, 1], [2, 3], [4]]
     assert output.values.tolist() == [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    assert output.non_tensor_batch["generation_id"].tolist() == [f"gen-000007-r1-{index:012d}" for index in range(10)]
+
+
+def test_scheduler_concatenation_preserves_inference_generation_id_alignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_workers(monkeypatch)
+    outputs = []
+    for rank, values in enumerate(([10, 11], [20, 21])):
+        worker = module.ResponseInferWorker()
+        worker.worker_config = SimpleNamespace(infer_batch_size=1)
+        worker.rank_info = SimpleNamespace(dp_rank=rank)
+        worker.calls = []
+        outputs.append(worker.generate(FakeData(torch.tensor(values), {"global_step": 1})))
+
+    merged = FakeData.concat(outputs)
+
+    assert merged.values.tolist() == [10, 10, 11, 11, 20, 20, 21, 21]
+    assert merged.non_tensor_batch["generation_id"].tolist() == [
+        "gen-000001-r0-000000000000",
+        "gen-000001-r0-000000000001",
+        "gen-000001-r0-000000000002",
+        "gen-000001-r0-000000000003",
+        "gen-000001-r1-000000000000",
+        "gen-000001-r1-000000000001",
+        "gen-000001-r1-000000000002",
+        "gen-000001-r1-000000000003",
+    ]
 
 
 def test_actor_dcp_round_trip_restores_exact_counters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

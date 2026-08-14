@@ -13,7 +13,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -21,11 +21,21 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from rdan_grpo.program import MODEL_NAME, MODEL_REVISION, require_launch_gate
+from rdan_grpo.response_identity import (
+    canonical_resolved_config_sha256,
+    response_data_identity,
+    response_source_hashes,
+)
 from rdan_grpo.response_identity import file_sha256 as _file_sha256
-from rdan_grpo.response_identity import response_data_identity, response_source_hashes
+from rdan_grpo.response_pilot_lifecycle import (
+    CompletedResponseRun,
+    issue_lifecycle_certificate,
+    validate_lifecycle_certificate,
+)
+from rdan_grpo.response_readiness import validate_response_readiness
 from rdan_grpo.roll_bridge import require_train_certificate
 from rdan_grpo.roll_compat import RTT_REVISION, install_rtt_compat
-from rdan_grpo.roll_response_checkpoint import ArtifactIdentity, CheckpointIdentity
+from rdan_grpo.roll_response_checkpoint import ArtifactIdentity, CheckpointIdentity, load_checkpoint
 from rdan_grpo.roll_response_config import ResponseConfig, load_response_rlvr_config
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY, build_runtime_identity
 from rdan_grpo.wandb_tracking import (
@@ -45,74 +55,192 @@ METHOD_NAMES = {
 CURRENT_LAUNCH_METHOD = "rtt_papo_response"
 
 
+class _LaunchPaths(NamedTuple):
+    config: Path
+    runtime: Path
+    certificate: Path
+    preflight: Path
+    evaluator_rows: Path
+    program: Path
+    rtt_root: Path
+    snapshot: Path
+    resume: Path | None
+    recovery_evidence: Path | None
+    pilot_evidence: Path | None
+
+
+class _LaunchEvidence(NamedTuple):
+    code_revision: str
+    production_payload: dict[str, Any]
+    production_hash: str
+    certificate: Mapping[str, Any]
+    data_identity: Mapping[str, Any]
+    parity: Mapping[str, Any]
+
+
 def main() -> int:
     """Validate immutable inputs, build the custom pipeline, and run the requested gate."""
 
     args = _parse_args()
     _require_current_launch_method(args.method)
-    config_path = _regular_file(args.config, "config")
-    runtime_path = _regular_file(args.runtime_parity, "runtime parity artifact")
-    certificate_path = _regular_file(args.certificate, "preflight certificate")
-    preflight_path = _regular_file(args.preflight_config, "preflight config")
-    evaluator_rows = _regular_file(args.evaluator_rows, "evaluator rows")
-    program_path = _regular_file(args.program, "experiment program")
-    rtt_root = _real_directory(args.rtt_root, "RTT root")
-    snapshot = _snapshot(args.snapshot)
-    resume = _resume_path(args.resume_checkpoint)
-    _bind_snapshot_environment(snapshot)
-    require_launch_gate(program_path, config_path, certificate_path, rtt_root)
-    code_revision = _git_revision(REPO_ROOT)
-    data_identity = response_data_identity(program_path)
-    production_hash = _file_sha256(config_path)
-    parity = _runtime_parity(runtime_path, production_hash)
-    source_hashes = response_source_hashes(
-        REPO_ROOT / "src/rdan_grpo",
-        evaluator_rows=evaluator_rows,
-        train_config=config_path,
-        preflight_config=preflight_path,
-        program=program_path,
+    paths = _launch_paths(args)
+    evidence = _launch_evidence(args, paths)
+    run_dir = _prepare_directory(args.run_dir, "run directory")
+    checkpoint_root = _prepare_directory(args.checkpoint_root, "checkpoint root")
+    pipeline_config, response_config, model_identity = _load_pipeline_config(args, paths, evidence)
+    runtime_identity = _response_runtime_identity(
+        response_config,
+        evidence.data_identity,
+        evidence.production_hash,
     )
-    if _file_sha256(runtime_path) != source_hashes["runtime_parity"]:
-        raise ValueError("runtime parity artifact differs from the frozen experiment program")
+    identities = _prepare_lifecycle(
+        args, paths, evidence, pipeline_config, response_config, model_identity, runtime_identity, run_dir
+    )
+    identity = identities[args.stage]
+    _bind_checkpoint_identity(run_dir, identity, paths.resume is not None)
+    completed = _run_pipeline(
+        args,
+        paths,
+        evidence,
+        pipeline_config,
+        response_config,
+        model_identity,
+        runtime_identity,
+        identity,
+        checkpoint_root,
+        run_dir,
+    )
+    _print_outcome(args, completed, run_dir)
+    return 0
+
+
+def _launch_paths(args: argparse.Namespace) -> _LaunchPaths:
+    return _LaunchPaths(
+        config=_regular_file(args.config, "config"),
+        runtime=_regular_file(args.runtime_parity, "runtime parity artifact"),
+        certificate=_regular_file(args.certificate, "preflight certificate"),
+        preflight=_regular_file(args.preflight_config, "preflight config"),
+        evaluator_rows=_regular_file(args.evaluator_rows, "evaluator rows"),
+        program=_regular_file(args.program, "experiment program"),
+        rtt_root=_real_directory(args.rtt_root, "RTT root"),
+        snapshot=_snapshot(args.snapshot),
+        resume=_checkpoint_path(args.resume_checkpoint, "resume checkpoint"),
+        recovery_evidence=_optional_regular_file(args.recovery_evidence, "recovery lifecycle certificate"),
+        pilot_evidence=_optional_regular_file(args.pilot_evidence, "pilot lifecycle certificate"),
+    )
+
+
+def _launch_evidence(args: argparse.Namespace, paths: _LaunchPaths) -> _LaunchEvidence:
+    _bind_snapshot_environment(paths.snapshot)
+    code_revision = _git_revision(REPO_ROOT)
+    _require_response_readiness(args, paths.program, code_revision)
+    require_launch_gate(paths.program, paths.config, paths.certificate, paths.rtt_root)
+    data_identity = response_data_identity(paths.program)
+    production_payload = _compose_config(paths.config)
+    preflight_payload = _compose_config(paths.preflight)
+    production_hash = _file_sha256(paths.config)
+    preflight_hash = _file_sha256(paths.preflight)
+    production_resolved_hash = canonical_resolved_config_sha256(production_payload)
+    preflight_resolved_hash = canonical_resolved_config_sha256(preflight_payload)
+    parity = _runtime_parity(
+        paths.runtime,
+        production_hash,
+        production_resolved_hash,
+        preflight_hash,
+        preflight_resolved_hash,
+    )
+    source_hashes = _response_source_identity(
+        paths,
+        production_resolved_hash,
+        preflight_resolved_hash,
+    )
     certificate = require_train_certificate(
-        certificate_path,
+        paths.certificate,
         method=args.method,
-        config_sha256=_file_sha256(preflight_path),
+        config_sha256=preflight_hash,
         source_sha256=source_hashes,
         quality_weight=args.quality_weight,
         mix_weight=args.mix_weight,
     )
+    _require_secrets()
+    return _LaunchEvidence(code_revision, production_payload, production_hash, certificate, data_identity, parity)
+
+
+def _response_source_identity(
+    paths: _LaunchPaths,
+    production_resolved_hash: str,
+    preflight_resolved_hash: str,
+) -> dict[str, str]:
+    hashes = response_source_hashes(
+        REPO_ROOT / "src/rdan_grpo",
+        evaluator_rows=paths.evaluator_rows,
+        train_config=paths.config,
+        preflight_config=paths.preflight,
+        program=paths.program,
+        train_resolved_config_sha256=production_resolved_hash,
+        preflight_resolved_config_sha256=preflight_resolved_hash,
+    )
+    if _file_sha256(paths.runtime) != hashes["runtime_parity"]:
+        raise ValueError("runtime parity artifact differs from the frozen experiment program")
+    return hashes
+
+
+def _require_secrets() -> None:
     for name in ("OPENROUTER_API_KEY", "WANDB_API_KEY"):
         if not os.environ.get(name, "").strip():
             raise ValueError(f"{name} must be set in the environment")
-    run_dir = _prepare_directory(args.run_dir, "run directory")
-    checkpoint_root = _prepare_directory(args.checkpoint_root, "checkpoint root")
 
+
+def _load_pipeline_config(
+    args: argparse.Namespace,
+    paths: _LaunchPaths,
+    evidence: _LaunchEvidence,
+) -> tuple[Any, ResponseConfig, dict[str, str]]:
+    rtt_root = paths.rtt_root
     sys.path.insert(0, str(rtt_root))
     install_rtt_compat(rtt_root)
     register_wandb_tracker(rtt_root)
 
-    from hydra import compose, initialize_config_dir
-    from omegaconf import OmegaConf
     from roll.datasets.chat_template import register_chat_template
-    from roll.distributed.scheduler.initialize import init
     from roll.models.model_providers import default_tokenizer_provider
     from roll.pipeline.rlvr.rubric_config import RLVRConfig
 
     @register_chat_template("qwen3_nothinking")
-    def qwen3_nothinking(tokenizer, conversation, tools=None, documents=None, **kwargs):
+    def qwen3_nothinking(
+        tokenizer: Any,
+        conversation: Any,
+        tools: Any = None,
+        documents: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Render Qwen3 messages with thinking disabled for training."""
+
         kwargs["tokenize"] = False
         kwargs["add_generation_prompt"] = kwargs.get("add_generation_prompt", True)
         kwargs["enable_thinking"] = False
         return tokenizer.apply_chat_template(conversation, tools, documents, **kwargs)
 
-    with initialize_config_dir(version_base=None, config_dir=str(config_path.parent)):
-        hydra_config = compose(config_name=config_path.stem)
-    payload = OmegaConf.to_container(hydra_config, resolve=True)
-    if not isinstance(payload, dict):
-        raise ValueError("response training config must resolve to an object")
-    pipeline_config = load_response_rlvr_config(rtt_root, RLVRConfig, payload)
+    pipeline_config = load_response_rlvr_config(rtt_root, RLVRConfig, evidence.production_payload)
     response_config = pipeline_config.rdan_response
+    _validate_pipeline_config(args, pipeline_config, response_config, paths.snapshot)
+    model_identity = _model_identity(evidence.parity)
+    observed = build_runtime_identity(
+        paths.snapshot,
+        default_tokenizer_provider(model_args=pipeline_config.actor_train.model_args),
+        model=MODEL_NAME,
+        revision=MODEL_REVISION,
+    )
+    if observed.__dict__ != model_identity:
+        raise ValueError("current snapshot, tokenizer, or chat template differs from runtime parity")
+    return pipeline_config, response_config, model_identity
+
+
+def _validate_pipeline_config(
+    args: argparse.Namespace,
+    pipeline_config: Any,
+    response_config: ResponseConfig,
+    snapshot: Path,
+) -> None:
     _validate_method(args, response_config)
     if args.planned_horizon != pipeline_config.max_steps:
         raise ValueError("planned horizon must match the frozen production config")
@@ -121,59 +249,84 @@ def main() -> int:
     _validate_stage(args)
     _validate_snapshot_config(pipeline_config, snapshot)
 
-    model_identity = _model_identity(parity)
-    observed_identity = build_runtime_identity(
-        snapshot,
-        default_tokenizer_provider(model_args=pipeline_config.actor_train.model_args),
-        model=MODEL_NAME,
-        revision=MODEL_REVISION,
-    )
-    if observed_identity.__dict__ != model_identity:
-        raise ValueError("current snapshot, tokenizer, or chat template differs from runtime parity")
-    runtime_identity = {
-        "resolved_config_sha256": response_config.resolved_config_sha256,
-        "production_train_config_sha256": production_hash,
-        "response_data_manifest_sha256": data_identity["manifest_sha256"],
-        "response_data_output_sha256": data_identity["output_sha256"],
-        "rtt_revision": RTT_REVISION,
-        **GENERATION_SOURCE_IDENTITY,
-    }
-    tracker, wandb_identity = _tracking(
-        pipeline_config,
-        response_config,
-        certificate,
-        model_identity,
-        str(data_identity["manifest_sha256"]),
-        code_revision,
-        run_dir,
-        resume is not None,
-        args.stage,
-    )
-    pipeline_config.track_with = "rdan_wandb"
-    pipeline_config.tracker_kwargs = tracker
-    identity = CheckpointIdentity(
-        planned_horizon=args.planned_horizon,
-        method=args.method,
-        method_weight=(
-            args.quality_weight if args.method in {"rtt_papo_response", "rdan_scalar"} else args.mix_weight
-        ),
-        resolved_config_sha256=response_config.resolved_config_sha256,
-        certificate=ArtifactIdentity(id=certificate["certificate_id"], sha256=_file_sha256(certificate_path)),
-        data=ArtifactIdentity(
-            id=str(data_identity["artifact_id"]),
-            sha256=str(data_identity["manifest_sha256"]),
-        ),
-        revisions={
-            "code": code_revision,
-            "rtt": RTT_REVISION,
-            "model": MODEL_REVISION,
-        },
-        base_checkpoint_sha256=model_identity["snapshot_sha256"],
-        wandb=wandb_identity,
-    )
-    _bind_checkpoint_identity(run_dir, identity, resume is not None)
 
+def _prepare_lifecycle(
+    args: argparse.Namespace,
+    paths: _LaunchPaths,
+    evidence: _LaunchEvidence,
+    pipeline_config: Any,
+    response_config: ResponseConfig,
+    model_identity: Mapping[str, str],
+    runtime_identity: Mapping[str, Any],
+    run_dir: Path,
+) -> dict[str, CheckpointIdentity]:
+    tracking = _stage_tracking(args, paths, evidence, pipeline_config, response_config, model_identity, run_dir)
+    pipeline_config.track_with = "rdan_wandb"
+    pipeline_config.tracker_kwargs = tracking[args.stage][0]
+    identities = {
+        stage: _checkpoint_identity(
+            args=args,
+            response=response_config,
+            certificate=evidence.certificate,
+            certificate_path=paths.certificate,
+            data_identity=evidence.data_identity,
+            code_revision=evidence.code_revision,
+            model_identity=model_identity,
+            wandb_identity=value[1],
+        )
+        for stage, value in tracking.items()
+    }
+    _require_pilot_sequence(
+        args,
+        identities=identities,
+        runtime_identity=runtime_identity,
+        model_identity=model_identity,
+        resume=paths.resume,
+        recovery_evidence=paths.recovery_evidence,
+        pilot_evidence=paths.pilot_evidence,
+    )
+    return identities
+
+
+def _stage_tracking(
+    args: argparse.Namespace,
+    paths: _LaunchPaths,
+    evidence: _LaunchEvidence,
+    pipeline_config: Any,
+    response_config: ResponseConfig,
+    model_identity: Mapping[str, str],
+    run_dir: Path,
+) -> dict[str, tuple[dict[str, Any], dict[str, str]]]:
+    return {
+        stage: _tracking(
+            pipeline_config,
+            response_config,
+            evidence.certificate,
+            model_identity,
+            str(evidence.data_identity["manifest_sha256"]),
+            evidence.code_revision,
+            run_dir,
+            paths.resume is not None and stage == args.stage,
+            stage,
+        )
+        for stage in ("recovery", "pilot", "train")
+    }
+
+
+def _run_pipeline(
+    args: argparse.Namespace,
+    paths: _LaunchPaths,
+    evidence: _LaunchEvidence,
+    pipeline_config: Any,
+    response_config: ResponseConfig,
+    model_identity: Mapping[str, str],
+    runtime_identity: Mapping[str, Any],
+    identity: CheckpointIdentity,
+    checkpoint_root: Path,
+    run_dir: Path,
+) -> CompletedResponseRun:
     import ray
+    from roll.distributed.scheduler.initialize import init
 
     from rdan_grpo.roll_response_pipeline import build_response_training_pipeline
 
@@ -182,7 +335,7 @@ def main() -> int:
         pipeline = build_response_training_pipeline(
             pipeline_config,
             response_config=response_config,
-            certificate=certificate,
+            certificate=evidence.certificate,
             runtime_identity=runtime_identity,
             model_identity=model_identity,
             checkpoint_identity=identity,
@@ -190,13 +343,25 @@ def main() -> int:
             run_root=run_dir,
             artifact_root=run_dir / "artifacts",
             stop_after_step=args.stop_after_step,
-            resume_checkpoint=resume,
+            resume_checkpoint=paths.resume,
+            lifecycle_predecessor=paths.recovery_evidence,
         )
-        checkpoints = pipeline.run()
+        return pipeline.run()
     finally:
         ray.shutdown()
-    print(json.dumps({"checkpoints": [str(path) for path in checkpoints]}, sort_keys=True))
-    return 0
+
+
+def _print_outcome(args: argparse.Namespace, completed: CompletedResponseRun, run_dir: Path) -> None:
+    lifecycle = _issue_lifecycle_outcome(args, completed=completed, run_dir=run_dir)
+    print(
+        json.dumps(
+            {
+                "checkpoints": [str(path) for path in completed.checkpoints],
+                "lifecycle_certificate": str(lifecycle) if lifecycle is not None else None,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -209,6 +374,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--evaluator-rows", type=Path, required=True)
     parser.add_argument("--program", type=Path, required=True)
     parser.add_argument("--runtime-parity", type=Path, required=True)
+    parser.add_argument("--readiness-receipt", type=Path, required=True)
+    parser.add_argument("--readiness-bootstrap", type=Path, required=True)
+    parser.add_argument(
+        "--readiness-evidence",
+        type=Path,
+        action="append",
+        required=True,
+        help="repeat in judge calibration, runtime parity, no-update order",
+    )
     parser.add_argument("--checkpoint-root", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--method", choices=tuple(METHOD_NAMES), required=True)
@@ -217,7 +391,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--planned-horizon", type=int, required=True)
     parser.add_argument("--stop-after-step", type=int)
     parser.add_argument("--resume-checkpoint", type=Path)
-    parser.add_argument("--stage", choices=("pilot", "train"), required=True)
+    parser.add_argument("--recovery-evidence", type=Path)
+    parser.add_argument("--pilot-evidence", type=Path)
+    parser.add_argument("--stage", choices=("recovery", "pilot", "train"), required=True)
     return parser.parse_args()
 
 
@@ -226,6 +402,19 @@ def _validate_method(args: argparse.Namespace, config: ResponseConfig) -> None:
     expected = (config.method, config.quality_weight, config.mix_weight)
     if observed != expected:
         raise ValueError("CLI method and weights must exactly match the production sidecar")
+
+
+def _require_response_readiness(args: argparse.Namespace, program_path: Path, code_revision: str) -> Mapping[str, Any]:
+    receipt = _regular_file(args.readiness_receipt, "response readiness receipt")
+    bootstrap = _regular_file(args.readiness_bootstrap, "response readiness bootstrap")
+    evidence = tuple(_regular_file(path, "response readiness evidence") for path in args.readiness_evidence)
+    return validate_response_readiness(
+        receipt,
+        program_path,
+        bootstrap,
+        evidence,
+        rdan_revision=code_revision,
+    )
 
 
 def _require_current_launch_method(method: str) -> None:
@@ -237,20 +426,238 @@ def _require_current_launch_method(method: str) -> None:
 
 
 def _validate_stage(args: argparse.Namespace) -> None:
-    if args.stage == "pilot":
-        if args.stop_after_step is None or not 1 <= args.stop_after_step <= 20:
-            raise ValueError("pilot stage requires stop_after_step in [1, 20]")
-    elif args.stop_after_step is not None:
+    if args.stage == "recovery" and args.stop_after_step not in {1, 2}:
+        raise ValueError("recovery stage requires stop_after_step 1 or 2")
+    if args.stage == "pilot" and args.stop_after_step != 20:
+        raise ValueError("pilot stage requires stop_after_step 20")
+    if args.stage == "train" and args.stop_after_step is not None:
         raise ValueError("train stage must run the complete frozen horizon")
 
 
-def _runtime_parity(path: Path, production_hash: str) -> Mapping[str, Any]:
+def _checkpoint_identity(
+    *,
+    args: argparse.Namespace,
+    response: ResponseConfig,
+    certificate: Mapping[str, Any],
+    certificate_path: Path,
+    data_identity: Mapping[str, Any],
+    code_revision: str,
+    model_identity: Mapping[str, str],
+    wandb_identity: Mapping[str, str],
+) -> CheckpointIdentity:
+    return CheckpointIdentity(
+        planned_horizon=args.planned_horizon,
+        method=args.method,
+        method_weight=(
+            args.quality_weight if args.method in {"rtt_papo_response", "rdan_scalar"} else args.mix_weight
+        ),
+        resolved_config_sha256=response.resolved_config_sha256,
+        certificate=ArtifactIdentity(id=certificate["certificate_id"], sha256=_file_sha256(certificate_path)),
+        data=ArtifactIdentity(
+            id=str(data_identity["artifact_id"]),
+            sha256=str(data_identity["manifest_sha256"]),
+        ),
+        revisions={"code": code_revision, "rtt": RTT_REVISION, "model": MODEL_REVISION},
+        base_checkpoint_sha256=model_identity["snapshot_sha256"],
+        wandb=wandb_identity,
+    )
+
+
+def _response_runtime_identity(
+    response: ResponseConfig,
+    data_identity: Mapping[str, Any],
+    production_config_sha256: str,
+) -> dict[str, Any]:
+    return {
+        "resolved_config_sha256": response.resolved_config_sha256,
+        "production_train_config_sha256": production_config_sha256,
+        "response_data_manifest_sha256": data_identity["manifest_sha256"],
+        "response_data_output_sha256": data_identity["output_sha256"],
+        "rtt_revision": RTT_REVISION,
+        **GENERATION_SOURCE_IDENTITY,
+    }
+
+
+def _require_pilot_sequence(
+    args: argparse.Namespace,
+    *,
+    identities: Mapping[str, CheckpointIdentity],
+    runtime_identity: Mapping[str, Any],
+    model_identity: Mapping[str, Any],
+    resume: Path | None,
+    recovery_evidence: Path | None,
+    pilot_evidence: Path | None,
+) -> None:
+    _validate_stage(args)
+    _validate_stage_identities(identities)
+    if args.stage == "recovery":
+        _require_recovery_sequence(
+            args,
+            identity=identities["recovery"],
+            runtime_identity=runtime_identity,
+            model_identity=model_identity,
+            resume=resume,
+            recovery_evidence=recovery_evidence,
+            pilot_evidence=pilot_evidence,
+        )
+        return
+    if args.stage == "pilot":
+        _require_pilot_gate(
+            identity=identities["recovery"],
+            runtime_identity=runtime_identity,
+            model_identity=model_identity,
+            resume=resume,
+            recovery_evidence=recovery_evidence,
+            pilot_evidence=pilot_evidence,
+        )
+        return
+    _require_train_gate(
+        identity=identities["train"],
+        pilot_identity=identities["pilot"],
+        runtime_identity=runtime_identity,
+        model_identity=model_identity,
+        resume=resume,
+        recovery_evidence=recovery_evidence,
+        pilot_evidence=pilot_evidence,
+    )
+
+
+def _require_recovery_sequence(
+    args: argparse.Namespace,
+    *,
+    identity: CheckpointIdentity,
+    runtime_identity: Mapping[str, Any],
+    model_identity: Mapping[str, Any],
+    resume: Path | None,
+    recovery_evidence: Path | None,
+    pilot_evidence: Path | None,
+) -> None:
+    if pilot_evidence is not None:
+        raise ValueError("recovery stage does not accept pilot lifecycle evidence")
+    if args.stop_after_step == 1 and resume is None and recovery_evidence is None:
+        return
+    if args.stop_after_step != 2 or resume is None or recovery_evidence is None:
+        raise ValueError("recovery must run fresh to step 1, then resume with its step-1 lifecycle certificate")
+    _require_checkpoint(resume, identity, 1, "recovery resume")
+    evidence = validate_lifecycle_certificate(
+        recovery_evidence,
+        expected_stage="recovery_step_1",
+        expected_identity=identity,
+        expected_runtime_identity=runtime_identity,
+        expected_model_identity=model_identity,
+    )
+    if evidence["checkpoint"]["path"] != str(resume):
+        raise ValueError("recovery resume differs from the certified step-1 checkpoint")
+
+
+def _require_pilot_gate(
+    *,
+    identity: CheckpointIdentity,
+    runtime_identity: Mapping[str, Any],
+    model_identity: Mapping[str, Any],
+    resume: Path | None,
+    recovery_evidence: Path | None,
+    pilot_evidence: Path | None,
+) -> None:
+    if resume is not None or pilot_evidence is not None:
+        raise ValueError("pilot must start fresh from the pinned base")
+    if recovery_evidence is None:
+        raise ValueError("pilot requires the strict step-2 recovery lifecycle certificate")
+    validate_lifecycle_certificate(
+        recovery_evidence,
+        expected_stage="recovery_step_2",
+        expected_identity=identity,
+        expected_runtime_identity=runtime_identity,
+        expected_model_identity=model_identity,
+    )
+
+
+def _require_train_gate(
+    *,
+    identity: CheckpointIdentity,
+    pilot_identity: CheckpointIdentity,
+    runtime_identity: Mapping[str, Any],
+    model_identity: Mapping[str, Any],
+    resume: Path | None,
+    recovery_evidence: Path | None,
+    pilot_evidence: Path | None,
+) -> None:
+    if recovery_evidence is not None:
+        raise ValueError("train stage accepts pilot evidence only")
+    if pilot_evidence is None:
+        raise ValueError("full training requires the strict step-20 pilot lifecycle certificate")
+    validate_lifecycle_certificate(
+        pilot_evidence,
+        expected_stage="pilot_step_20",
+        expected_identity=pilot_identity,
+        expected_runtime_identity=runtime_identity,
+        expected_model_identity=model_identity,
+    )
+    if resume is not None:
+        manifest = _require_checkpoint(resume, identity, None, "train resume")
+        if not 1 <= manifest["completed_step"] < identity.planned_horizon:
+            raise ValueError("train resume must advance an incomplete full-run checkpoint")
+
+
+def _issue_lifecycle_outcome(
+    args: argparse.Namespace,
+    *,
+    completed: CompletedResponseRun,
+    run_dir: Path,
+) -> Path | None:
+    if args.stage == "train":
+        return None
+    stage = f"recovery_step_{args.stop_after_step}" if args.stage == "recovery" else "pilot_step_20"
+    return issue_lifecycle_certificate(
+        run_dir / f"{stage}.json",
+        stage=stage,
+        outcome=completed,
+    )
+
+
+def _validate_stage_identities(identities: Mapping[str, CheckpointIdentity]) -> None:
+    if set(identities) != {"recovery", "pilot", "train"}:
+        raise ValueError("checkpoint lifecycle identities are incomplete")
+    values = list(identities.values())
+    common = [{key: value for key, value in asdict(identity).items() if key != "wandb"} for identity in values]
+    if common[1:] != common[:-1]:
+        raise ValueError("checkpoint lifecycle immutable identities differ")
+    run_ids = {identity.wandb.get("run_id") for identity in values}
+    if len(run_ids) != len(values):
+        raise ValueError("recovery, pilot, and train checkpoint identities must be distinct")
+
+
+def _require_checkpoint(
+    path: Path,
+    identity: CheckpointIdentity,
+    completed_step: int | None,
+    name: str,
+) -> Mapping[str, Any]:
+    manifest = load_checkpoint(path, identity=identity)
+    if completed_step is not None and manifest["completed_step"] != completed_step:
+        raise ValueError(f"{name} must be a promoted step-{completed_step} checkpoint")
+    return manifest
+
+
+def _runtime_parity(
+    path: Path,
+    production_hash: str,
+    production_resolved_hash: str,
+    preflight_hash: str,
+    preflight_resolved_hash: str,
+) -> Mapping[str, Any]:
     artifact = _json_object(path, "runtime parity artifact")
     backend = artifact.get("runtime_backend")
     if artifact.get("status") != "parity_passed" or not isinstance(backend, Mapping):
         raise ValueError("runtime parity artifact is not passing")
-    if backend.get("production_train_config_sha256") != production_hash:
-        raise ValueError("runtime parity artifact is linked to a different production config")
+    expected_configs = {
+        "production_train_config_sha256": production_hash,
+        "production_resolved_config_sha256": production_resolved_hash,
+        "preflight_train_config_sha256": preflight_hash,
+        "preflight_resolved_config_sha256": preflight_resolved_hash,
+    }
+    if any(backend.get(key) != value for key, value in expected_configs.items()):
+        raise ValueError("runtime parity artifact is linked to different composed launch configs")
     required = {
         "actor_train_strategy": "fsdp2_train",
         "actor_infer_strategy": "hf_infer",
@@ -260,6 +667,18 @@ def _runtime_parity(path: Path, production_hash: str) -> Mapping[str, Any]:
     if any(backend.get(key) != value for key, value in required.items()):
         raise ValueError("runtime parity artifact backend differs from production")
     return artifact
+
+
+def _compose_config(path: Path) -> dict[str, Any]:
+    from hydra import compose, initialize_config_dir
+    from omegaconf import OmegaConf
+
+    with initialize_config_dir(version_base=None, config_dir=str(path.parent)):
+        config = compose(config_name=path.stem)
+    payload = OmegaConf.to_container(config, resolve=True)
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path.name} must resolve to an object")
+    return payload
 
 
 def _model_identity(parity: Mapping[str, Any]) -> dict[str, str]:
@@ -294,6 +713,7 @@ def _tracking(
     stage: str,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     method = METHOD_NAMES[response.method]
+    wandb_stage = "resume" if stage == "recovery" else stage
     source_hashes = certificate.get("source_sha256")
     if not isinstance(source_hashes, Mapping) or not source_hashes:
         raise ValueError("preflight certificate source identity is missing")
@@ -301,7 +721,7 @@ def _tracking(
         "kind": "train",
         "method": method,
         "seed": config.seed,
-        "stage": stage,
+        "stage": wandb_stage,
         "resolved_config_sha256": response.resolved_config_sha256,
         "model_revision": MODEL_REVISION,
         "data_sha256": data_sha256,
@@ -310,7 +730,7 @@ def _tracking(
     }
     run_id = deterministic_run_id(metadata)
     group = f"qwen-{method}"
-    name = f"qwen-{method}-{stage}-s{config.seed}"
+    name = f"qwen-{method}-{wandb_stage}-s{config.seed}"
     kwargs = {
         "entity": WANDB_ENTITY,
         "project": WANDB_PROJECT,
@@ -319,8 +739,8 @@ def _tracking(
         "job_type": "train",
         "id": run_id,
         "resume": "must" if resume else "allow",
-        "tags": [method, "response-only", stage],
-        "notes": f"Receipted response-only {stage}",
+        "tags": [method, "response-only", wandb_stage],
+        "notes": f"Receipted response-only {wandb_stage}",
         "log_dir": str(run_dir),
         "settings": {"console": "off"},
         "metadata": metadata,
@@ -346,8 +766,12 @@ def _prepare_directory(path: Path, name: str) -> Path:
     return _real_directory(path, name)
 
 
-def _resume_path(path: Path | None) -> Path | None:
-    return None if path is None else _real_directory(path, "resume checkpoint")
+def _checkpoint_path(path: Path | None, name: str) -> Path | None:
+    return None if path is None else _real_directory(path, name)
+
+
+def _optional_regular_file(path: Path | None, name: str) -> Path | None:
+    return None if path is None else _regular_file(path, name)
 
 
 def _snapshot(path: Path) -> Path:

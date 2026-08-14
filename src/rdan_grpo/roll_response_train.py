@@ -67,10 +67,95 @@ def run_response_train_step(
     returns = _validate_topology(pipeline_config, actor_train, actor_infer)
     prompt_count = _validate_rewarded_batch(rewarded_batch, returns)
     state_before = _training_state(observe_training_state(), "before")
-    initial_id, initial_pipeline_step = _validate_receipt(
-        initial_receipt,
-        _shared_counter(state_before, "optimizer_step"),
+    initial_id, initial_pipeline_step, initial_inventory = _initial_receipt(initial_receipt, state_before)
+    full_response_mask = _prepare_training_batch(
+        rewarded_batch,
+        certificate,
+        returns,
+        method=method,
+        quality_weight=quality_weight,
+        mix_weight=mix_weight,
     )
+    _bind_log_probs(actor_train, rewarded_batch)
+    _validate_token_fields(rewarded_batch, full_response_mask)
+    metrics, state_after, optimizer_delta, scheduler_delta = _execute_actor_update(
+        actor_train, rewarded_batch, full_response_mask, state_before, observe_training_state
+    )
+    post_id = _validate_post_receipt(
+        transfer_after_update(), state_after, initial_id, initial_pipeline_step, initial_inventory
+    )
+    peak_fraction = _validate_post_transaction_memory(observe_post_transaction_memory())
+    return _train_result(
+        method,
+        rewarded_batch,
+        prompt_count,
+        optimizer_delta,
+        scheduler_delta,
+        initial_id,
+        post_id,
+        metrics,
+        peak_fraction,
+    )
+
+
+def _initial_receipt(
+    receipt: Mapping[str, Any], state: Mapping[int, Mapping[str, Any]]
+) -> tuple[str, int, tuple[Mapping[str, Any], ...]]:
+    return _validate_receipt(receipt, _shared_counter(state, "optimizer_step"))
+
+
+def _execute_actor_update(
+    actor_train: Any,
+    batch: DataProto,
+    response_mask: torch.Tensor,
+    state_before: Mapping[int, Mapping[str, Any]],
+    observe_training_state: Callable[[], Sequence[Mapping[str, Any]]],
+) -> tuple[dict[str, Any], dict[int, Mapping[str, Any]], int, int]:
+    metrics = _train_metrics(actor_train.train_step(batch, blocking=True))
+    if not torch.equal(batch.batch["response_mask"], response_mask):
+        raise RuntimeError("actor training changed the full response mask")
+    state_after = _training_state(observe_training_state(), "after")
+    optimizer_delta, scheduler_delta = _validate_state_delta(state_before, state_after)
+    return metrics, state_after, optimizer_delta, scheduler_delta
+
+
+def _train_result(
+    method: ScalarMethod,
+    batch: DataProto,
+    prompt_count: int,
+    optimizer_updates: int,
+    scheduler_steps: int,
+    initial_id: str,
+    post_id: str,
+    metrics: Mapping[str, Any],
+    peak_memory_fraction: float,
+) -> ResponseTrainResult:
+    return ResponseTrainResult(
+        method,
+        prompt_count,
+        len(batch),
+        optimizer_updates,
+        scheduler_steps,
+        initial_id,
+        post_id,
+        MappingProxyType(dict(metrics)),
+        peak_memory_fraction,
+        True,
+    )
+
+
+def _prepare_training_batch(
+    batch: DataProto,
+    certificate: PreflightCertificate | Mapping[str, Any],
+    returns: int,
+    *,
+    method: ScalarMethod,
+    quality_weight: float | None,
+    mix_weight: float | None,
+) -> torch.Tensor:
+    full_response_mask = batch.batch["response_mask"].clone()
+    shifted_mask = full_response_mask[:, 1:].to(torch.bool)
+    batch.batch["final_response_mask"] = shifted_mask.clone()
     adapter = make_roll_compute_advantage(
         certificate,
         method=method,
@@ -78,48 +163,28 @@ def run_response_train_step(
         quality_weight=quality_weight,
         mix_weight=mix_weight,
     )
+    adapter(batch, response_mask=shifted_mask)
+    _bind_method_evidence(batch, method=method, quality_weight=quality_weight, mix_weight=mix_weight)
+    _pre_update_reward_gate(batch, returns, method)
+    return full_response_mask
 
-    full_response_mask = rewarded_batch.batch["response_mask"].clone()
-    shifted_mask = full_response_mask[:, 1:].to(torch.bool)
-    rewarded_batch.batch["final_response_mask"] = shifted_mask.clone()
-    adapter(rewarded_batch, response_mask=shifted_mask)
-    _bind_method_evidence(
-        rewarded_batch,
-        method=method,
-        quality_weight=quality_weight,
-        mix_weight=mix_weight,
+
+def _validate_post_receipt(
+    receipt: Mapping[str, Any],
+    state_after: Mapping[int, Mapping[str, Any]],
+    initial_id: str,
+    initial_pipeline_step: int,
+    initial_inventory: Sequence[Mapping[str, Any]],
+) -> str:
+    post_id, post_pipeline_step, post_inventory = _validate_receipt(
+        receipt, _shared_counter(state_after, "optimizer_step")
     )
-    _pre_update_reward_gate(rewarded_batch, returns, method)
-    _bind_log_probs(actor_train, rewarded_batch)
-    _validate_token_fields(rewarded_batch, full_response_mask)
-
-    train_output = actor_train.train_step(rewarded_batch, blocking=True)
-    metrics = _train_metrics(train_output)
-    if not torch.equal(rewarded_batch.batch["response_mask"], full_response_mask):
-        raise RuntimeError("actor training changed the full response mask")
-    state_after = _training_state(observe_training_state(), "after")
-    optimizer_delta, scheduler_delta = _validate_state_delta(state_before, state_after)
-
-    post_receipt = transfer_after_update()
-    post_id, post_pipeline_step = _validate_receipt(post_receipt, _shared_counter(state_after, "optimizer_step"))
     if post_id == initial_id:
         raise RuntimeError("post-update receipt must use a distinct transaction")
     if post_pipeline_step != initial_pipeline_step + 1:
         raise RuntimeError("post-update receipt did not advance exactly one pipeline transaction")
-    peak_fraction = _validate_post_transaction_memory(observe_post_transaction_memory())
-
-    return ResponseTrainResult(
-        method=method,
-        prompt_count=prompt_count,
-        response_count=len(rewarded_batch),
-        optimizer_updates=optimizer_delta,
-        scheduler_steps=scheduler_delta,
-        initial_transaction_id=initial_id,
-        post_transaction_id=post_id,
-        metrics=MappingProxyType(dict(metrics)),
-        peak_memory_fraction=peak_fraction,
-        promotion_ready=True,
-    )
+    _validate_parameter_update(initial_inventory, post_inventory)
+    return post_id
 
 
 def _validate_topology(config: Any, actor_train: Any, actor_infer: Any) -> int:
@@ -414,7 +479,9 @@ def _validate_state_delta(
     return optimizer_deltas[0], scheduler_deltas[0]
 
 
-def _validate_receipt(receipt: Mapping[str, Any], optimizer_updates: int) -> tuple[str, int]:
+def _validate_receipt(
+    receipt: Mapping[str, Any], optimizer_updates: int
+) -> tuple[str, int, tuple[Mapping[str, Any], ...]]:
     if not isinstance(receipt, Mapping) or receipt.get("status") != "receipt_passed":
         raise RuntimeError("paired receipt did not pass")
     observed_updates = receipt.get("optimizer_updates")
@@ -452,7 +519,16 @@ def _validate_receipt(receipt: Mapping[str, Any], optimizer_updates: int) -> tup
     )
     if receipt.get("receipt_manifest_sha256") != expected_manifest:
         raise RuntimeError("paired receipt manifest digest is invalid")
-    return transaction_id, pipeline_step
+    return transaction_id, pipeline_step, tuple(actors[0]["items"])
+
+
+def _validate_parameter_update(initial: Sequence[Mapping[str, Any]], post: Sequence[Mapping[str, Any]]) -> None:
+    initial_metadata = [(item["name"], item["shape"], item["dtype"], item["nbytes"]) for item in initial]
+    post_metadata = [(item["name"], item["shape"], item["dtype"], item["nbytes"]) for item in post]
+    if initial_metadata != post_metadata:
+        raise RuntimeError("post-update trainable parameter inventory differs from the initial receipt")
+    if not any(before["sha256"] != after["sha256"] for before, after in zip(initial, post, strict=True)):
+        raise RuntimeError("optimizer updates did not change any trainable parameter bytes")
 
 
 def _receipt_side(values: Any, side: str, transaction_id: str) -> dict[int, Mapping[str, Any]]:

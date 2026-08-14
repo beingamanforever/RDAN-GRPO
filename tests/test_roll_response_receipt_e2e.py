@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,6 +19,7 @@ from rdan_grpo.roll_response_receipt import ResponseReceiptError, build_response
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY
 
 TRANSACTION = "response-receipt-transaction"
+ROOT = Path(__file__).resolve().parents[1]
 MODEL_IDENTITY = {
     "model": MODEL,
     "revision": MODEL_REVISION,
@@ -27,6 +30,8 @@ MODEL_IDENTITY = {
 RUNTIME_IDENTITY = {
     "resolved_config_sha256": "4" * 64,
     "production_train_config_sha256": "5" * 64,
+    "response_data_manifest_sha256": "6" * 64,
+    "response_data_output_sha256": "7" * 64,
     "rtt_revision": RTT_REVISION,
     **GENERATION_SOURCE_IDENTITY,
 }
@@ -77,6 +82,24 @@ def _build(phase: str = "initial", pipeline_step: int = 0, steps: int = 0, **kwa
         fixed_weight=kwargs.pop("fixed_weight", 0.5),
         **kwargs,
     )
+
+
+def test_runner_runtime_identity_reaches_receipt_boundary_exactly() -> None:
+    path = ROOT / "scripts/run_response_train.py"
+    spec = importlib.util.spec_from_file_location("test_response_receipt_runner", path)
+    assert spec is not None and spec.loader is not None
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    response = runner.ResponseConfig("rtt_papo_response", 0.5, None, "4" * 64)
+    runtime = runner._response_runtime_identity(
+        response,
+        {"manifest_sha256": "6" * 64, "output_sha256": "7" * 64},
+        "5" * 64,
+    )
+
+    receipt = _build(runtime_identity=runtime)
+
+    assert receipt["runtime"] == runtime == RUNTIME_IDENTITY
 
 
 @pytest.mark.parametrize(
@@ -139,6 +162,7 @@ def test_response_receipt_rejects_rank_counter_and_phase_drift() -> None:
     [
         lambda runtime, model: runtime.update(transformers_version="4.57.1"),
         lambda runtime, model: runtime.update(production_train_config_sha256="bad"),
+        lambda runtime, model: runtime.update(response_data_manifest_sha256="bad"),
         lambda runtime, model: runtime.update(resolved_config_sha256="0" * 64),
         lambda runtime, model: model.update(revision="0" * 40),
         lambda runtime, model: model.update(snapshot_sha256="bad"),

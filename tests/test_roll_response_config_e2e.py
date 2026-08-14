@@ -44,10 +44,21 @@ def _payload(method: str = "rtt_papo_response") -> dict[str, Any]:
         "async_pipeline": False,
         "async_generation_ratio": 0,
         "generate_opt_level": 0,
+        "num_gpus_per_node": 2,
+        "prompt_length": 2048,
+        "response_length": 4096,
         "enable_reference": False,
+        "add_token_level_kl": False,
+        "init_kl_coef": 0,
         "enable_old_logprobs_recompute": True,
         "rollout_batch_size": 64,
         "num_return_sequences_in_group": 8,
+        "ppo_epochs": 1,
+        "pg_clip": 0.2,
+        "pg_clip_low": 0.2,
+        "pg_clip_high": 0.27,
+        "use_pg_clip_range": True,
+        "importance_sampling": "token",
         "max_steps": 500,
         "save_steps": 20,
         "actor_train": {
@@ -62,7 +73,19 @@ def _payload(method: str = "rtt_papo_response") -> dict[str, Any]:
                 "num_train_epochs": 50,
             },
         },
-        "actor_infer": {**_worker("ResponseInferWorker", "hf_infer"), "max_concurrency": 1},
+        "actor_infer": {
+            **_worker("ResponseInferWorker", "hf_infer"),
+            "max_concurrency": 1,
+            "generating_args": {
+                "do_sample": True,
+                "max_new_tokens": 4096,
+                "num_beams": 1,
+                "num_return_sequences": 8,
+                "temperature": 0.99,
+                "top_k": 100,
+                "top_p": 0.99,
+            },
+        },
         "rewards": {
             "llm_judge": {
                 "worker_cls": reward_worker,
@@ -80,7 +103,10 @@ def _worker(name: str, strategy: str) -> dict[str, Any]:
         "device_mapping": [0, 1],
         "world_size": 2,
         "num_gpus_per_worker": 1,
-        "strategy_args": {"strategy_name": strategy, "strategy_config": {"transformer_impl": "huggingface"}},
+        "strategy_args": {
+            "strategy_name": strategy,
+            "strategy_config": {"transformer_impl": "huggingface", "max_model_len": 8000},
+        },
         "model_args": {"dtype": "bf16", "attn_implementation": "sdpa"},
     }
 
@@ -154,7 +180,7 @@ def test_preflight_constructor_restores_zero_update_hf_topology(monkeypatch: pyt
     payload.update(max_steps=0, track_with="stdout")
     payload["actor_train"]["device_mapping"] = "[]"
     payload["validation"] = {
-        "generating_args": {"num_return_sequences": 8},
+        "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
         "data_args": {"file_name": ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]},
     }
     original = copy.deepcopy(payload)
@@ -172,19 +198,80 @@ def test_preflight_constructor_restores_zero_update_hf_topology(monkeypatch: pyt
 
 
 @pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("do_sample", False),
+        ("max_new_tokens", 2048),
+        ("num_beams", 2),
+        ("num_return_sequences", 4),
+        ("temperature", 1.0),
+        ("top_k", 0),
+        ("top_p", 1.0),
+    ],
+)
+def test_preflight_constructor_rejects_generation_drift(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: object
+) -> None:
+    module = _module(monkeypatch)
+    payload = _payload()
+    payload.update(max_steps=0, track_with="stdout")
+    payload["actor_train"]["device_mapping"] = "[]"
+    payload["validation"] = {
+        "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
+        "data_args": {"file_name": ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]},
+    }
+    payload["validation"]["generating_args"][name] = value
+    monkeypatch.setattr(module, "_verify_rtt", lambda root: None)
+
+    with pytest.raises(ValueError, match="frozen RTT generation recipe"):
+        module.load_response_preflight_config("/pinned/rtt", FakeConfig, payload)
+
+
+@pytest.mark.parametrize(
     "mutate",
     [
         lambda value: value.update(rewards={}),
         lambda value: value["actor_train"].update(worker_cls="roll.pipeline.rlvr.actor_worker.ActorWorker"),
+        lambda value: value["actor_train"].update(device_mapping=[0]),
+        lambda value: value["actor_train"].update(world_size=1),
+        lambda value: value["actor_infer"].update(num_gpus_per_worker=2),
         lambda value: value["actor_infer"]["strategy_args"].update(strategy_name="vllm"),
         lambda value: value.update(enable_old_logprobs_recompute=False),
+        lambda value: value.update(enable_reference=True),
+        lambda value: value["actor_train"]["training_args"].update(learning_rate=2e-6),
+        lambda value: value["actor_train"]["training_args"].update(weight_decay=0.1),
+        lambda value: value["actor_train"]["training_args"].update(per_device_train_batch_size=2),
         lambda value: value["actor_train"]["training_args"].update(gradient_accumulation_steps=2),
+        lambda value: value["actor_train"]["training_args"].update(warmup_steps=10),
+        lambda value: value["actor_train"]["training_args"].update(num_train_epochs=49),
+        lambda value: value.update(prompt_length=1024),
+        lambda value: value.update(response_length=2048),
+        lambda value: value.update(pg_clip=0.1),
+        lambda value: value.update(pg_clip_low=0.1),
+        lambda value: value.update(pg_clip_high=0.2),
+        lambda value: value.update(use_pg_clip_range=False),
+        lambda value: value.update(ppo_epochs=2),
+        lambda value: value.update(init_kl_coef=0.01),
+        lambda value: value.update(add_token_level_kl=True),
+        lambda value: value.update(num_return_sequences_in_group=4),
+        lambda value: value.update(rollout_batch_size=32),
+        lambda value: value.update(max_steps=499),
+        lambda value: value.update(save_steps=10),
+        lambda value: value.update(num_gpus_per_node=1),
+        lambda value: value["actor_infer"]["strategy_args"]["strategy_config"].update(max_model_len=4096),
+        lambda value: value["actor_infer"]["generating_args"].update(do_sample=False),
+        lambda value: value["actor_infer"]["generating_args"].update(num_beams=2),
+        lambda value: value["actor_infer"]["generating_args"].update(max_new_tokens=2048),
+        lambda value: value["actor_infer"]["generating_args"].update(num_return_sequences=4),
+        lambda value: value["actor_infer"]["generating_args"].update(temperature=1.0),
+        lambda value: value["actor_infer"]["generating_args"].update(top_p=1.0),
         lambda value: value["actor_train"]["data_args"].update(
             file_name=["data/qwen_hir_rubrichub_if_rl_eligible.jsonl"]
         ),
         lambda value: value["rewards"]["llm_judge"].update(
             worker_cls="rdan_grpo.roll_reward.ScalarRubricRewardWorker"
         ),
+        lambda value: value["actor_infer"]["generating_args"].update(top_k=0),
     ],
 )
 def test_production_constructor_rejects_stock_or_weakened_profiles(
@@ -221,6 +308,13 @@ def test_method_train_yaml_uses_exact_objective_sidecar(path: str, method: str, 
     }
     assert payload["rewards"]["llm_judge"]["worker_cls"].endswith("RTTCompatibleRubricRewardWorker")
     assert payload["rewards"]["llm_judge"]["judge_model_type"] == "api"
+    assert payload["actor_infer"]["generating_args"]["temperature"] == 0.99
+    assert payload["actor_infer"]["generating_args"]["top_k"] == 100
+    assert payload["actor_infer"]["generating_args"]["top_p"] == 0.99
+    assert payload["actor_infer"]["generating_args"]["do_sample"] is True
+    assert payload["actor_infer"]["generating_args"]["max_new_tokens"] == "${response_length}"
+    assert payload["actor_infer"]["generating_args"]["num_beams"] == 1
+    assert payload["actor_infer"]["generating_args"]["num_return_sequences"] == "${num_return_sequences_in_group}"
     assert payload["rdan_response"] == {"method": method, "quality_weight": quality, "mix_weight": None}
     assert "api_key" not in payload["rewards"]["llm_judge"]
 
@@ -239,6 +333,12 @@ def test_method_preflight_yaml_is_zero_update_over_hybrid_data(path: str) -> Non
     assert payload["track_with"] == "stdout"
     assert payload["actor_train"]["device_mapping"] == "[]"
     assert payload["validation"]["generating_args"]["num_return_sequences"] == 8
+    assert payload["validation"]["generating_args"]["do_sample"] is True
+    assert payload["validation"]["generating_args"]["max_new_tokens"] == "${response_length}"
+    assert payload["validation"]["generating_args"]["num_beams"] == 1
+    assert payload["validation"]["generating_args"]["temperature"] == 0.99
+    assert payload["validation"]["generating_args"]["top_k"] == 100
+    assert payload["validation"]["generating_args"]["top_p"] == 0.99
     assert payload["validation"]["data_args"]["file_name"] == ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]
 
 

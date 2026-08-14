@@ -96,6 +96,6 @@
   "train_config": {
     "dataset_path": "data/HIR_trainv1_rdan_scalar_certified.jsonl",
     "path": "configs/roll/qwen_scalar_train.yaml",
-    "sha256": "f90e24e9147f968aeae15122abbcb1de25bdfa62d45050c5e1f6e1fd65abf864"
+    "sha256": "9560713cf9064fa4287ac0b678db0ccb9f11f346883fbac4c352ce78154227bd"
   }
 }

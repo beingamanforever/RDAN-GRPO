@@ -245,6 +245,9 @@ def test_same_backend_profile_is_explicit_and_old_profile_is_unchanged(
         rtt_revision=program.RTT_REVISION,
         weight_receipt=WEIGHT_RECEIPT,
         production_train_config_sha256="d" * 64,
+        production_resolved_config_sha256="e" * 64,
+        preflight_train_config_sha256="f" * 64,
+        preflight_resolved_config_sha256="0" * 64,
         backend_profile=FSDP2_HF_PROFILE,
     )
 
@@ -265,6 +268,9 @@ def test_same_backend_profile_is_explicit_and_old_profile_is_unchanged(
     assert artifact["runtime_backend"] == {
         "train_config_sha256": parity_config_sha256,
         "production_train_config_sha256": "d" * 64,
+        "production_resolved_config_sha256": "e" * 64,
+        "preflight_train_config_sha256": "f" * 64,
+        "preflight_resolved_config_sha256": "0" * 64,
         "resolved_config_sha256": RESOLVED_CONFIG_SHA256,
         "actor_train_strategy": "fsdp2_train",
         "actor_infer_strategy": "hf_infer",
@@ -288,6 +294,9 @@ def test_same_backend_profile_is_explicit_and_old_profile_is_unchanged(
             rtt_revision=program.RTT_REVISION,
             weight_receipt=WEIGHT_RECEIPT,
             production_train_config_sha256="d" * 64,
+            production_resolved_config_sha256="e" * 64,
+            preflight_train_config_sha256="f" * 64,
+            preflight_resolved_config_sha256="0" * 64,
             backend_profile=FSDP2_HF_PROFILE,
         )
     assert _run(_FaithfulRollBoundary(_observation()), identity)["runtime_backend"]["actor_infer_strategy"] == "vllm"

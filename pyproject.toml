@@ -25,4 +25,4 @@ select = ["E", "F", "I", "W"]
 testpaths = ["tests"]
 
 [tool.setuptools.data-files]
-"share/doc/rdan-grpo" = ["THIRD_PARTY_NOTICES.md", "third_party/licenses/RTT-APACHE-2.0.txt"]
+"share/doc/rdan-grpo" = ["THIRD_PARTY_NOTICES.md", "LICENSES/Apache-2.0.txt"]

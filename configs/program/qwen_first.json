@@ -116,19 +116,19 @@
     "evaluator_certificate": {
       "certificate_id": "hir_evaluator_certificate_v1",
       "path": "configs/artifacts/hir_evaluator_certificate.json",
-      "sha256": "b84dfd35fe48723c9d47b24f61299c681bbf417d1f721c71a4d336afd24fb408",
+      "sha256": "96cd00d9bff6deabb97f3a1660cb8cf027f55f20147f9a311f07da06c41f81d4",
       "status": "frozen"
     },
     "exclusion_manifest": {
       "manifest_id": "hir_hard_route_exclusions_v1",
       "path": "configs/artifacts/hir_hard_route_exclusions.json",
-      "sha256": "313a6eb9030db5c536ae6a6f85d141ce62891cff06c3a1cb241398160728c632",
+      "sha256": "c68b86c1f214f1bfe6e2a2559bac967a06b1b441696e42df2f46340826bc91e3",
       "status": "frozen"
     },
     "implementation_manifest": {
       "manifest_id": "hir_route_implementation_v1",
       "path": "configs/artifacts/hir_route_implementation.json",
-      "sha256": "af54813451e0dfb480b64b2f399ad60fdc3563bacdce69f88291f5533394761a",
+      "sha256": "d8d2f97ea9206bc82668d9dacf06f33607030a21bee50c1f972abf2a051be929",
       "status": "frozen"
     },
     "route_resolution": {
@@ -140,10 +140,14 @@
   "id": "qwen_first",
   "judge_config": "../judges/openrouter_luna.json",
   "launch_train_config": {
+    "hydra_parent": {
+      "path": "configs/roll/qwen_scalar_train.yaml",
+      "sha256": "9560713cf9064fa4287ac0b678db0ccb9f11f346883fbac4c352ce78154227bd"
+    },
     "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
-    "preflight_sha256": "e4bd887cc4135cc94ac8a06c2500f53ccffa656ad3e7fdd0290c9c399e8ab278",
+    "preflight_sha256": "98d4a435c6c1761ad55cd5fcd975dc4d9587f4769d56aba0ac986ddd22582748",
     "purpose": "500_step_recipe_with_stop_after_step_pilot_gate",
-    "sha256": "48e67c466ea3914951322d68313c8b92fe3ff541eb0e8d5d9f4f62ce4230c3c8"
+    "sha256": "47e68b9c9aae4c73f126ce30b158d7c00fe58b1ebf71490dacd0e925832ff103"
   },
   "lifecycle_artifacts": {
     "discriminator_certificate": {
@@ -191,7 +195,7 @@
     "scalar_data": {
       "artifact_id": "qwen_scalar_data_v1",
       "path": "configs/artifacts/qwen_scalar_data_manifest.json",
-      "sha256": "1b3aa62fdb51f99120cdf67b20a2f0baeda70159831c14528807eb6732eae3fa",
+      "sha256": "8b7505cbb48f85b3ca1a8545828c3e4ae2e1e4e16b5648d4c105b4a2fefcc833",
       "status": "frozen"
     },
     "token_labels": {
@@ -423,7 +427,7 @@
     },
     "production": {
       "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
-      "sha256": "48e67c466ea3914951322d68313c8b92fe3ff541eb0e8d5d9f4f62ce4230c3c8",
+      "sha256": "47e68b9c9aae4c73f126ce30b158d7c00fe58b1ebf71490dacd0e925832ff103",
       "status": "frozen"
     }
   },

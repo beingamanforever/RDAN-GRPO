@@ -22,6 +22,40 @@ SIDECAR_KEY = "rdan_response"
 HYBRID_METHODS = frozenset({"rtt_papo_response", "rl_csr", "rl_aon"})
 METHODS = HYBRID_METHODS | {"rdan_scalar", "rl_mix"}
 UPDATES_PER_STEP = 2
+FROZEN_PROFILE = {
+    "num_gpus_per_node": 2,
+    "prompt_length": 2048,
+    "response_length": 4096,
+    "rollout_batch_size": 64,
+    "num_return_sequences_in_group": 8,
+    "ppo_epochs": 1,
+    "pg_clip": 0.2,
+    "pg_clip_low": 0.2,
+    "pg_clip_high": 0.27,
+    "use_pg_clip_range": True,
+    "importance_sampling": "token",
+    "init_kl_coef": 0,
+    "enable_reference": False,
+    "add_token_level_kl": False,
+    "save_steps": 20,
+}
+TRAINING_ARGS = {
+    "learning_rate": 1.0e-6,
+    "weight_decay": 0,
+    "per_device_train_batch_size": 4,
+    "gradient_accumulation_steps": 32,
+    "warmup_steps": 20,
+    "num_train_epochs": 50,
+}
+GENERATION_ARGS = {
+    "do_sample": True,
+    "max_new_tokens": 4096,
+    "num_beams": 1,
+    "num_return_sequences": 8,
+    "temperature": 0.99,
+    "top_k": 100,
+    "top_p": 0.99,
+}
 
 
 @dataclass(frozen=True)
@@ -141,32 +175,13 @@ def _validate_payload(payload: Mapping[str, Any], response: ResponseConfig) -> N
         "async_pipeline": False,
         "async_generation_ratio": 0,
         "generate_opt_level": 0,
-        "enable_reference": False,
         "enable_old_logprobs_recompute": True,
-        "rollout_batch_size": 64,
-        "num_return_sequences_in_group": 8,
-        "max_steps": 500,
-        "save_steps": 20,
     }
     if any(payload.get(name) != value for name, value in required.items()):
         raise ValueError("response config differs from the frozen synchronous 500-step profile")
     if infer.get("max_concurrency") != 1:
         raise ValueError("response config requires actor_infer.max_concurrency=1")
-    training = actor.get("training_args")
-    expected_training = {
-        "learning_rate": 1.0e-6,
-        "weight_decay": 0,
-        "per_device_train_batch_size": 4,
-        "gradient_accumulation_steps": 32,
-        "warmup_steps": 20,
-        "num_train_epochs": 50,
-    }
-    if training != expected_training:
-        raise ValueError("response config differs from the RTT global optimizer batch recipe")
-    responses = payload["rollout_batch_size"] * payload["num_return_sequences_in_group"]
-    optimizer_batch = training["per_device_train_batch_size"] * training["gradient_accumulation_steps"] * 2
-    if responses != optimizer_batch * UPDATES_PER_STEP:
-        raise ValueError("response config differs from the frozen optimizer update cadence")
+    _validate_recipe(payload, actor, infer, max_steps=500)
 
 
 def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseConfig) -> None:
@@ -178,6 +193,7 @@ def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseCo
         raise ValueError("response preflight requires inference DP2")
     if payload.get("max_steps") != 0 or payload.get("track_with") != "stdout":
         raise ValueError("response preflight requires zero updates and stdout tracking")
+    _validate_recipe(payload, actor, infer, max_steps=0)
     rewards = payload.get("rewards")
     if not isinstance(rewards, Mapping) or set(rewards) != {"llm_judge"}:
         raise ValueError("response preflight requires the production llm_judge reward")
@@ -190,6 +206,7 @@ def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseCo
     validation = payload.get("validation")
     generating = validation.get("generating_args") if isinstance(validation, Mapping) else None
     data = validation.get("data_args") if isinstance(validation, Mapping) else None
+    _validate_generation(generating, "response preflight validation")
     if (
         not isinstance(generating, Mapping)
         or generating.get("num_return_sequences") != 8
@@ -197,6 +214,32 @@ def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseCo
         or data.get("file_name") != [expected_data]
     ):
         raise ValueError(f"response preflight requires eight responses over data {expected_data}")
+
+
+def _validate_recipe(
+    payload: Mapping[str, Any], actor: Mapping[str, Any], infer: Mapping[str, Any], *, max_steps: int
+) -> None:
+    expected = {**FROZEN_PROFILE, "max_steps": max_steps}
+    if any(payload.get(name) != value for name, value in expected.items()):
+        raise ValueError("response config differs from the frozen RL recipe")
+    if actor.get("training_args") != TRAINING_ARGS:
+        raise ValueError("response config differs from the RTT global optimizer batch recipe")
+    strategy = infer.get("strategy_args")
+    strategy_config = strategy.get("strategy_config") if isinstance(strategy, Mapping) else None
+    if not isinstance(strategy_config, Mapping) or strategy_config.get("max_model_len") != 8000:
+        raise ValueError("response config differs from the frozen inference topology")
+    _validate_generation(infer.get("generating_args"), "response config")
+    responses = payload["rollout_batch_size"] * payload["num_return_sequences_in_group"]
+    optimizer_batch = TRAINING_ARGS["per_device_train_batch_size"] * TRAINING_ARGS["gradient_accumulation_steps"] * 2
+    if responses != optimizer_batch * UPDATES_PER_STEP:
+        raise ValueError("response config differs from the frozen optimizer update cadence")
+
+
+def _validate_generation(value: Any, name: str) -> None:
+    expected = GENERATION_ARGS
+    observed = value if isinstance(value, Mapping) else {key: getattr(value, key, None) for key in expected}
+    if any(observed.get(key) != expected_value for key, expected_value in expected.items()):
+        raise ValueError(f"{name} differs from the frozen RTT generation recipe")
 
 
 def _method_profile(method: str) -> tuple[str, str]:
@@ -280,6 +323,7 @@ def _validate_config(config: Any) -> None:
         raise RuntimeError("constructed response config changed the method reward worker")
     if config.actor_train.data_args.file_name != [expected_data]:
         raise RuntimeError("constructed response config changed the method dataset")
+    _validate_generation(config.actor_infer.generating_args, "constructed response config")
 
 
 def _validate_preflight_config(config: Any) -> None:
@@ -298,6 +342,8 @@ def _validate_preflight_config(config: Any) -> None:
         raise RuntimeError("constructed response preflight can perform updates or external tracking")
     if config.validation.generating_args.num_return_sequences != 8:
         raise RuntimeError("constructed response preflight changed group size")
+    _validate_generation(config.actor_infer.generating_args, "constructed response preflight actor inference")
+    _validate_generation(config.validation.generating_args, "constructed response preflight validation")
     expected_worker, expected_data = _method_profile(config.rdan_response.method)
     if config.rewards["llm_judge"].get("worker_cls") != expected_worker:
         raise RuntimeError("constructed response preflight changed the method reward worker")

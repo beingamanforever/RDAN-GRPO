@@ -24,6 +24,7 @@ def _load_module() -> ModuleType:
 
 
 BOOTSTRAP = _load_module()
+RUNTIME = BOOTSTRAP._load_runtime_contract()
 
 
 class FakeRunner:
@@ -35,6 +36,18 @@ class FakeRunner:
         }
         self.dirty: Path | None = None
         self.gpu_name = "NVIDIA A100-SXM4-80GB"
+        self.gpu_count = 2
+        self.gpu_memory_mib = 81920
+        self.gpu_memory_used_mib = 0
+        self.gpu_utilization_percent = 0
+        self.compute_processes = ""
+        self.topology_forward = "PIX"
+        self.topology_reverse = "PIX"
+        self.driver = "575.57.08"
+        self.cuda = "12.9"
+        self.nccl_version = [2, 27, 3]
+        self.host_ram_bytes = 210 * 2**30
+        self.free_disk_bytes = {inputs.cache_root: 2_700 * 2**30, inputs.run_root: 2_700 * 2**30}
         self.package_overrides: dict[str, str | None] = {}
         self.ambient_origin: str | None = None
         self.fail_next_install = False
@@ -54,10 +67,29 @@ class FakeRunner:
         self.envs.append(dict(env or {}))
         if command[0] == "git":
             return self._git(command)
-        if command[0] == "nvidia-smi":
-            return "\n".join(f"{index}, {self.gpu_name}, 81920, 575.57.08" for index in range(2))
+        if command[:2] == ["free", "--bytes"]:
+            return f"              total used free\nMem: {self.host_ram_bytes} 0 {self.host_ram_bytes}\n"
+        if command[:3] == ["df", "--block-size=1", "--output=avail"]:
+            return f"Avail\n{self.free_disk_bytes[Path(command[-1])]}\n"
+        if command[:2] == [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version",
+        ]:
+            return "\n".join(
+                f"{index}, GPU-{index}, {self.gpu_name}, {self.gpu_memory_mib}, "
+                f"{self.gpu_memory_used_mib}, {self.gpu_utilization_percent}, {self.driver}"
+                for index in range(self.gpu_count)
+            )
+        if command[:2] == ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name"]:
+            return self.compute_processes
+        if command == ["nvidia-smi", "topo", "-m"]:
+            return (
+                "        GPU0 GPU1 CPU Affinity\n"
+                f"GPU0    X    {self.topology_forward}   0-31\n"
+                f"GPU1    {self.topology_reverse}  X     0-31\n"
+            )
         if command[0] == "nvcc":
-            return "Cuda compilation tools, release 12.9, V12.9.41\n"
+            return f"Cuda compilation tools, release {self.cuda}, V{self.cuda}.41\n"
         if len(command) >= 3 and command[1:3] == ["-m", "venv"]:
             python = Path(command[3]) / "bin/python"
             python.parent.mkdir(parents=True)
@@ -125,20 +157,33 @@ class FakeRunner:
     def _cuda(self) -> dict[str, Any]:
         return {
             "torch": "2.8.0+cu129",
-            "cuda": "12.9",
+            "cuda": self.cuda,
             "cuda_available": True,
             "device_count": 2,
             "devices": [{"index": index, "name": self.gpu_name, "memory_mib": 81920} for index in range(2)],
             "nccl_available": True,
+            "nccl_version": self.nccl_version,
         }
 
 
 class LaunchRunner:
-    def __init__(self, *, repo_digest: str = BOOTSTRAP.CONTAINER_AMD64_DIGEST) -> None:
+    def __init__(self, *, repo_digest: str = RUNTIME.container_amd64_digest) -> None:
         self.repo_digest = repo_digest
         self.image_id = "sha256:" + "2" * 64
         self.commands: list[list[str]] = []
         self.envs: list[dict[str, str]] = []
+        self.static = FakeRunner.__new__(FakeRunner)
+        self.static.host_ram_bytes = 210 * 2**30
+        self.static.free_disk_bytes = 2_700 * 2**30
+        self.static.gpu_count = 2
+        self.static.gpu_name = "NVIDIA A100-SXM4-80GB"
+        self.static.gpu_memory_mib = 81920
+        self.static.gpu_memory_used_mib = 0
+        self.static.gpu_utilization_percent = 0
+        self.static.compute_processes = ""
+        self.static.topology_forward = "PIX"
+        self.static.topology_reverse = "PIX"
+        self.static.driver = "575.57.08"
 
     def run(
         self,
@@ -151,6 +196,27 @@ class LaunchRunner:
         command = list(args)
         self.commands.append(command)
         self.envs.append(dict(env or {}))
+        if command[:2] == ["free", "--bytes"]:
+            return f"Mem: {self.static.host_ram_bytes} 0 0\n"
+        if command[:3] == ["df", "--block-size=1", "--output=avail"]:
+            return f"Avail\n{self.static.free_disk_bytes}\n"
+        if command[:2] == [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version",
+        ]:
+            return "\n".join(
+                f"{index}, GPU-{index}, {self.static.gpu_name}, {self.static.gpu_memory_mib}, "
+                f"{self.static.gpu_memory_used_mib}, {self.static.gpu_utilization_percent}, {self.static.driver}"
+                for index in range(self.static.gpu_count)
+            )
+        if command[:2] == ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name"]:
+            return self.static.compute_processes
+        if command == ["nvidia-smi", "topo", "-m"]:
+            return (
+                "        GPU0 GPU1 CPU Affinity\n"
+                f"GPU0    X    {self.static.topology_forward}   0-31\n"
+                f"GPU1    {self.static.topology_reverse}  X     0-31\n"
+            )
         if command[:2] == ["docker", "pull"]:
             return ""
         if command[:3] == ["docker", "image", "inspect"]:
@@ -166,7 +232,7 @@ class LaunchRunner:
             )
         if command[:2] == ["docker", "run"]:
             return "NGC banner\n" + json.dumps(
-                {"container": {"image_id": self.image_id}, "schema_version": 1, "status": "passed"}
+                {"container": {"image_id": self.image_id}, "schema_version": 2, "status": "passed"}
             )
         raise AssertionError(f"unexpected launch command: {command}")
 
@@ -242,6 +308,7 @@ def contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Fake
         run_root=run,
     )
     env = {
+        "HF_TOKEN": "hugging-face-secret",
         "OPENROUTER_API_KEY": "openrouter-secret",
         "PIP_CONSTRAINT": "/etc/pip/constraint.txt",
         "WANDB_API_KEY": "wandb-secret",
@@ -256,20 +323,98 @@ def test_check_passes_without_exposing_secrets(contract: tuple[Any, FakeRunner, 
     encoded = json.dumps(report, sort_keys=True)
     assert report["profile"] == "fsdp2-hf-sdpa-2xa100"
     assert report["gpu"]["count"] == 2
+    assert report["gpu"]["nccl"] == "2.27.3"
+    assert report["host_readiness"]["gpu"]["topology"] == {
+        "gpu0_to_gpu1": "PIX",
+        "gpu1_to_gpu0": "PIX",
+    }
+    assert report["capabilities"] == {
+        "judge_access": True,
+        "model_publish_access": True,
+        "tracking_access": True,
+    }
     assert report["packages"]["transformers"] == "4.57.0"
     assert report["runtime_imports"]["pipeline"] == "ResponseTrainingPipeline"
     assert "openrouter-secret" not in encoded
     assert "wandb-secret" not in encoded
-    assert all("OPENROUTER_API_KEY" not in item and "WANDB_API_KEY" not in item for item in runner.envs)
+    assert "hugging-face-secret" not in encoded
+    assert all(
+        "OPENROUTER_API_KEY" not in item and "WANDB_API_KEY" not in item and "HF_TOKEN" not in item
+        for item in runner.envs
+    )
     assert all("PIP_CONSTRAINT" not in item for item in runner.envs)
 
 
-def test_check_does_not_require_service_credentials(contract: tuple[Any, FakeRunner, dict[str, str]]) -> None:
+@pytest.mark.parametrize(
+    ("missing", "capability"),
+    [
+        ("OPENROUTER_API_KEY", "judge_access"),
+        ("WANDB_API_KEY", "tracking_access"),
+        ("HF_TOKEN", "model_publish_access"),
+    ],
+)
+def test_check_requires_service_credentials(
+    contract: tuple[Any, FakeRunner, dict[str, str]], missing: str, capability: str
+) -> None:
     inputs, runner, _ = contract
+    env = contract[2] | {missing: ""}
 
-    report = BOOTSTRAP.check_environment(inputs, runner, {}, host=_host())
+    with pytest.raises(BOOTSTRAP.BootstrapError, match=capability):
+        BOOTSTRAP.check_environment(inputs, runner, env, host=_host())
 
-    assert report["status"] == "passed"
+
+def test_check_rejects_presence_flags_without_raw_credentials(
+    contract: tuple[Any, FakeRunner, dict[str, str]],
+) -> None:
+    inputs, runner, _ = contract
+    env = {
+        "RDAN_JUDGE_CREDENTIAL_PRESENT": "1",
+        "RDAN_MODEL_PUBLISH_CREDENTIAL_PRESENT": "1",
+        "RDAN_TRACKING_CREDENTIAL_PRESENT": "1",
+    }
+
+    with pytest.raises(BOOTSTRAP.BootstrapError, match="required service credential capabilities are absent"):
+        BOOTSTRAP.check_environment(inputs, runner, env, host=_host())
+
+
+def test_check_accepts_hugging_face_hub_token_without_naming_it_in_receipt(
+    contract: tuple[Any, FakeRunner, dict[str, str]],
+) -> None:
+    inputs, runner, env = contract
+    env = env | {"HF_TOKEN": "", "HUGGING_FACE_HUB_TOKEN": "alternate-private-value"}
+
+    report = BOOTSTRAP.check_environment(inputs, runner, env, host=_host())
+
+    encoded = json.dumps(report, sort_keys=True)
+    assert report["capabilities"]["model_publish_access"] is True
+    assert "HF_TOKEN" not in encoded
+    assert "HUGGING_FACE_HUB_TOKEN" not in encoded
+    assert "alternate-private-value" not in encoded
+
+
+def test_check_consumes_drifted_compute_threshold_exactly(
+    contract: tuple[Any, FakeRunner, dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    inputs, runner, env = contract
+    source = BOOTSTRAP.COMPUTE_CONTRACT
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    runtime = payload["response_runtime"]
+    runtime["host"]["minimum_ram_gib"] = 211
+    runtime["platform"]["container_contract"] = str(
+        RUNTIME.package_contracts[0].parent / "a100-response-container.json"
+    )
+    runtime["packages"]["contracts"] = [str(path) for path in RUNTIME.package_contracts]
+    drifted = tmp_path / "compute.json"
+    drifted.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(BOOTSTRAP, "COMPUTE_CONTRACT", drifted)
+
+    loaded = BOOTSTRAP._load_runtime_contract()
+
+    assert loaded.minimum_ram_bytes == 211 * 2**30
+    with pytest.raises(BOOTSTRAP.BootstrapError, match="at least 211 GiB"):
+        BOOTSTRAP.check_environment(inputs, runner, env, host=_host())
 
 
 @pytest.mark.parametrize(
@@ -281,7 +426,19 @@ def test_check_does_not_require_service_credentials(contract: tuple[Any, FakeRun
         ("image", "container identity does not match"),
         ("digest", "container image digest does not match"),
         ("identity", "not externally inspected"),
+        ("ram", "host RAM must be at least 192 GiB"),
+        ("cache-disk", "cache filesystem must have at least 512 GiB free"),
+        ("run-disk", "run filesystem must have at least 512 GiB free"),
         ("gpu", "must expose only A100"),
+        ("gpu-count", "must expose exactly two GPUs"),
+        ("gpu-memory", "memory must be at least 79 GiB"),
+        ("gpu-memory-used", "must be idle"),
+        ("gpu-utilization", "must be idle"),
+        ("gpu-process", "no active compute processes"),
+        ("gpu-topology", "exact reciprocal supported topology link"),
+        ("driver", "driver is below"),
+        ("cuda", "nvcc must be exact CUDA 12.9"),
+        ("nccl", "NCCL runtime must be exact 2.27.3"),
         ("rtt", "RTT revision mismatch"),
         ("dirty", "RDAN checkout is dirty"),
         ("package", "installed distribution mismatch"),
@@ -313,8 +470,32 @@ def test_check_fails_closed(
         host = _host(image_digest="sha256:" + "0" * 64)
     elif case == "identity":
         host = _host(identity_source="operator-claim")
+    elif case == "ram":
+        runner.host_ram_bytes = RUNTIME.minimum_ram_bytes - 1
+    elif case == "cache-disk":
+        runner.free_disk_bytes[inputs.cache_root] = RUNTIME.minimum_free_disk_bytes - 1
+    elif case == "run-disk":
+        runner.free_disk_bytes[inputs.run_root] = RUNTIME.minimum_free_disk_bytes - 1
     elif case == "gpu":
         runner.gpu_name = "NVIDIA L40S"
+    elif case == "gpu-count":
+        runner.gpu_count = 1
+    elif case == "gpu-memory":
+        runner.gpu_memory_mib = 79 * 1024 - 1
+    elif case == "gpu-memory-used":
+        runner.gpu_memory_used_mib = 1
+    elif case == "gpu-utilization":
+        runner.gpu_utilization_percent = 1
+    elif case == "gpu-process":
+        runner.compute_processes = "GPU-0, 42, python\n"
+    elif case == "gpu-topology":
+        runner.topology_reverse = "PHB"
+    elif case == "driver":
+        runner.driver = "570.00.00"
+    elif case == "cuda":
+        runner.cuda = "12.8"
+    elif case == "nccl":
+        runner.nccl_version = [2, 26, 2]
     elif case == "rtt":
         runner.revisions[inputs.rtt_root] = "b" * 40
     elif case == "dirty":
@@ -423,15 +604,37 @@ def test_host_launcher_inspects_digest_and_mounts_receipt(
     receipt = inputs.run_root / BOOTSTRAP.IDENTITY_NAME
     docker_run = next(command for command in runner.commands if command[:2] == ["docker", "run"])
     assert report["status"] == "passed"
-    assert json.loads(receipt.read_text(encoding="utf-8"))["repo_digest"] == BOOTSTRAP.CONTAINER_AMD64_DIGEST
-    assert BOOTSTRAP.CONTAINER_REF in docker_run
+    assert json.loads(receipt.read_text(encoding="utf-8"))["repo_digest"] == RUNTIME.container_amd64_digest
+    assert RUNTIME.container_ref in docker_run
     assert any(value.endswith(f"dst={BOOTSTRAP.IDENTITY_RECEIPT},readonly") for value in docker_run)
     assert "openrouter-secret" not in " ".join(docker_run)
     assert "wandb-secret" not in " ".join(docker_run)
+    assert "hugging-face-secret" not in " ".join(docker_run)
+    assert all(
+        any(docker_run[index : index + 2] == ["--env", name] for index in range(len(docker_run) - 1))
+        for name in ("OPENROUTER_API_KEY", "WANDB_API_KEY", "HF_TOKEN")
+    )
+    assert not any("RDAN_" in item and "CREDENTIAL_PRESENT" in item for item in docker_run)
     assert "--env-file" not in docker_run
     assert docker_run.count("--workdir") == 1
     assert not any(value.startswith(f"type=bind,src={venv},") for value in docker_run)
-    assert all("OPENROUTER_API_KEY" not in item and "WANDB_API_KEY" not in item for item in runner.envs)
+    docker_env = next(
+        process_env
+        for command, process_env in zip(runner.commands, runner.envs, strict=True)
+        if command[:2] == ["docker", "run"]
+    )
+    assert {name: docker_env.get(name) for name in ("OPENROUTER_API_KEY", "WANDB_API_KEY", "HF_TOKEN")} == {
+        "OPENROUTER_API_KEY": "openrouter-secret",
+        "WANDB_API_KEY": "wandb-secret",
+        "HF_TOKEN": "hugging-face-secret",
+    }
+    assert "HUGGING_FACE_HUB_TOKEN" not in docker_env
+    assert "PIP_CONSTRAINT" not in docker_env
+    assert all(
+        not any(name in process_env for name in BOOTSTRAP.SECRET_ENV_NAMES)
+        for command, process_env in zip(runner.commands, runner.envs, strict=True)
+        if command[:2] != ["docker", "run"]
+    )
 
 
 def test_host_launcher_rejects_wrong_inspected_digest(
@@ -452,6 +655,48 @@ def test_host_launcher_rejects_wrong_inspected_digest(
         )
 
 
+def test_launch_check_is_read_only_and_does_not_pull(
+    contract: tuple[Any, FakeRunner, dict[str, str]],
+) -> None:
+    inputs, _, env = contract
+    runner = LaunchRunner()
+    target = inputs.cache_root / "sealed-env"
+    (target / "bin").mkdir(parents=True)
+    (target / "bin/python").write_text("", encoding="utf-8")
+    venv = inputs.cache_root / "a100-response-venv"
+    venv.symlink_to(target, target_is_directory=True)
+    identity = BOOTSTRAP._image_identity(
+        json.dumps(
+            [
+                {
+                    "Architecture": "amd64",
+                    "Id": runner.image_id,
+                    "Os": "linux",
+                    "RepoDigests": [RUNTIME.container_ref],
+                }
+            ]
+        )
+    )
+    receipt = inputs.run_root / BOOTSTRAP.IDENTITY_NAME
+    BOOTSTRAP._seal_identity(receipt, identity)
+    before = receipt.read_bytes()
+
+    report = BOOTSTRAP.launch_environment(
+        inputs,
+        venv,
+        runner,
+        env,
+        setup=False,
+        max_build_jobs=4,
+        system="Linux",
+        machine="x86_64",
+    )
+
+    assert report["status"] == "passed"
+    assert receipt.read_bytes() == before
+    assert not any(command[:2] == ["docker", "pull"] for command in runner.commands)
+
+
 def test_cli_help_uses_a_real_subprocess() -> None:
     result = subprocess.run([sys.executable, str(SCRIPT), "--help"], text=True, capture_output=True, check=False)
 
@@ -461,7 +706,7 @@ def test_cli_help_uses_a_real_subprocess() -> None:
 
 
 def test_runner_redacts_secret_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = subprocess.CompletedProcess(["tool"], 1, "", "failed with private-value")
+    result = subprocess.CompletedProcess(["tool"], 1, "", "failed with private-value another-value hugging-face-value")
     observed: dict[str, Any] = {}
 
     def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -476,16 +721,59 @@ def test_runner_redacts_secret_values(monkeypatch: pytest.MonkeyPatch) -> None:
             ["tool"],
             env={
                 "OPENROUTER_API_KEY": "private-value",
+                "HF_TOKEN": "hugging-face-value",
                 "PIP_CONSTRAINT": "/etc/pip/constraint.txt",
                 "WANDB_API_KEY": "another-value",
             },
         )
 
     assert "private-value" not in str(caught.value)
+    assert "another-value" not in str(caught.value)
+    assert "hugging-face-value" not in str(caught.value)
     assert "[REDACTED]" in str(caught.value)
     assert "OPENROUTER_API_KEY" not in observed["env"]
     assert "PIP_CONSTRAINT" not in observed["env"]
     assert "WANDB_API_KEY" not in observed["env"]
+    assert "HF_TOKEN" not in observed["env"]
+
+
+def test_runner_forwards_only_named_secrets_to_docker_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: dict[str, Any] = {}
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(args[0], 0, "", "")
+
+    monkeypatch.setattr(BOOTSTRAP.subprocess, "run", fake_run)
+    command = [
+        "docker",
+        "run",
+        "--env",
+        "OPENROUTER_API_KEY",
+        "--env",
+        "WANDB_API_KEY",
+        "--env",
+        "HF_TOKEN",
+        "image",
+    ]
+    BOOTSTRAP.Runner().run(
+        command,
+        env={
+            "HF_TOKEN": "hugging-face-secret",
+            "HUGGING_FACE_HUB_TOKEN": "unused-alternate-secret",
+            "OPENAI_API_KEY": "unused-openai-secret",
+            "OPENROUTER_API_KEY": "openrouter-secret",
+            "PIP_CONSTRAINT": "/etc/pip/constraint.txt",
+            "WANDB_API_KEY": "wandb-secret",
+        },
+    )
+
+    assert observed["env"] == {
+        "HF_TOKEN": "hugging-face-secret",
+        "OPENROUTER_API_KEY": "openrouter-secret",
+        "WANDB_API_KEY": "wandb-secret",
+    }
+    assert not any("secret" in item for item in command)
 
 
 def test_data_python_launcher_is_regular_and_executes(tmp_path: Path) -> None:
@@ -550,8 +838,8 @@ def _host(
     machine: str = "x86_64",
     python: tuple[int, ...] = (3, 12, 9),
     container: bool = True,
-    container_release: str = BOOTSTRAP.CONTAINER_RELEASE,
-    image_digest: str = BOOTSTRAP.CONTAINER_AMD64_DIGEST,
+    container_release: str = RUNTIME.container_release,
+    image_digest: str = RUNTIME.container_amd64_digest,
     identity_source: str = "docker-image-inspect",
 ) -> Any:
     return BOOTSTRAP.HostInfo(
@@ -561,7 +849,7 @@ def _host(
         python=python,
         os_release={"ID": "ubuntu", "VERSION_ID": "24.04"},
         container=container,
-        cuda=BOOTSTRAP.CONTAINER_CUDA,
+        cuda=RUNTIME.container_cuda,
         container_release=container_release,
         image_digest=image_digest,
         image_id="sha256:" + "1" * 64,
