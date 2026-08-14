@@ -14,6 +14,8 @@ from typing import Any
 JsonObject = dict[str, Any]
 PROCESS_SCORES = (0, 0.5, 1)
 SIGNED_PROCESS_SCORES = (-1.0, 0.0, 1.0)
+# Ordered by preference: the first non-inferior candidate becomes the selected effort.
+EFFORT_CANDIDATES = ("high", "medium", "low")
 
 
 @dataclass(frozen=True)
@@ -292,7 +294,7 @@ def calibration_plan(case_ids: Mapping[str, Sequence[str]], selected_effort: str
     if {name: len(values) for name, values in case_ids.items()} != {"debug": 1, "labeled": 49, "heldout": 26}:
         raise ValueError("calibration requires exactly 1 debug, 49 labeled, and 26 heldout cases")
     plan = [(case_ids["debug"][0], "none", 1)]
-    plan.extend((case_id, effort, 1) for effort in ("none", "low", "medium") for case_id in case_ids["labeled"])
+    plan.extend((case_id, effort, 1) for effort in EFFORT_CANDIDATES for case_id in case_ids["labeled"])
     plan.extend((case_id, selected_effort, repeat) for case_id in case_ids["heldout"] for repeat in (1, 2))
     if len(plan) != 200:
         raise AssertionError("calibration plan must contain exactly 200 calls")
@@ -306,7 +308,7 @@ def select_reasoning_effort(
     seed: int = 240520,
     margin: float = -0.02,
 ) -> JsonObject:
-    efforts = ("none", "low", "medium")
+    efforts = EFFORT_CANDIDATES
     if set(indicators) != set(efforts) or samples <= 0:
         raise ValueError("paired calibration indicators or bootstrap sample count are invalid")
     rows = {effort: list(indicators[effort]) for effort in efforts}

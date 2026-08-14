@@ -689,7 +689,7 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
     _expect(
         judge["calibration"]
         == {
-            "reasoning_effort_candidates": ["none", "low", "medium"],
+            "reasoning_effort_candidates": ["high", "medium", "low"],
             "total_calls": 200,
             "total_cases": 76,
             "debug_canary_cases": 1,
@@ -697,7 +697,7 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
             "heldout_cases": 26,
             "calls_per_labeled_case": 3,
             "heldout_duplicates": 2,
-            "selection_rule": "paired_bootstrap_noninferiority_then_lowest_effort",
+            "selection_rule": "paired_bootstrap_noninferiority_then_highest_effort",
             "bootstrap_samples": 10_000,
             "bootstrap_seed": 240520,
             "noninferiority_margin": -0.02,
@@ -2825,7 +2825,7 @@ def _validate_judge_calibration(
         and _sha256(row["sha256"])
         for row in safe_case_rows
     )
-    efforts = {"none", "low", "medium"}
+    efforts = {"high", "medium", "low", "none"}
     row_shape = isinstance(rows, list) and all(
         isinstance(row, dict)
         and set(row)

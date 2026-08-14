@@ -24,7 +24,7 @@ PROMPT = ROOT / "configs/judges/rubric_prompt.txt"
 IMPLEMENTATION = ROOT / "src/rdan_grpo/judge.py"
 CASES_PATH = "configs/judges/qwen_judge_calibration_cases.jsonl"
 CASES = ROOT / CASES_PATH
-EFFORTS = ("none", "low", "medium")
+EFFORTS = ("high", "medium", "low")
 THRESHOLDS = {
     "valid_call_rate": 1.0,
     "selected_labeled_exact_accuracy": 0.85,

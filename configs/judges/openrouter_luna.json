@@ -54,9 +54,9 @@
   },
   "calibration": {
     "reasoning_effort_candidates": [
-      "none",
-      "low",
-      "medium"
+      "high",
+      "medium",
+      "low"
     ],
     "total_calls": 200,
     "total_cases": 76,
@@ -65,7 +65,7 @@
     "heldout_cases": 26,
     "calls_per_labeled_case": 3,
     "heldout_duplicates": 2,
-    "selection_rule": "paired_bootstrap_noninferiority_then_lowest_effort",
+    "selection_rule": "paired_bootstrap_noninferiority_then_highest_effort",
     "bootstrap_samples": 10000,
     "bootstrap_seed": 240520,
     "noninferiority_margin": -0.02,

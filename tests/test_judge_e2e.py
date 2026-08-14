@@ -365,11 +365,11 @@ def test_calibration_plan_is_exactly_200_calls_over_76_cases() -> None:
     assert sum(case_id.startswith("heldout") for case_id, _, _ in plan) == 52
 
 
-def test_paired_bootstrap_selection_is_deterministic_and_prefers_lower_noninferior_effort() -> None:
+def test_paired_bootstrap_selection_is_deterministic_and_prefers_higher_noninferior_effort() -> None:
     indicators = {
-        "none": [1] * 46 + [0] * 3,
-        "low": [1] * 47 + [0] * 2,
-        "medium": [1] * 48 + [0],
+        "low": [1] * 46 + [0] * 3,
+        "medium": [1] * 47 + [0] * 2,
+        "high": [1] * 48 + [0],
     }
     first = select_reasoning_effort(indicators)
     second = select_reasoning_effort(indicators)
@@ -377,7 +377,8 @@ def test_paired_bootstrap_selection_is_deterministic_and_prefers_lower_noninferi
     assert first["bootstrap_samples"] == 10_000
     assert first["bootstrap_seed"] == 240520
     assert first["noninferiority_margin"] == -0.02
-    assert first["reference_effort"] == "medium"
+    assert first["reference_effort"] == "high"
+    assert first["selected_effort"] == "high"
     assert first["selected_effort"] in first["qualifying_efforts"]
 
 
