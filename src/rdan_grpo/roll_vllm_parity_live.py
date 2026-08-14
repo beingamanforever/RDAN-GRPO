@@ -171,7 +171,7 @@ class VLLMRuntimeParityPipeline(BasePipeline):
         if len(generated) != responses or generated.meta_info.get("infer_logprobs_source") != INFER_LOGPROBS_SOURCE:
             raise RuntimeError("vLLM parity generation boundary is incomplete")
         required = {"input_ids", "attention_mask", "response_mask", "infer_logprobs"}
-        if generated.batch is None or set(generated.batch) < required:
+        if generated.batch is None or set(generated.batch.keys()) < required:
             raise RuntimeError("vLLM parity generation is missing exact token boundaries")
         self.actor_train.load_states(blocking=True)
         try:
@@ -179,7 +179,7 @@ class VLLMRuntimeParityPipeline(BasePipeline):
         finally:
             self.actor_train.offload_states(blocking=True)
         actor_fields = {"log_probs", "actor_input_ids", "actor_attention_mask", "actor_response_mask"}
-        if recomputed.batch is None or set(recomputed.batch) < actor_fields:
+        if recomputed.batch is None or set(recomputed.batch.keys()) < actor_fields:
             raise RuntimeError("vLLM parity actor recomputation is incomplete")
         if recomputed.meta_info.get("actor_boundary_observed") is not True or self.state.step != state_before:
             raise RuntimeError("vLLM parity changed or missed the actor boundary")

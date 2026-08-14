@@ -252,7 +252,7 @@ def _validate_rewarded_batch(data: DataProto, returns: int) -> int:
         "rdan_eval_mask",
         "rdan_hard_mask",
     }
-    missing = sorted(required - set(data.batch))
+    missing = sorted(required - set(data.batch.keys()))
     missing.extend(name for name in REWARD_METADATA if name not in data.non_tensor_batch)
     if missing:
         raise RuntimeError(f"scheduler reward batch is missing fields: {', '.join(missing)}")
