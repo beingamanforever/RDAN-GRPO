@@ -112,7 +112,7 @@ def _execute_actor_update(
     state_before: Mapping[int, Mapping[str, Any]],
     observe_training_state: Callable[[], Sequence[Mapping[str, Any]]],
 ) -> tuple[dict[str, Any], dict[int, Mapping[str, Any]], int, int]:
-    metrics = _train_metrics(actor_train.train_step(batch, blocking=True))
+    metrics = dict(_train_metrics(actor_train.train_step(batch, blocking=True))) | _rollout_metrics(batch)
     if not torch.equal(batch.batch["response_mask"], response_mask):
         raise RuntimeError("actor training changed the full response mask")
     state_after = _training_state(observe_training_state(), "after")
@@ -663,6 +663,15 @@ def _validate_post_transaction_memory(values: Sequence[Mapping[str, Any]]) -> fl
     if maximum > MAX_MEMORY_FRACTION:
         raise RuntimeError("post-transaction peak GPU memory exceeds 92 percent")
     return maximum
+
+
+def _rollout_metrics(batch: DataProto) -> dict[str, float]:
+    """Return the rollout engine metrics the vLLM worker attached to this batch."""
+
+    values = getattr(batch, "meta_info", {}).get("vllm_metrics")
+    if not isinstance(values, Mapping):
+        return {}
+    return {name: float(value) for name, value in values.items() if isinstance(value, (int, float))}
 
 
 def _train_metrics(output: Any) -> Mapping[str, Any]:
