@@ -364,7 +364,7 @@ def _generation_data(
         if attempt > 1:
             sleep(interval_seconds)
         try:
-            payload = client.get("/generation", cast_to=dict, options={"params": {"id": generation_id}})
+            payload = client.get("/generation", cast_to=JsonObject, options={"params": {"id": generation_id}})
         except Exception as exc:
             if getattr(exc, "status_code", None) == 404 and attempt < attempts:
                 continue
@@ -401,7 +401,7 @@ def _validate_provenance(
         or evidence["provider"] != "OpenAI"
         or evidence["model"] not in allowed
         or _field(generation, "id") != evidence["generation_id"]
-        or _field(generation, "model") != evidence["model"]
+        or _field(generation, "model") != selected.get("model")
         or _field(generation, "finish_reason") != evidence["finish_reason"]
         or evidence["finish_reason"] != "stop"
         or evidence["service_tier"] not in {None, "default"}

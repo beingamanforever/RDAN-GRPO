@@ -48,10 +48,12 @@ class FakeClient:
         self.completions = FakeCompletions(response, error)
         self.chat = SimpleNamespace(completions=self.completions)
         self.generation = generation
-        self.get_calls: list[tuple[str, type, dict[str, Any]]] = []
+        self.get_calls: list[tuple[str, Any, dict[str, Any]]] = []
 
-    def get(self, path: str, *, cast_to: type, options: dict[str, Any]) -> dict[str, Any]:
+    def get(self, path: str, *, cast_to: Any, options: dict[str, Any]) -> dict[str, Any]:
         self.get_calls.append((path, cast_to, options))
+        if cast_to is dict:
+            raise ValueError("the pinned OpenAI SDK rejects an unparameterized dict")
         if isinstance(self.generation, list):
             value = self.generation.pop(0)
             if isinstance(value, Exception):
@@ -127,11 +129,28 @@ def test_strict_judge_reuses_client_and_cross_checks_generation_metadata() -> No
         "request_sha256": first.evidence["request_sha256"],
     }
     assert len(client.completions.calls) == len(client.get_calls) == 2
+    assert client.get_calls[0][1] == dict[str, Any]
     assert client.get_calls[0][2] == {"params": {"id": "gen-1"}}
     request = client.completions.calls[0]
     assert request["extra_body"] == {"provider": contract["routing"]}
     assert "structured_outputs" not in request
     assert request["seed"] == 240520
+
+
+def test_provenance_accepts_requested_alias_for_selected_canonical_model() -> None:
+    contract, prompt = _contract()
+    response = _response()
+    canonical = contract["expected_canonical_slug"]
+    response.openrouter_metadata["endpoints"]["available"][0]["model"] = canonical
+    client = FakeClient(response, _generation(model=canonical))
+
+    result = OpenRouterJudge(contract, prompt, "redacted", client=client).judge(
+        "instruction", "response", [{"id": 1, "text": "quality"}], 240520, "low"
+    )
+
+    assert result.valid
+    assert result.evidence["model"] == contract["model"]
+    assert result.evidence["selected_endpoint"]["model"] == canonical
 
 
 def test_transport_schema_and_provenance_failures_return_zero_without_retry() -> None:
