@@ -18,7 +18,6 @@ if _rtt_root:
 
 import torch
 import vllm
-from roll.third_party.megatron import model_update as rtt_model_update
 from roll.third_party.vllm.worker import WorkerV1
 
 from rdan_grpo.fsdp_hf_receipt import FSDPHFReceiptError, FSDPHFStreamReceipt
@@ -132,6 +131,8 @@ def get_actor_weight_receipt(worker: Any) -> dict[str, Any]:
 
 def run_receipted_actor_update(worker: Any, model_update_name: str, update: Callable[[], Any]) -> Any:
     """Patch the pinned RTT generator only for one actor update and always restore it."""
+
+    from roll.third_party.megatron import model_update as rtt_model_update
 
     receipt = _required_receipt(worker)
     updater = getattr(worker, _UPDATER_ATTR, None)
