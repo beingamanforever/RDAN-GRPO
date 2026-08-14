@@ -79,6 +79,10 @@ def main() -> int:
     from dacite import from_dict
 
     config_payload = copy.deepcopy(payload)
+    for worker in ("actor_train", "actor_infer"):
+        config_payload[worker]["device_mapping"] = _device_mapping_literal(
+            config_payload[worker].get("device_mapping")
+        )
     response_payload = config_payload.pop("rdan_response", None)
     if not isinstance(response_payload, dict):
         raise VLLMParityError("vLLM parity response sidecar is missing")
@@ -185,6 +189,16 @@ def _validate_outputs(args: argparse.Namespace) -> None:
     for path in outputs:
         if path.exists() or path.is_symlink():
             raise FileExistsError(path)
+
+
+def _device_mapping_literal(value: Any) -> str:
+    """Return the string literal RTT evaluates when it parses a worker device mapping."""
+
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return repr(value)
+    raise VLLMParityError("vLLM parity config requires a worker device mapping")
 
 
 def _validate_program_configs(program: Any, parity: Path, production: Path) -> None:
