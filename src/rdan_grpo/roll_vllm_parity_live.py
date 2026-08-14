@@ -1,16 +1,26 @@
 """Live no-update FSDP2 to production vLLM parity boundary."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import copy
 import hashlib
 import json
 import math
+import os
 import uuid
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
 from typing import Any
+
+from rdan_grpo.roll_compat import install_rtt_compat
+
+# Ray workers must install the pinned compatibility hook before importing ROLL pipelines.
+_rtt_root = os.environ.get("RTT_ROOT")
+if _rtt_root:
+    install_rtt_compat(_rtt_root)
 
 import ray
 import torch
