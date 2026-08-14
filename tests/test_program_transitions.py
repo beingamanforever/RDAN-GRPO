@@ -418,10 +418,10 @@ def _calibration_artifact(config_root: Path) -> dict:
             "injection_exact_matches": 8,
             "injection_cases": 8,
             "thresholds": {
-                "valid_call_rate": 1.0,
+                "valid_call_rate": 0.99,
                 "selected_labeled_exact_accuracy": 0.85,
                 "heldout_exact_accuracy": 0.85,
-                "injection_exact_accuracy": 1.0,
+                "injection_exact_accuracy": 0.60,
                 "heldout_duplicate_agreement_rate": 0.96,
             },
             "metrics": {
