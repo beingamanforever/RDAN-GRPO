@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import importlib.util
 import inspect
 import sys
@@ -65,7 +66,7 @@ def _load_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     actor = types.ModuleType("roll.pipeline.rlvr.actor_worker")
     actor.ActorWorker = FakeActorWorker
     platform = types.ModuleType("roll.platforms")
-    platform.current_platform = SimpleNamespace(device_type="cuda", init=lambda: None)
+    platform.current_platform = SimpleNamespace(device_type="cuda", init=lambda: None, empty_cache=lambda: None)
 
     @contextmanager
     def offload_manager(**_kwargs: Any):
@@ -116,12 +117,18 @@ def _load_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     return loaded
 
 
-class FakeModel:
+class FakeModel(torch.nn.Module):
     def __init__(self, sequences: torch.Tensor, step_scores: list[torch.Tensor]) -> None:
+        super().__init__()
         self.sequences = sequences
         self.step_scores = step_scores
         self.generate_calls: list[dict[str, Any]] = []
         self.eval_calls = 0
+        self.moves: list[str | torch.device] = []
+
+    def to(self, device: str | torch.device) -> FakeModel:
+        self.moves.append(device)
+        return self
 
     def eval(self) -> None:
         self.eval_calls += 1
@@ -150,17 +157,14 @@ def _infer_worker(module: types.ModuleType, model: FakeModel, worker_class: type
     )
     worker.worker_config = SimpleNamespace(
         strategy_args=SimpleNamespace(strategy_name="hf_infer"),
+        model_args=SimpleNamespace(model_type=None),
         infer_batch_size=2,
         generating_args=SimpleNamespace(to_dict=lambda: _generation_config()),
     )
     worker.tokenizer = SimpleNamespace(eos_token_id=2, pad_token_id=0)
     worker.strategy = SimpleNamespace(
         model=model,
-        load_states=lambda: setattr(worker, "loads", worker.loads + 1),
-        offload_states=lambda: setattr(worker, "offloads", worker.offloads + 1),
     )
-    worker.loads = 0
-    worker.offloads = 0
     return worker
 
 
@@ -282,7 +286,7 @@ def test_sync_hf_generation_preserves_prompt_return_and_early_eos_alignment(
         rtol=1e-6,
     )
     assert output.meta_info["infer_logprobs_source"] == "observed_hf_generation"
-    assert worker.loads == worker.offloads == 1
+    assert model.moves == ["cuda", "cpu"]
     call = model.generate_calls[0]
     assert call["return_dict_in_generate"] is True
     assert call["output_scores"] is False
@@ -292,6 +296,118 @@ def test_sync_hf_generation_preserves_prompt_return_and_early_eos_alignment(
     assert call["eos_token_id"] == [2, 0]
     assert model.eval_calls == 1
     assert not inspect.iscoroutinefunction(worker.generate)
+
+
+def test_standard_hf_state_moves_without_importing_trl_and_is_inherited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module(monkeypatch)
+    workers = _load_response_workers(monkeypatch, module)
+    model = FakeModel(torch.ones(2, 4, dtype=torch.long), [])
+    worker = _infer_worker(module, model, workers.ResponseInferWorker)
+    empty_cache: list[None] = []
+    monkeypatch.setattr(module.current_platform, "empty_cache", lambda: empty_cache.append(None))
+    monkeypatch.delitem(sys.modules, "trl", raising=False)
+    original_import = builtins.__import__
+
+    def guarded_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "trl" or name.startswith("trl."):
+            pytest.fail("standard Hugging Face state movement imported TRL")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+
+    worker.load_states()
+    worker.offload_states()
+
+    assert workers.ResponseInferWorker.load_states is module.SynchronousHFInferWorker.load_states
+    assert workers.ResponseInferWorker.offload_states is module.SynchronousHFInferWorker.offload_states
+    assert model.moves == ["cuda", "cpu"]
+    assert empty_cache == [None]
+    assert "trl" not in sys.modules
+
+
+def test_standard_hf_state_moves_follow_exact_device_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_module(monkeypatch)
+
+    class Layer:
+        def __init__(self) -> None:
+            self.moves: list[str | torch.device] = []
+
+        def to(self, device: str | torch.device) -> Layer:
+            self.moves.append(device)
+            return self
+
+    class ShardedModel(FakeModel):
+        def __init__(self) -> None:
+            super().__init__(torch.ones(2, 4, dtype=torch.long), [])
+            self.hf_device_map = {"first": 0, "second": torch.device("cuda:1")}
+            self.layers = {name: Layer() for name in self.hf_device_map}
+
+        def get_submodule(self, name: str) -> Layer:
+            return self.layers[name]
+
+    model = ShardedModel()
+    worker = _infer_worker(module, model)
+    empty_cache: list[None] = []
+    monkeypatch.setattr(module.current_platform, "empty_cache", lambda: empty_cache.append(None))
+
+    worker.load_states()
+    worker.offload_states()
+
+    assert model.moves == []
+    assert model.layers["first"].moves == ["cuda:0", "cpu"]
+    assert model.layers["second"].moves == [torch.device("cuda:1"), "cpu"]
+    assert empty_cache == [None]
+
+
+def test_sync_hf_worker_rejects_trl_config_and_wrappers(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_module(monkeypatch)
+    model = FakeModel(torch.ones(2, 4, dtype=torch.long), [])
+    worker = _infer_worker(module, model)
+    worker.worker_config.model_args.model_type = "trl"
+    with pytest.raises(RuntimeError, match="TRL models"):
+        module._require_sync_hf_worker(worker)
+    with pytest.raises(RuntimeError, match="TRL models"):
+        worker.load_states()
+    assert model.moves == []
+
+    worker.worker_config.model_args.model_type = None
+    model.pretrained_model = object()
+    model.v_head = object()
+    with pytest.raises(RuntimeError, match="TRL model wrappers"):
+        worker.offload_states()
+    assert model.moves == []
+
+
+def test_sync_hf_initialize_uses_standard_offload_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_module(monkeypatch)
+    model = FakeModel(torch.ones(2, 4, dtype=torch.long), [])
+    initialized: list[Any] = []
+    platform_init: list[None] = []
+    empty_cache: list[None] = []
+    worker = module.SynchronousHFInferWorker.__new__(module.SynchronousHFInferWorker)
+    worker.worker_config = SimpleNamespace(
+        strategy_args=SimpleNamespace(strategy_name="hf_infer"),
+        model_args=SimpleNamespace(model_type=None),
+    )
+    worker.strategy = SimpleNamespace(
+        strategy_name="hf_infer",
+        model=model,
+        tokenizer=object(),
+        initialize=lambda *, model_provider: initialized.append(model_provider),
+    )
+    pipeline = SimpleNamespace(async_pipeline=False, async_generation_ratio=0, generate_opt_level=0)
+    monkeypatch.setattr(module.current_platform, "init", lambda: platform_init.append(None))
+    monkeypatch.setattr(module.current_platform, "empty_cache", lambda: empty_cache.append(None))
+
+    worker.initialize(pipeline)
+
+    assert initialized == [module.default_actor_model_provider]
+    assert worker.tokenizer is worker.strategy.tokenizer
+    assert model.moves == ["cpu"]
+    assert empty_cache == [None]
+    assert platform_init == [None]
 
 
 def test_inference_worker_rejects_generation_source_drift_before_loading(
@@ -313,7 +429,7 @@ def test_inference_worker_rejects_generation_source_drift_before_loading(
     with pytest.raises(RuntimeError, match="source drift"):
         worker.generate(data)
 
-    assert worker.loads == worker.offloads == 0
+    assert model.moves == []
     assert model.generate_calls == []
 
 

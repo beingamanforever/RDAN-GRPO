@@ -60,8 +60,24 @@ class SynchronousHFInferWorker(Worker):
             raise RuntimeError("same-backend rollout requires the RTT hf_infer strategy")
         self.strategy.initialize(model_provider=default_actor_model_provider)
         self.tokenizer = self.strategy.tokenizer
-        self.strategy.offload_states()
+        self.offload_states()
         current_platform.init()
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def load_states(self, include: Sequence[Any] | None = None, non_blocking: bool = False) -> None:
+        """Move the standard Hugging Face model to its configured inference devices."""
+
+        del include, non_blocking
+        _load_standard_hf_model(self)
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def offload_states(self, include: Sequence[Any] | None = None, non_blocking: bool = False) -> None:
+        """Move standard Hugging Face model parameters to CPU and clear device caches."""
+
+        del non_blocking
+        if include is None or OffloadStateType.model_params in include:
+            _offload_standard_hf_model(self)
+        current_platform.empty_cache()
 
     @register(dispatch_mode=Dispatch.DP_MP_COMPUTE)
     def generate(self, data: DataProto) -> DataProto:
@@ -72,7 +88,7 @@ class SynchronousHFInferWorker(Worker):
         config = _generation_config(self, data)
         data = data.to(current_platform.device_type)
         data.meta_info["micro_batch_size"] = self.worker_config.infer_batch_size
-        self.strategy.load_states()
+        self.load_states()
         try:
             sequences, logprobs = _generate_with_scores(self.strategy.model, data, config)
             result = postprocess_generate(
@@ -92,7 +108,7 @@ class SynchronousHFInferWorker(Worker):
         finally:
             data.to("cpu")
             if data.meta_info.get("is_offload_states", True):
-                self.strategy.offload_states()
+                self.offload_states()
 
     def generate_request(self, data: DataProto) -> DataProto:
         """Reject the asynchronous request path."""
@@ -269,6 +285,50 @@ def _require_sync_hf_worker(worker: Any) -> None:
     strategy = getattr(getattr(worker, "worker_config", None), "strategy_args", None)
     if getattr(strategy, "strategy_name", None) != "hf_infer":
         raise RuntimeError("same-backend rollout requires actor_infer strategy hf_infer")
+    model_args = getattr(getattr(worker, "worker_config", None), "model_args", None)
+    if getattr(model_args, "model_type", None) == "trl":
+        raise RuntimeError("same-backend rollout does not support TRL models")
+
+
+def _load_standard_hf_model(worker: Any) -> None:
+    model = _standard_hf_model(worker)
+    device_map = getattr(model, "hf_device_map", None)
+    if device_map is None:
+        model.to(current_platform.device_type)
+        return
+    for layer_name, device_id in device_map.items():
+        device = device_id if isinstance(device_id, torch.device) else f"{current_platform.device_type}:{device_id}"
+        model.get_submodule(layer_name).to(device)
+
+
+def _offload_standard_hf_model(worker: Any) -> None:
+    model = _standard_hf_model(worker)
+    device_map = getattr(model, "hf_device_map", None)
+    if device_map is None:
+        model.to("cpu")
+        return
+    for layer_name in device_map:
+        model.get_submodule(layer_name).to("cpu")
+
+
+def _standard_hf_model(worker: Any) -> Any:
+    _require_sync_hf_worker(worker)
+    model = getattr(getattr(worker, "strategy", None), "model", None)
+    classes = getattr(type(model), "__mro__", ())
+    trl_class = any(
+        candidate.__name__ == "AutoModelForCausalLMWithValueHead"
+        or candidate.__module__ == "trl"
+        or candidate.__module__.startswith("trl.")
+        for candidate in classes
+    )
+    if trl_class or (hasattr(model, "pretrained_model") and hasattr(model, "v_head")):
+        raise RuntimeError("same-backend rollout does not support TRL model wrappers")
+    if model is None or not callable(getattr(model, "to", None)):
+        raise RuntimeError("same-backend rollout requires a standard Hugging Face model")
+    device_map = getattr(model, "hf_device_map", None)
+    if device_map is not None and not isinstance(device_map, Mapping):
+        raise RuntimeError("same-backend rollout requires a valid Hugging Face device map")
+    return model
 
 
 def _generation_config(worker: Any, data: DataProto) -> dict[str, Any]:
