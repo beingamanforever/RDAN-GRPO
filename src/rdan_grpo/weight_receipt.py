@@ -14,6 +14,7 @@ import torch
 from rdan_grpo.runtime_parity import write_artifact
 
 RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
+REQUIRED_VLLM_VERSION = "0.11.0"
 RECEIPT_WORKER_EXTENSION = "rdan_grpo.roll_weight_receipt.ReceiptWorkerV1"
 EXPECTED_PAIRS = ((0, 0), (1, 1))
 RECEIPT_CLAIM = (
@@ -282,7 +283,7 @@ def build_weight_receipt_artifact(
         },
         "runtime": {
             "rtt_revision": rtt_revision,
-            "vllm_version": "0.10.2",
+            "vllm_version": REQUIRED_VLLM_VERSION,
             "resolved_config_sha256": resolved_config_sha256,
             "worker_extension_cls": RECEIPT_WORKER_EXTENSION,
             "rtt_boundary_sha256": dict(rtt_boundary_sha256),

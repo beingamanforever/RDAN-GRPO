@@ -1,9 +1,20 @@
 """ROLL and vLLM hooks for the revision-gated weight receipt diagnostic."""
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
+
+from rdan_grpo.roll_compat import install_rtt_compat
+
+# vLLM resolves this module inside its own engine subprocess, which must install
+# the pinned compatibility hook before importing ROLL.
+_rtt_root = os.environ.get("RTT_ROOT")
+if _rtt_root:
+    install_rtt_compat(_rtt_root)
 
 import torch
 import vllm
@@ -11,7 +22,7 @@ from roll.third_party.megatron import model_update as rtt_model_update
 from roll.third_party.vllm.worker import WorkerV1
 
 from rdan_grpo.fsdp_hf_receipt import FSDPHFReceiptError, FSDPHFStreamReceipt
-from rdan_grpo.weight_receipt import TensorStreamReceipt, WeightReceiptError
+from rdan_grpo.weight_receipt import REQUIRED_VLLM_VERSION, TensorStreamReceipt, WeightReceiptError
 
 _RECEIPT_ATTR = "_rdan_weight_receipt"
 _UPDATER_ATTR = "_rdan_receipt_updater"
@@ -28,8 +39,8 @@ class ReceiptWorkerV1(WorkerV1):
 
     def custom_init_worker(self, *args: Any, **kwargs: Any) -> None:
         super().custom_init_worker(*args, **kwargs)
-        if vllm.__version__ != "0.10.2":
-            raise RuntimeError(f"weight receipt requires vLLM 0.10.2, got {vllm.__version__}")
+        if vllm.__version__ != REQUIRED_VLLM_VERSION:
+            raise RuntimeError(f"weight receipt requires vLLM {REQUIRED_VLLM_VERSION}, got {vllm.__version__}")
         setattr(self, _RECEIPT_ATTR, None)
 
     def rdan_begin_weight_receipt(self, transaction_id: str, infer_rank: int, actor_rank: int) -> None:

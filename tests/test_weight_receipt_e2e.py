@@ -16,6 +16,7 @@ import torch
 from rdan_grpo.weight_receipt import (
     RECEIPT_CLAIM,
     RECEIPT_NON_CLAIM,
+    REQUIRED_VLLM_VERSION,
     RTT_BOUNDARY_SHA256,
     RTT_REVISION,
     TensorStreamReceipt,
@@ -237,7 +238,7 @@ def test_generator_is_lazy_and_consumed_once() -> None:
 
 def _load_roll_hook(monkeypatch: pytest.MonkeyPatch) -> tuple[types.ModuleType, types.ModuleType]:
     fake_vllm = types.ModuleType("vllm")
-    fake_vllm.__version__ = "0.10.2"
+    fake_vllm.__version__ = REQUIRED_VLLM_VERSION
     fake_model_update = types.ModuleType("roll.third_party.megatron.model_update")
     fake_model_update.gather_all_hf_weights = lambda *args, **kwargs: iter((_weights(),))
     fake_worker = types.ModuleType("roll.third_party.vllm.worker")
