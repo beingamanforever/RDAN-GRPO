@@ -20,6 +20,8 @@ MODEL_KEYS = {
 RUNTIME_KEYS = {
     "resolved_config_sha256",
     "production_train_config_sha256",
+    "response_data_manifest_sha256",
+    "response_data_output_sha256",
     "rtt_revision",
     *GENERATION_SOURCE_IDENTITY,
 }
@@ -184,8 +186,9 @@ def _runtime(value: Mapping[str, Any], resolved_config_sha256: str) -> dict[str,
         runtime.get(key) != expected for key, expected in GENERATION_SOURCE_IDENTITY.items()
     ):
         raise ResponseReceiptError("response receipt runtime identity differs")
-    if not _sha256(runtime.get("production_train_config_sha256")):
-        raise ResponseReceiptError("response receipt production config identity is invalid")
+    for key in ("production_train_config_sha256", "response_data_manifest_sha256", "response_data_output_sha256"):
+        if not _sha256(runtime.get(key)):
+            raise ResponseReceiptError("response receipt runtime artifact identity is invalid")
     return runtime
 
 

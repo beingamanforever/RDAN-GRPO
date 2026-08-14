@@ -215,6 +215,7 @@ def _receipt(
     phase: str | None = None,
     pipeline_step: int | None = None,
     mismatch: bool = False,
+    unchanged: bool = False,
 ) -> dict[str, Any]:
     items = [
         {
@@ -223,7 +224,7 @@ def _receipt(
             "shape": [2, 2],
             "dtype": "torch.float32",
             "nbytes": 16,
-            "sha256": "a" * 64,
+            "sha256": ("a" if updates == 0 or unchanged else format(updates % 16, "x")) * 64,
         }
     ]
     actor_receipts = []
@@ -250,6 +251,8 @@ def _receipt(
         runtime_identity={
             "resolved_config_sha256": "4" * 64,
             "production_train_config_sha256": "5" * 64,
+            "response_data_manifest_sha256": "6" * 64,
+            "response_data_output_sha256": "7" * 64,
             "rtt_revision": RTT_REVISION,
             **GENERATION_SOURCE_IDENTITY,
         },
@@ -380,6 +383,12 @@ def test_built_response_receipts_pass_the_training_caller_boundary(monkeypatch: 
     assert post["optimizer_updates"] == 2
     assert result.initial_transaction_id == "built-initial"
     assert result.post_transaction_id == "built-post"
+
+
+def test_optimizer_counters_without_parameter_mutation_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_module(monkeypatch)
+    with pytest.raises(RuntimeError, match="did not change any trainable parameter bytes"):
+        _run(module, "rdan_scalar", post=_receipt(2, "post", unchanged=True))
 
 
 def test_receipt_pipeline_transactions_and_optimizer_updates_use_distinct_units(

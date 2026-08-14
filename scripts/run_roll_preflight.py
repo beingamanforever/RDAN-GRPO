@@ -10,13 +10,19 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rdan_grpo.response_identity import lifecycle_source_hashes, response_source_hashes
+from rdan_grpo.response_identity import (
+    canonical_resolved_config_sha256,
+    clean_repository_revision,
+    lifecycle_source_hashes,
+    response_source_hashes,
+)
 from rdan_grpo.roll_bridge import (
     assess_scalar_batch,
     build_preflight_certificate,
@@ -32,6 +38,7 @@ def main() -> int:
     """Validate opaque evaluator rows and write one immutable certificate."""
 
     args = _parse_args()
+    clean_repository_revision(ROOT)
     if args.live_rollout:
         return _live_rollout(args)
     for name in ("input", "config", "train_config", "program", "output"):
@@ -53,6 +60,8 @@ def main() -> int:
         mix_weight=args.mix_weight,
     )
     source_dir = Path(__file__).resolve().parents[1] / "src" / "rdan_grpo"
+    train_resolved_hash = canonical_resolved_config_sha256(_compose_config(args.train_config))
+    preflight_resolved_hash = canonical_resolved_config_sha256(_compose_config(args.config))
     certificate = build_preflight_certificate(
         [assessment],
         method=args.method,
@@ -63,6 +72,8 @@ def main() -> int:
             train_config=args.train_config,
             preflight_config=args.config,
             program=args.program,
+            train_resolved_config_sha256=train_resolved_hash,
+            preflight_resolved_config_sha256=preflight_resolved_hash,
         ),
         optimizer_updates=args.optimizer_updates,
         quality_weight=args.quality_weight,
@@ -96,6 +107,12 @@ def _parse_args() -> argparse.Namespace:
 
 def _live_rollout(args: argparse.Namespace) -> int:
     _validate_live_method(args)
+    rtt_root = _validate_live_inputs(args)
+    pipeline_config = _load_live_pipeline(args, rtt_root)
+    return _run_live_pipeline(args, pipeline_config)
+
+
+def _validate_live_inputs(args: argparse.Namespace) -> str:
     required = (args.config, args.train_config, args.program, args.output, args.restricted_output)
     if any(value is None for value in required):
         raise ValueError("--config, --train-config, --program, --output, and --restricted-output are required")
@@ -107,40 +124,56 @@ def _live_rollout(args: argparse.Namespace) -> int:
     if sha256_file(args.config) != bundle.program["launch_train_config"]["preflight_sha256"]:
         raise ValueError("live rollout config differs from the experiment program")
     lifecycle_source_hashes(args.program)
+    parity = bundle.lifecycle_artifacts.get("runtime_parity")
+    backend = parity.get("runtime_backend") if isinstance(parity, dict) else None
+    expected = {
+        "production_resolved_config_sha256": canonical_resolved_config_sha256(_compose_config(args.train_config)),
+        "preflight_resolved_config_sha256": canonical_resolved_config_sha256(_compose_config(args.config)),
+    }
+    if not isinstance(backend, dict) or any(backend.get(key) != value for key, value in expected.items()):
+        raise ValueError("runtime parity artifact differs from the composed preflight launch configs")
     for name in ("OPENROUTER_API_KEY",):
         if not os.environ.get(name):
             raise ValueError(f"{name} must be set in the environment")
-
-    from rdan_grpo.roll_compat import install_rtt_compat
-
     rtt_root = os.environ.get(RTT_ROOT_ENV)
     if not rtt_root:
         raise ValueError(f"{RTT_ROOT_ENV} must be set to the pinned RTT checkout")
+    return rtt_root
+
+
+def _load_live_pipeline(args: argparse.Namespace, rtt_root: str) -> Any:
+    from rdan_grpo.roll_compat import install_rtt_compat
+
     install_rtt_compat(rtt_root)
 
-    from hydra import compose, initialize_config_dir
-    from omegaconf import OmegaConf
     from roll.datasets.chat_template import register_chat_template
-    from roll.distributed.scheduler.initialize import init
     from roll.pipeline.rlvr.rubric_config import RLVRConfig
 
-    from rdan_grpo.roll_live import ScalarPreflightPipeline, run_live_preflight, seal_live_batch
     from rdan_grpo.roll_response_config import load_response_preflight_config
 
     @register_chat_template("qwen3_nothinking")
-    def qwen3_nothinking(tokenizer, conversation, tools=None, documents=None, **kwargs):
+    def qwen3_nothinking(
+        tokenizer: Any,
+        conversation: Any,
+        tools: Any = None,
+        documents: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Render Qwen3 messages with thinking disabled for preflight."""
+
         kwargs["tokenize"] = False
         kwargs["add_generation_prompt"] = kwargs.get("add_generation_prompt", True)
         kwargs["enable_thinking"] = False
         return tokenizer.apply_chat_template(conversation, tools, documents, **kwargs)
 
-    config_path = args.config.resolve()
-    with initialize_config_dir(version_base=None, config_dir=str(config_path.parent)):
-        config = compose(config_name=config_path.stem)
-    payload = OmegaConf.to_container(config, resolve=True)
-    if not isinstance(payload, dict):
-        raise ValueError("ROLL preflight config must resolve to an object")
-    pipeline_config = load_response_preflight_config(rtt_root, RLVRConfig, payload)
+    return load_response_preflight_config(rtt_root, RLVRConfig, _compose_config(args.config))
+
+
+def _run_live_pipeline(args: argparse.Namespace, pipeline_config: Any) -> int:
+    from roll.distributed.scheduler.initialize import init
+
+    from rdan_grpo.roll_live import ScalarPreflightPipeline, run_live_preflight, seal_live_batch
+
     init()
     batch = run_live_preflight(ScalarPreflightPipeline, pipeline_config)
     assessment = seal_live_batch(
@@ -168,6 +201,19 @@ def _validate_live_method(args: argparse.Namespace) -> None:
         return
     if args.quality_weight is not None or args.mix_weight is None:
         raise ValueError("live rollout response mix requires only mix_weight")
+
+
+def _compose_config(path: Path) -> dict[str, object]:
+    from hydra import compose, initialize_config_dir
+    from omegaconf import OmegaConf
+
+    resolved = path.resolve()
+    with initialize_config_dir(version_base=None, config_dir=str(resolved.parent)):
+        config = compose(config_name=resolved.stem)
+    payload = OmegaConf.to_container(config, resolve=True)
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path.name} must resolve to an object")
+    return payload
 
 
 def _load_rows(path: Path) -> list[dict[str, object]]:

@@ -37,6 +37,7 @@ pg_clip: 0.2
 pg_clip_low: 0.2
 pg_clip_high: 0.27
 use_pg_clip_range: true
+importance_sampling: token
 dual_clip_loss: false
 norm_mean_type: null
 norm_std_type: null

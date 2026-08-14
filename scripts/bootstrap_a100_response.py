@@ -29,15 +29,14 @@ LOCK = REPO_ROOT / "requirements/a100-response-linux-py312.lock"
 LOCK_INPUT = REPO_ROOT / "requirements/a100-response.in"
 BOOTSTRAP_LOCK = REPO_ROOT / "requirements/a100-response-bootstrap-linux-py312.lock"
 BOOTSTRAP_INPUT = REPO_ROOT / "requirements/a100-response-bootstrap.in"
-CONTAINER_CONTRACT = REPO_ROOT / "requirements/a100-response-container.json"
 SNAPSHOT_MANIFEST = REPO_ROOT / "requirements/qwen3-4b-instruct-2507-snapshot.json"
+COMPUTE_CONTRACT = REPO_ROOT / "configs/compute/qwen_a100_2x.json"
 DATA_REQUIREMENTS = REPO_ROOT / "requirements/data-prep-py311-direct.txt"
 DATA_LOCK = REPO_ROOT / "requirements/data-prep-linux-py311.lock"
 TORCH_REQUIREMENTS = REQUIREMENTS[0]
 DIRECT_REQUIREMENTS = REQUIREMENTS[1]
 FLASH_REQUIREMENTS = REQUIREMENTS[2]
 
-PYTHON_VERSION = (3, 12)
 DATA_PYTHON_VERSION = "3.11.15"
 DATA_ENV_NAME = "data-prep-py311"
 DATA_PYTHON_BIN = "data-python"
@@ -87,8 +86,8 @@ SNAPSHOT_SIZES = {
     "tokenizer_config.json": 9_377,
     "vocab.json": 2_776_833,
 }
-SECRET_ENV_NAMES = ("OPENROUTER_API_KEY", "WANDB_API_KEY")
-PRIVATE_ENV_NAMES = (*SECRET_ENV_NAMES, "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "OPENAI_API_KEY")
+SECRET_ENV_NAMES = ("OPENROUTER_API_KEY", "WANDB_API_KEY", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
+PRIVATE_ENV_NAMES = (*SECRET_ENV_NAMES, "OPENAI_API_KEY")
 INSTALL_OVERRIDE_ENV_NAMES = (
     "PIP_BUILD_CONSTRAINT",
     "PIP_CONFIG_FILE",
@@ -112,19 +111,6 @@ INSTALL_OVERRIDE_ENV_NAMES = (
     "UV_PYTHON_DOWNLOADS_JSON_URL",
     "UV_PYTHON_INSTALL_MIRROR",
 )
-TORCH_INDEX = "https://download.pytorch.org/whl/cu129"
-PYPI_INDEX = "https://pypi.org/simple"
-CUDA_VERSION = "12.9"
-MIN_DRIVER = (575, 57, 8)
-MIN_GPU_MIB = 79 * 1024
-GPU_COUNT = 2
-CONTAINER_IMAGE = "nvcr.io/nvidia/pytorch:25.06-py3"
-CONTAINER_INDEX_DIGEST = "sha256:025d9b102b5436d4af8af58f12c6a46b7e5d16f19543b1d2cc4446bf2650b4f1"
-CONTAINER_AMD64_DIGEST = "sha256:3cb18e2c438db8af2d3a659ca27fac5da328640261c38c48a34edcd223c38af9"
-CONTAINER_REF = f"nvcr.io/nvidia/pytorch@{CONTAINER_AMD64_DIGEST}"
-CONTAINER_CUDA = "12.9.1.010"
-CONTAINER_OS = "24.04"
-CONTAINER_RELEASE = "25.06"
 IDENTITY_RECEIPT = Path("/run/rdan/a100-image-identity.json")
 IDENTITY_NAME = "a100-image-identity.json"
 
@@ -132,6 +118,7 @@ _PIN = re.compile(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?==([^\s\\]+)")
 _SHA = re.compile(r"^[0-9a-f]{64}$")
 _REVISION = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 _AMBIENT_PROBE = r"""
 import importlib.util
@@ -179,6 +166,7 @@ payload = {
     "device_count": torch.cuda.device_count(),
     "devices": devices,
     "nccl_available": torch.distributed.is_nccl_available(),
+    "nccl_version": torch.cuda.nccl.version() if torch.distributed.is_nccl_available() else None,
 }
 print("RDAN_CUDA=" + json.dumps(payload, sort_keys=True))
 """
@@ -250,6 +238,46 @@ class BootstrapError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class RuntimeContract:
+    """Canonical response runtime values loaded from the compute contract."""
+
+    profile: str
+    minimum_ram_bytes: int
+    minimum_free_disk_bytes: int
+    system: str
+    machines: tuple[str, ...]
+    platform_receipt: str
+    python_version: tuple[int, int]
+    container_image: str
+    container_index_digest: str
+    container_amd64_digest: str
+    container_cuda: str
+    container_os: str
+    container_release: str
+    gpu_model: str
+    gpu_count: int
+    minimum_gpu_memory_mib: int
+    minimum_driver: tuple[int, ...]
+    cuda_runtime: str
+    nccl_package: str
+    require_idle: bool
+    supported_links: tuple[str, ...]
+    package_contracts: tuple[Path, ...]
+    allowed_local_suffixes: Mapping[str, str]
+    index_url: str
+    torch_index_url: str
+    torch_backend: str
+    sha256: str
+
+    @property
+    def container_ref(self) -> str:
+        """Return the immutable Linux AMD64 container reference."""
+
+        repository = self.container_image.split(":", 1)[0]
+        return f"{repository}@{self.container_amd64_digest}"
+
+
+@dataclass(frozen=True)
 class HostInfo:
     """Host facts that do not require a subprocess."""
 
@@ -278,6 +306,157 @@ class Inputs:
     run_root: Path
 
 
+@dataclass
+class _SetupState:
+    stage: Path
+    data_root: Path | None
+    published: list[tuple[Path, Path]]
+
+
+def _load_runtime_contract() -> RuntimeContract:
+    compute = _load_json_object(COMPUTE_CONTRACT, "compute contract")
+    if compute.get("schema_version") != 4 or compute.get("id") != "qwen_a100_2x":
+        raise BootstrapError("compute contract identity is invalid")
+    runtime = _required_mapping(compute, "response_runtime", "compute contract")
+    target = _required_mapping(compute, "target_topology", "compute contract")
+    host = _required_mapping(runtime, "host", "response runtime")
+    platform_contract = _required_mapping(runtime, "platform", "response runtime")
+    gpu = _required_mapping(runtime, "gpu", "response runtime")
+    packages = _required_mapping(runtime, "packages", "response runtime")
+    container_path = _contract_path(platform_contract.get("container_contract"), "container contract")
+    container = _load_json_object(container_path, "container contract")
+    package_paths = tuple(_contract_path(value, "package contract") for value in _string_list(packages, "contracts"))
+    return _build_runtime_contract(
+        compute,
+        runtime,
+        target,
+        host,
+        platform_contract,
+        gpu,
+        packages,
+        container,
+        package_paths,
+    )
+
+
+def _build_runtime_contract(
+    compute: Mapping[str, Any],
+    runtime: Mapping[str, Any],
+    target: Mapping[str, Any],
+    host: Mapping[str, Any],
+    platform_contract: Mapping[str, Any],
+    gpu: Mapping[str, Any],
+    packages: Mapping[str, Any],
+    container: Mapping[str, Any],
+    package_paths: tuple[Path, ...],
+) -> RuntimeContract:
+    _validate_runtime_shape(runtime, host, platform_contract, gpu, packages)
+    _validate_container_shape(container)
+    _validate_target_reference(target, gpu)
+    suffixes = _string_mapping(packages, "allowed_local_suffixes")
+    contract = RuntimeContract(
+        profile=_required_string(runtime, "profile"),
+        minimum_ram_bytes=_positive_int(host, "minimum_ram_gib") * 2**30,
+        minimum_free_disk_bytes=_positive_int(host, "minimum_free_disk_gib") * 2**30,
+        system=_required_string(platform_contract, "system"),
+        machines=tuple(_string_list(platform_contract, "machines")),
+        platform_receipt=_required_string(platform_contract, "receipt"),
+        python_version=_container_python(container),
+        container_image=_required_string(container, "image"),
+        container_index_digest=_required_digest(container, "manifest_digest"),
+        container_amd64_digest=_required_digest(container, "linux_amd64_digest"),
+        container_cuda=_required_string(container, "cuda"),
+        container_os=_container_os(container),
+        container_release=_required_string(container, "nvidia_pytorch_release"),
+        gpu_model=_required_string(target, "model"),
+        gpu_count=_positive_int(target, "count"),
+        minimum_gpu_memory_mib=_positive_int(target, "minimum_memory_gib_each") * 1024,
+        minimum_driver=_required_version(gpu, "minimum_driver"),
+        cuda_runtime=_required_string(gpu, "cuda_runtime"),
+        nccl_package=_required_string(gpu, "nccl_package"),
+        require_idle=gpu.get("require_idle") is True,
+        supported_links=tuple(_string_list(gpu, "supported_links")),
+        package_contracts=package_paths,
+        allowed_local_suffixes=suffixes,
+        index_url=_required_url(packages, "index_url"),
+        torch_index_url=_required_url(packages, "torch_index_url"),
+        torch_backend=_required_string(packages, "torch_backend"),
+        sha256=hashlib.sha256(COMPUTE_CONTRACT.read_bytes()).hexdigest(),
+    )
+    _validate_package_contracts(contract)
+    return contract
+
+
+def _validate_runtime_shape(
+    runtime: Mapping[str, Any],
+    host: Mapping[str, Any],
+    platform_contract: Mapping[str, Any],
+    gpu: Mapping[str, Any],
+    packages: Mapping[str, Any],
+) -> None:
+    _exact_keys(runtime, {"profile", "host", "platform", "gpu", "packages"}, "response runtime")
+    _exact_keys(host, {"minimum_ram_gib", "minimum_free_disk_gib"}, "response runtime host")
+    _exact_keys(
+        platform_contract,
+        {"system", "machines", "receipt", "container_contract"},
+        "response runtime platform",
+    )
+    _exact_keys(
+        gpu,
+        {
+            "topology_contract",
+            "minimum_driver",
+            "cuda_runtime",
+            "nccl_package",
+            "require_idle",
+            "supported_links",
+        },
+        "response runtime GPU",
+    )
+    _exact_keys(
+        packages,
+        {"index_url", "torch_index_url", "torch_backend", "contracts", "allowed_local_suffixes"},
+        "response runtime packages",
+    )
+
+
+def _validate_container_shape(container: Mapping[str, Any]) -> None:
+    _exact_keys(
+        container,
+        {
+            "cuda",
+            "image",
+            "linux_amd64_digest",
+            "manifest_digest",
+            "nvidia_pytorch_release",
+            "os",
+            "python",
+            "schema_version",
+        },
+        "container contract",
+    )
+    if container.get("schema_version") != 1:
+        raise BootstrapError("container contract schema is invalid")
+
+
+def _validate_target_reference(target: Mapping[str, Any], gpu: Mapping[str, Any]) -> None:
+    if gpu.get("topology_contract") != "target_topology":
+        raise BootstrapError("response runtime must reference the target topology")
+    if not gpu.get("require_idle"):
+        raise BootstrapError("response runtime must require idle GPUs")
+    if _positive_int(target, "count") != 2:
+        raise BootstrapError("response runtime requires exactly two GPUs")
+
+
+def _validate_package_contracts(contract: RuntimeContract) -> None:
+    expected = _runtime_expected_packages(contract)
+    if not expected or contract.nccl_package not in expected:
+        raise BootstrapError("response runtime package contracts omit the NCCL identity")
+    for name, suffix in contract.allowed_local_suffixes.items():
+        if name not in expected or not re.fullmatch(r"[a-z0-9.]+", suffix):
+            raise BootstrapError("response runtime local package suffixes are invalid")
+
+
 class Runner:
     """Run bounded commands without invoking a shell."""
 
@@ -292,7 +471,11 @@ class Runner:
 
         source_env = os.environ if env is None else env
         process_env = dict(source_env)
-        for name in (*PRIVATE_ENV_NAMES, *INSTALL_OVERRIDE_ENV_NAMES):
+        allowed_secrets = _docker_secret_env_names(args)
+        for name in PRIVATE_ENV_NAMES:
+            if name not in allowed_secrets:
+                process_env.pop(name, None)
+        for name in INSTALL_OVERRIDE_ENV_NAMES:
             process_env.pop(name, None)
         result = subprocess.run(
             list(args),
@@ -361,34 +544,65 @@ def check_environment(
 ) -> dict[str, Any]:
     """Return a secret-free report only after every requested check passes."""
 
+    contract = _load_runtime_contract()
+    credentials = _verify_credentials(env)
     env = _subprocess_env(env)
     host = host or _host_info(env)
     python = (python or Path(sys.executable)).resolve()
-    _verify_host(host)
-    _verify_inputs(inputs)
+    _verify_host(host, contract)
+    _verify_inputs(inputs, contract)
     revisions = _verify_repositories(inputs, runner)
     snapshot = _verify_snapshot(inputs.snapshot)
     roots = _verify_roots(inputs)
+    readiness = _verify_static_readiness(inputs, runner, env, contract)
     _verify_ambient_roll(python, runner, inputs.rdan_root, env)
-    gpu = _verify_gpu(python, runner, inputs.rdan_root, env, exact_torch=include_packages)
-    report: dict[str, Any] = {
-        "schema_version": 1,
+    gpu = _verify_gpu(
+        python,
+        runner,
+        inputs.rdan_root,
+        env,
+        exact_torch=include_packages,
+        static=readiness["gpu"],
+        contract=contract,
+    )
+    report = _base_report(contract, host, revisions, snapshot, roots, readiness, credentials, gpu)
+    if include_packages:
+        report["packages"] = _verify_packages(python, runner, inputs.rdan_root, env, contract)
+        report["runtime_imports"] = _verify_runtime_imports(python, runner, inputs, env)
+    return report
+
+
+def _base_report(
+    contract: RuntimeContract,
+    host: HostInfo,
+    revisions: Mapping[str, str],
+    snapshot: Mapping[str, Any],
+    roots: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+    credentials: Mapping[str, bool],
+    gpu: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": 2,
         "status": "passed",
-        "profile": "fsdp2-hf-sdpa-2xa100",
-        "python": f"{PYTHON_VERSION[0]}.{PYTHON_VERSION[1]}.x",
-        "platform": "Ubuntu-24.04-x86_64",
+        "profile": contract.profile,
+        "python": f"{contract.python_version[0]}.{contract.python_version[1]}.x",
+        "platform": contract.platform_receipt,
+        "compute_contract_sha256": contract.sha256,
         "container": {
-            "image": CONTAINER_IMAGE,
-            "index_digest": CONTAINER_INDEX_DIGEST,
-            "amd64_digest": CONTAINER_AMD64_DIGEST,
-            "cuda": CONTAINER_CUDA,
-            "release": CONTAINER_RELEASE,
+            "image": contract.container_image,
+            "index_digest": contract.container_index_digest,
+            "amd64_digest": contract.container_amd64_digest,
+            "cuda": contract.container_cuda,
+            "release": contract.container_release,
             "image_id": host.image_id,
             "identity_source": host.identity_source,
         },
         "repositories": revisions,
         "model": snapshot,
         "storage": roots,
+        "host_readiness": readiness,
+        "capabilities": credentials,
         "gpu": gpu,
         "requirements": {
             path.name: _sha256(path)
@@ -398,19 +612,15 @@ def check_environment(
                 LOCK_INPUT,
                 BOOTSTRAP_LOCK,
                 BOOTSTRAP_INPUT,
-                CONTAINER_CONTRACT,
+                _container_contract_path(),
                 DATA_LOCK,
                 DATA_REQUIREMENTS,
                 SNAPSHOT_MANIFEST,
+                COMPUTE_CONTRACT,
+                *contract.package_contracts,
             )
         },
     }
-    if include_packages:
-        packages = _verify_packages(python, runner, inputs.rdan_root, env)
-        imports = _verify_runtime_imports(python, runner, inputs, env)
-        report["packages"] = packages
-        report["runtime_imports"] = imports
-    return report
 
 
 def setup_environment(
@@ -424,106 +634,115 @@ def setup_environment(
 ) -> dict[str, Any]:
     """Create a new environment and atomically seal its passing report."""
 
-    env = _subprocess_env(env)
-    check_environment(inputs, runner, env, host=host, include_packages=False)
+    contract = _load_runtime_contract()
+    credential_env = env
+    env = _subprocess_env(credential_env)
+    check_environment(inputs, runner, credential_env, host=host, include_packages=False)
     venv = _alias_path(venv)
     data_venv = inputs.cache_root / DATA_ENV_NAME
     marker = inputs.run_root / "a100-response-bootstrap.json"
     _verify_setup_paths(venv, marker, inputs)
     _verify_data_setup_path(data_venv, inputs)
-    stage = Path(tempfile.mkdtemp(prefix=f".{venv.name}.", dir=venv.parent))
-    data_stage_root: Path | None = None
-    published: list[tuple[Path, Path]] = []
+    state = _SetupState(
+        stage=Path(tempfile.mkdtemp(prefix=f".{venv.name}.", dir=venv.parent)),
+        data_root=None,
+        published=[],
+    )
     try:
-        runner.run([sys.executable, "-m", "venv", str(stage)], cwd=inputs.rdan_root, env=env)
-        python = stage / "bin/python"
-        if not python.is_file():
-            raise BootstrapError("venv creation did not produce bin/python")
-        runner.run(
-            [
-                str(python),
-                "-m",
-                "pip",
-                "--isolated",
-                "install",
-                "--index-url",
-                PYPI_INDEX,
-                "--extra-index-url",
-                TORCH_INDEX,
-                "--require-hashes",
-                "-r",
-                str(BOOTSTRAP_LOCK),
-            ],
-            env=env,
-        )
-        runner.run(
-            [
-                str(python),
-                "-m",
-                "pip",
-                "--isolated",
-                "install",
-                "--index-url",
-                PYPI_INDEX,
-                "--extra-index-url",
-                TORCH_INDEX,
-                "--no-build-isolation",
-                "--require-hashes",
-                "-r",
-                str(LOCK),
-            ],
-            env=dict(env) | {"MAX_JOBS": str(max_build_jobs)},
-        )
-        runner.run(
-            [
-                str(python),
-                "-m",
-                "pip",
-                "--isolated",
-                "install",
-                "--index-url",
-                PYPI_INDEX,
-                "--no-build-isolation",
-                "--no-deps",
-                "--require-hashes",
-                "-r",
-                str(FLASH_REQUIREMENTS),
-            ],
-            env=dict(env) | {"MAX_JOBS": str(max_build_jobs)},
-        )
-        runner.run([str(python), "-m", "pip", "--isolated", "check"], env=env)
-        data_stage_root, data_stage, data_python = _create_data_environment(python, inputs, runner, env)
+        python = _install_production_environment(state.stage, inputs, runner, env, contract, max_build_jobs)
+        state.data_root, data_stage, data_python = _create_data_environment(python, inputs, runner, env)
         data = _verify_data_runtime(data_python, runner, inputs.rdan_root, env)
         prepared = _prepare_data(python, data_python, inputs, runner, env, check=False)
-        report = check_environment(inputs, runner, env, host=host, python=python)
-        _publish_environment(stage, venv)
-        published.append((venv, stage))
-        _publish_environment(data_stage, data_venv)
-        published.append((data_venv, data_stage_root))
-        sealed = report | {
-            "data_preparation": prepared | {"data_python": str(data_venv / "bin" / DATA_PYTHON_BIN)},
-            "data_runtime": data | {"python": str(data_venv / "bin" / DATA_PYTHON_BIN)},
-            "venv": str(venv),
-        }
+        report = check_environment(inputs, runner, credential_env, host=host, python=python)
+        sealed = _publish_setup(state, venv, data_venv, data_stage, report, prepared, data)
         _write_marker(marker, sealed)
     except BaseException:
-        for alias, target in reversed(published):
-            alias.unlink(missing_ok=True)
-            if target.exists():
-                shutil.rmtree(target)
-        if not published and stage.exists():
-            shutil.rmtree(stage)
-        if data_stage_root is not None and data_stage_root.exists():
-            shutil.rmtree(data_stage_root)
+        _cleanup_setup(state)
         raise
     return sealed | {"marker": str(marker)}
+
+
+def _install_production_environment(
+    stage: Path,
+    inputs: Inputs,
+    runner: Runner,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+    max_build_jobs: int,
+) -> Path:
+    runner.run([sys.executable, "-m", "venv", str(stage)], cwd=inputs.rdan_root, env=env)
+    python = stage / "bin/python"
+    if not python.is_file():
+        raise BootstrapError("venv creation did not produce bin/python")
+    build_env = dict(env) | {"MAX_JOBS": str(max_build_jobs)}
+    _install_pip_contract(python, BOOTSTRAP_LOCK, runner, env, contract, build=False, dependencies=True)
+    _install_pip_contract(python, LOCK, runner, build_env, contract, build=True, dependencies=True)
+    _install_pip_contract(python, FLASH_REQUIREMENTS, runner, build_env, contract, build=True, dependencies=False)
+    runner.run([str(python), "-m", "pip", "--isolated", "check"], env=env)
+    return python
+
+
+def _install_pip_contract(
+    python: Path,
+    requirements: Path,
+    runner: Runner,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+    *,
+    build: bool,
+    dependencies: bool,
+) -> None:
+    command = [str(python), "-m", "pip", "--isolated", "install", "--index-url", contract.index_url]
+    if requirements != FLASH_REQUIREMENTS:
+        command.extend(["--extra-index-url", contract.torch_index_url])
+    if build:
+        command.append("--no-build-isolation")
+    if not dependencies:
+        command.append("--no-deps")
+    command.extend(["--require-hashes", "-r", str(requirements)])
+    runner.run(command, env=env)
+
+
+def _publish_setup(
+    state: _SetupState,
+    venv: Path,
+    data_venv: Path,
+    data_stage: Path,
+    report: Mapping[str, Any],
+    prepared: Mapping[str, Any],
+    data: Mapping[str, Any],
+) -> dict[str, Any]:
+    _publish_environment(state.stage, venv)
+    state.published.append((venv, state.stage))
+    _publish_environment(data_stage, data_venv)
+    if state.data_root is None:
+        raise BootstrapError("data environment stage is missing")
+    state.published.append((data_venv, state.data_root))
+    data_python = str(data_venv / "bin" / DATA_PYTHON_BIN)
+    return report | {
+        "data_preparation": dict(prepared) | {"data_python": data_python},
+        "data_runtime": dict(data) | {"python": data_python},
+        "venv": str(venv),
+    }
+
+
+def _cleanup_setup(state: _SetupState) -> None:
+    for alias, target in reversed(state.published):
+        alias.unlink(missing_ok=True)
+        if target.exists():
+            shutil.rmtree(target)
+    if not state.published and state.stage.exists():
+        shutil.rmtree(state.stage)
+    if state.data_root is not None and state.data_root.exists():
+        shutil.rmtree(state.data_root)
 
 
 def resolve_lock(runner: Runner, env: Mapping[str, str]) -> dict[str, Any]:
     """Regenerate the exact target lock without modifying an environment."""
 
+    contract = _load_runtime_contract()
     env = _subprocess_env(env)
-    _verify_host(_host_info(env))
+    _verify_host(_host_info(env), contract)
     pairs = (
         (LOCK_INPUT, LOCK, "3.12", True),
         (BOOTSTRAP_INPUT, BOOTSTRAP_LOCK, "3.12", True),
@@ -552,7 +771,7 @@ def resolve_lock(runner: Runner, env: Mapping[str, str]) -> dict[str, Any]:
         if torch:
             command[command.index("--generate-hashes") : command.index("--generate-hashes")] = [
                 "--torch-backend",
-                "cu129",
+                contract.torch_backend,
             ]
         runner.run(command, cwd=REPO_ROOT, env=env)
         results.append({"path": str(output), "sha256": _sha256(output)})
@@ -572,13 +791,14 @@ def launch_environment(
 ) -> dict[str, Any]:
     """Inspect the pinned image on the host and run the internal contract."""
 
+    contract = _load_runtime_contract()
+    _verify_credentials(env)
+    docker_env = _docker_environment(env)
     env = _subprocess_env(env)
-    system = system or platform.system()
-    machine = machine or platform.machine()
-    if system != "Linux" or machine not in {"x86_64", "AMD64"}:
-        raise BootstrapError("A100 container launch requires a Linux x86_64 host")
-    _verify_inputs(inputs)
+    _verify_launch_platform(system or platform.system(), machine or platform.machine(), contract)
+    _verify_inputs(inputs, contract)
     _verify_roots(inputs)
+    _verify_static_readiness(inputs, runner, env, contract)
     venv = _alias_path(venv)
     marker = inputs.run_root / "a100-response-bootstrap.json"
     if setup:
@@ -589,20 +809,43 @@ def launch_environment(
         if "," in str(path):
             raise BootstrapError("container bind paths cannot contain commas")
 
-    runner.run(["docker", "pull", "--platform", "linux/amd64", CONTAINER_REF], env=env)
-    inspected = runner.run(["docker", "image", "inspect", CONTAINER_REF], env=env)
-    identity = _image_identity(inspected)
+    if setup:
+        runner.run(["docker", "pull", "--platform", "linux/amd64", contract.container_ref], env=env)
+    identity = _inspect_launch_image(runner, env, contract)
     receipt = inputs.run_root / IDENTITY_NAME
-    _seal_identity(receipt, identity)
-    command = _container_command(inputs, venv, receipt, setup, max_build_jobs)
-    output = runner.run(command, cwd=inputs.rdan_root, env=env)
+    if setup:
+        _seal_identity(receipt, identity)
+    elif _read_identity(receipt, contract) != identity:
+        raise BootstrapError("existing external image identity receipt differs from Docker inspection")
+    credential_names = tuple(name for name in SECRET_ENV_NAMES if name in docker_env)
+    command = _container_command(inputs, venv, receipt, setup, max_build_jobs, credential_names, contract)
+    output = runner.run(command, cwd=inputs.rdan_root, env=docker_env)
     report = _last_json_object(output)
-    if report.get("status") != "passed" or report.get("container", {}).get("image_id") != identity["image_id"]:
+    if (
+        report.get("schema_version") != 2
+        or report.get("status") != "passed"
+        or report.get("container", {}).get("image_id") != identity["image_id"]
+    ):
         raise BootstrapError("container bootstrap did not return the inspected image identity")
     return report | {"external_identity_receipt": str(receipt)}
 
 
-def _image_identity(raw: str) -> dict[str, Any]:
+def _verify_launch_platform(system: str, machine: str, contract: RuntimeContract) -> None:
+    if system != contract.system or machine not in contract.machines:
+        raise BootstrapError("A100 container launch requires a Linux x86_64 host")
+
+
+def _inspect_launch_image(
+    runner: Runner,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+) -> dict[str, Any]:
+    inspected = runner.run(["docker", "image", "inspect", contract.container_ref], env=env)
+    return _image_identity(inspected, contract)
+
+
+def _image_identity(raw: str, contract: RuntimeContract | None = None) -> dict[str, Any]:
+    contract = contract or _load_runtime_contract()
     try:
         records = json.loads(raw)
     except json.JSONDecodeError as error:
@@ -611,7 +854,7 @@ def _image_identity(raw: str) -> dict[str, Any]:
         raise BootstrapError("docker image inspect must return exactly one image")
     image = records[0]
     digests = image.get("RepoDigests")
-    expected = f"nvcr.io/nvidia/pytorch@{CONTAINER_AMD64_DIGEST}"
+    expected = contract.container_ref
     if not isinstance(digests, list) or expected not in digests:
         raise BootstrapError("docker inspected image does not have the pinned repository digest")
     image_id = image.get("Id")
@@ -621,8 +864,8 @@ def _image_identity(raw: str) -> dict[str, Any]:
         "architecture": "amd64",
         "image_id": image_id,
         "os": "linux",
-        "repo_digest": CONTAINER_AMD64_DIGEST,
-        "requested_ref": CONTAINER_REF,
+        "repo_digest": contract.container_amd64_digest,
+        "requested_ref": contract.container_ref,
         "schema_version": 1,
         "source": "docker-image-inspect",
     }
@@ -636,7 +879,8 @@ def _seal_identity(path: Path, identity: Mapping[str, Any]) -> None:
     _write_marker(path, identity)
 
 
-def _read_identity(path: Path) -> dict[str, Any]:
+def _read_identity(path: Path, contract: RuntimeContract | None = None) -> dict[str, Any]:
+    contract = contract or _load_runtime_contract()
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -644,8 +888,8 @@ def _read_identity(path: Path) -> dict[str, Any]:
     expected = {
         "architecture": "amd64",
         "os": "linux",
-        "repo_digest": CONTAINER_AMD64_DIGEST,
-        "requested_ref": CONTAINER_REF,
+        "repo_digest": contract.container_amd64_digest,
+        "requested_ref": contract.container_ref,
         "schema_version": 1,
         "source": "docker-image-inspect",
     }
@@ -662,8 +906,21 @@ def _container_command(
     receipt: Path,
     setup: bool,
     max_build_jobs: int,
+    credential_names: Sequence[str],
+    contract: RuntimeContract,
 ) -> list[str]:
-    mounts = (
+    command = _container_command_prefix(inputs)
+    for name in credential_names:
+        command.extend(["--env", name])
+    for source, target, readonly in _container_mounts(inputs, receipt):
+        mount = f"type=bind,src={source},dst={target}"
+        command.extend(["--mount", f"{mount},readonly" if readonly else mount])
+    command.extend(_container_bootstrap_args(inputs, venv, setup, max_build_jobs, contract))
+    return command
+
+
+def _container_mounts(inputs: Inputs, receipt: Path) -> tuple[tuple[Path, Path, bool], ...]:
+    return (
         (inputs.rdan_root, inputs.rdan_root, False),
         (inputs.rtt_root, inputs.rtt_root, True),
         (inputs.snapshot, inputs.snapshot, True),
@@ -671,7 +928,10 @@ def _container_command(
         (inputs.run_root, inputs.run_root, False),
         (receipt, IDENTITY_RECEIPT, True),
     )
-    command = [
+
+
+def _container_command_prefix(inputs: Inputs) -> list[str]:
+    return [
         "docker",
         "run",
         "--rm",
@@ -686,34 +946,37 @@ def _container_command(
         "--env",
         "PYTHONNOUSERSITE=1",
     ]
-    for source, target, readonly in mounts:
-        mount = f"type=bind,src={source},dst={target}"
-        command.extend(["--mount", f"{mount},readonly" if readonly else mount])
-    command.extend(
-        [
-            CONTAINER_REF,
-            "python3",
-            str(inputs.rdan_root / "scripts/bootstrap_a100_response.py"),
-            "--setup" if setup else "--check",
-            "--rtt-root",
-            str(inputs.rtt_root),
-            "--rdan-root",
-            str(inputs.rdan_root),
-            "--rdan-revision",
-            inputs.rdan_revision,
-            "--snapshot",
-            str(inputs.snapshot),
-            "--cache-root",
-            str(inputs.cache_root),
-            "--run-root",
-            str(inputs.run_root),
-            "--venv",
-            str(venv),
-            "--max-build-jobs",
-            str(max_build_jobs),
-        ]
-    )
-    return command
+
+
+def _container_bootstrap_args(
+    inputs: Inputs,
+    venv: Path,
+    setup: bool,
+    max_build_jobs: int,
+    contract: RuntimeContract,
+) -> list[str]:
+    return [
+        contract.container_ref,
+        "python3",
+        str(inputs.rdan_root / "scripts/bootstrap_a100_response.py"),
+        "--setup" if setup else "--check",
+        "--rtt-root",
+        str(inputs.rtt_root),
+        "--rdan-root",
+        str(inputs.rdan_root),
+        "--rdan-revision",
+        inputs.rdan_revision,
+        "--snapshot",
+        str(inputs.snapshot),
+        "--cache-root",
+        str(inputs.cache_root),
+        "--run-root",
+        str(inputs.run_root),
+        "--venv",
+        str(venv),
+        "--max-build-jobs",
+        str(max_build_jobs),
+    ]
 
 
 def _last_json_object(output: str) -> dict[str, Any]:
@@ -750,6 +1013,7 @@ def _populate_data_environment(
     runner: Runner,
     env: Mapping[str, str],
 ) -> tuple[Path, Path]:
+    contract = _load_runtime_contract()
     uv = production_python.parent / "uv"
     if not uv.is_file():
         raise BootstrapError("production environment did not install the pinned uv executable")
@@ -757,11 +1021,34 @@ def _populate_data_environment(
     managed = root / "managed-python"
     cache = root / "uv-cache"
     managed.mkdir(mode=0o755, exist_ok=True)
-    uv_env = _subprocess_env(env) | {
+    uv_env = _data_uv_environment(env, cache, managed)
+    _install_data_python(uv, managed, runner, inputs, uv_env)
+    _create_data_venv(uv, data_venv, runner, inputs, uv_env)
+    data_python = data_venv / "bin/python"
+    if not data_python.is_file():
+        raise BootstrapError("data-preparation venv creation did not produce bin/python")
+    _install_data_packages(uv, data_python, runner, inputs, uv_env, contract)
+    data_python = _write_data_python_launcher(data_venv)
+    if cache.exists():
+        shutil.rmtree(cache)
+    return data_venv, data_python
+
+
+def _data_uv_environment(env: Mapping[str, str], cache: Path, managed: Path) -> dict[str, str]:
+    return _subprocess_env(env) | {
         "UV_CACHE_DIR": str(cache),
         "UV_LINK_MODE": "copy",
         "UV_PYTHON_INSTALL_DIR": str(managed),
     }
+
+
+def _install_data_python(
+    uv: Path,
+    managed: Path,
+    runner: Runner,
+    inputs: Inputs,
+    env: Mapping[str, str],
+) -> None:
     runner.run(
         [
             str(uv),
@@ -775,8 +1062,17 @@ def _populate_data_environment(
             "--no-config",
         ],
         cwd=inputs.rdan_root,
-        env=uv_env,
+        env=env,
     )
+
+
+def _create_data_venv(
+    uv: Path,
+    data_venv: Path,
+    runner: Runner,
+    inputs: Inputs,
+    env: Mapping[str, str],
+) -> None:
     runner.run(
         [
             str(uv),
@@ -791,11 +1087,18 @@ def _populate_data_environment(
             "--no-config",
         ],
         cwd=inputs.rdan_root,
-        env=uv_env,
+        env=env,
     )
-    data_python = data_venv / "bin/python"
-    if not data_python.is_file():
-        raise BootstrapError("data-preparation venv creation did not produce bin/python")
+
+
+def _install_data_packages(
+    uv: Path,
+    data_python: Path,
+    runner: Runner,
+    inputs: Inputs,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+) -> None:
     runner.run(
         [
             str(uv),
@@ -804,24 +1107,20 @@ def _populate_data_environment(
             "--python",
             str(data_python),
             "--default-index",
-            PYPI_INDEX,
+            contract.index_url,
             "--require-hashes",
             "--no-config",
             "-r",
             str(DATA_LOCK),
         ],
         cwd=inputs.rdan_root,
-        env=uv_env,
+        env=env,
     )
     runner.run(
         [str(uv), "pip", "check", "--python", str(data_python), "--no-config"],
         cwd=inputs.rdan_root,
-        env=uv_env,
+        env=env,
     )
-    data_python = _write_data_python_launcher(data_venv)
-    if cache.exists():
-        shutil.rmtree(cache)
-    return data_venv, data_python
 
 
 def _write_data_python_launcher(venv: Path) -> Path:
@@ -950,20 +1249,20 @@ def _host_info(env: Mapping[str, str]) -> HostInfo:
     )
 
 
-def _verify_host(host: HostInfo) -> None:
-    if host.system != "Linux" or host.machine not in {"x86_64", "AMD64"}:
+def _verify_host(host: HostInfo, contract: RuntimeContract) -> None:
+    if host.system != contract.system or host.machine not in contract.machines:
         raise BootstrapError("host must be Linux x86_64")
-    if host.implementation != "CPython" or host.python[:2] != PYTHON_VERSION:
-        expected = ".".join(map(str, PYTHON_VERSION)) + ".x"
+    if host.implementation != "CPython" or host.python[:2] != contract.python_version:
+        expected = ".".join(map(str, contract.python_version)) + ".x"
         observed = ".".join(map(str, host.python))
         raise BootstrapError(f"Python must be exact CPython {expected}, got {host.implementation} {observed}")
-    if host.os_release.get("ID") != "ubuntu" or host.os_release.get("VERSION_ID") != CONTAINER_OS:
+    if host.os_release.get("ID") != "ubuntu" or host.os_release.get("VERSION_ID") != contract.container_os:
         raise BootstrapError("host must be Ubuntu 24.04")
     if not host.container:
         raise BootstrapError("runtime must execute inside the pinned NGC container")
-    if host.cuda != CONTAINER_CUDA or host.container_release != CONTAINER_RELEASE:
+    if host.cuda != contract.container_cuda or host.container_release != contract.container_release:
         raise BootstrapError("container identity does not match NVIDIA PyTorch 25.06")
-    if host.image_digest != CONTAINER_AMD64_DIGEST:
+    if host.image_digest != contract.container_amd64_digest:
         raise BootstrapError("container image digest does not match the pinned Linux AMD64 manifest")
     if host.identity_source != "docker-image-inspect" or not _DIGEST.fullmatch(host.image_id or ""):
         raise BootstrapError("container image identity was not externally inspected")
@@ -991,7 +1290,7 @@ def _containerized(path: Path) -> bool:
     return any(marker in value for marker in ("docker", "containerd", "kubepods"))
 
 
-def _verify_inputs(inputs: Inputs) -> None:
+def _verify_inputs(inputs: Inputs, contract: RuntimeContract) -> None:
     if inputs.rdan_root != REPO_ROOT:
         raise BootstrapError("--rdan-root must identify the checkout containing this bootstrap")
     if not _REVISION.fullmatch(inputs.rdan_revision):
@@ -1002,10 +1301,12 @@ def _verify_inputs(inputs: Inputs) -> None:
         LOCK_INPUT,
         BOOTSTRAP_LOCK,
         BOOTSTRAP_INPUT,
-        CONTAINER_CONTRACT,
+        _container_contract_path(),
         DATA_LOCK,
         DATA_REQUIREMENTS,
         SNAPSHOT_MANIFEST,
+        COMPUTE_CONTRACT,
+        *contract.package_contracts,
     )
     for path in contracts:
         if not path.is_file():
@@ -1015,9 +1316,9 @@ def _verify_inputs(inputs: Inputs) -> None:
         1 for path in REQUIREMENTS for line in path.read_text().splitlines() if _PIN.match(line)
     ):
         raise BootstrapError("requirement contracts contain duplicate or invalid exact pins")
-    _verify_lock(expected)
+    _verify_lock(expected, contract)
     _verify_bootstrap_lock()
-    _verify_container_contract()
+    _verify_container_contract(contract)
     _verify_data_lock()
     _verify_snapshot_manifest()
 
@@ -1127,6 +1428,152 @@ def _verify_ambient_roll(python: Path, runner: Runner, cwd: Path, env: Mapping[s
         raise BootstrapError("ambient roll module conflicts with the pinned source checkout")
 
 
+def _verify_credentials(env: Mapping[str, str]) -> dict[str, bool]:
+    present = {
+        "judge_access": bool(env.get("OPENROUTER_API_KEY", "").strip()),
+        "tracking_access": bool(env.get("WANDB_API_KEY", "").strip()),
+        "model_publish_access": any(env.get(name, "").strip() for name in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")),
+    }
+    missing = [name for name, value in present.items() if not value]
+    if missing:
+        raise BootstrapError(f"required service credential capabilities are absent: {missing}")
+    return present
+
+
+def _verify_static_readiness(
+    inputs: Inputs,
+    runner: Runner,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+) -> dict[str, Any]:
+    memory = runner.run(["free", "--bytes"], cwd=inputs.rdan_root, env=env)
+    total_ram = _parse_total_ram(memory)
+    if total_ram < contract.minimum_ram_bytes:
+        minimum_gib = contract.minimum_ram_bytes // 2**30
+        raise BootstrapError(f"host RAM must be at least {minimum_gib} GiB")
+    disk: dict[str, dict[str, int]] = {}
+    for name, root in (("cache", inputs.cache_root), ("run", inputs.run_root)):
+        output = runner.run(
+            ["df", "--block-size=1", "--output=avail", str(root)],
+            cwd=inputs.rdan_root,
+            env=env,
+        )
+        available = _parse_available_disk(output)
+        if available < contract.minimum_free_disk_bytes:
+            minimum_gib = contract.minimum_free_disk_bytes // 2**30
+            raise BootstrapError(f"{name} filesystem must have at least {minimum_gib} GiB free")
+        disk[name] = {"available_bytes": available, "minimum_bytes": contract.minimum_free_disk_bytes}
+    return {
+        "ram": {"total_bytes": total_ram, "minimum_bytes": contract.minimum_ram_bytes},
+        "disk": disk,
+        "gpu": _verify_static_gpu(runner, inputs.rdan_root, env, contract),
+    }
+
+
+def _parse_total_ram(output: str) -> int:
+    for line in output.splitlines():
+        fields = line.split()
+        if fields and fields[0].rstrip(":") == "Mem" and len(fields) >= 2:
+            try:
+                return int(fields[1])
+            except ValueError as error:
+                raise BootstrapError("free returned invalid host RAM evidence") from error
+    raise BootstrapError("free did not return host RAM evidence")
+
+
+def _parse_available_disk(output: str) -> int:
+    values = [line.strip() for line in output.splitlines()[1:] if line.strip()]
+    if len(values) != 1:
+        raise BootstrapError("df must return exactly one filesystem availability value")
+    try:
+        return int(values[0])
+    except ValueError as error:
+        raise BootstrapError("df returned invalid filesystem availability evidence") from error
+
+
+def _verify_static_gpu(
+    runner: Runner,
+    cwd: Path,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+) -> dict[str, Any]:
+    smi = runner.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,memory.total,memory.used,utilization.gpu,driver_version",
+            "--format=csv,noheader,nounits",
+        ],
+        cwd=cwd,
+        env=env,
+    )
+    devices = [_parse_smi(line) for line in smi.splitlines() if line.strip()]
+    _verify_devices(devices, "nvidia-smi", contract)
+    uuids = [device["uuid"] for device in devices]
+    if len(set(uuids)) != len(uuids) or any(re.fullmatch(r"GPU-[A-Za-z0-9-]+", value) is None for value in uuids):
+        raise BootstrapError("nvidia-smi must report one distinct valid UUID per A100 GPU")
+    if contract.require_idle and any(
+        device["memory_used_mib"] != 0 or device["utilization_percent"] != 0 for device in devices
+    ):
+        raise BootstrapError("both A100 GPUs must be idle with zero memory use and zero utilization")
+    processes = runner.run(
+        ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,process_name", "--format=csv,noheader,nounits"],
+        cwd=cwd,
+        env=env,
+    )
+    if processes.strip():
+        raise BootstrapError("A100 GPUs must have no active compute processes")
+    drivers = {device["driver"] for device in devices}
+    if len(drivers) != 1 or _version_tuple(next(iter(drivers))) < contract.minimum_driver:
+        raise BootstrapError("NVIDIA driver is below the CUDA 12.9.1 requirement")
+    topology = _parse_topology(
+        runner.run(["nvidia-smi", "topo", "-m"], cwd=cwd, env=env),
+        contract,
+    )
+    return _static_gpu_report(devices, next(iter(drivers)), topology)
+
+
+def _static_gpu_report(
+    devices: Sequence[Mapping[str, Any]],
+    driver: str,
+    topology: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        "count": len(devices),
+        "driver": driver,
+        "devices": [
+            {
+                "index": item["index"],
+                "uuid": item["uuid"],
+                "name": item["name"],
+                "memory_mib": item["memory_mib"],
+                "memory_used_mib": item["memory_used_mib"],
+                "utilization_percent": item["utilization_percent"],
+            }
+            for item in devices
+        ],
+        "compute_process_count": 0,
+        "topology": topology,
+    }
+
+
+def _parse_topology(output: str, contract: RuntimeContract) -> dict[str, str]:
+    clean = _ANSI_ESCAPE.sub("", output)
+    lines = [line.split() for line in clean.splitlines() if line.strip()]
+    header = next((fields for fields in lines if fields and fields[0] == "GPU0"), None)
+    gpu_columns = [] if header is None else [field for field in header if re.fullmatch(r"GPU\d+", field)]
+    rows = {fields[0]: fields for fields in lines if fields and re.fullmatch(r"GPU\d+", fields[0])}
+    if gpu_columns != ["GPU0", "GPU1"] or set(rows) != {"GPU0", "GPU1"}:
+        raise BootstrapError("nvidia-smi topology must contain exactly GPU0 and GPU1")
+    if len(rows["GPU0"]) < 3 or len(rows["GPU1"]) < 3:
+        raise BootstrapError("nvidia-smi topology matrix is incomplete")
+    forward, reverse = rows["GPU0"][2], rows["GPU1"][1]
+    if forward != reverse or not _supported_topology_link(forward, contract.supported_links):
+        raise BootstrapError("GPU0 and GPU1 must have one exact reciprocal supported topology link")
+    if rows["GPU0"][1] != "X" or rows["GPU1"][2] != "X":
+        raise BootstrapError("nvidia-smi topology diagonal is invalid")
+    return {"gpu0_to_gpu1": forward, "gpu1_to_gpu0": reverse}
+
+
 def _verify_gpu(
     python: Path,
     runner: Runner,
@@ -1134,32 +1581,25 @@ def _verify_gpu(
     env: Mapping[str, str],
     *,
     exact_torch: bool,
+    static: Mapping[str, Any],
+    contract: RuntimeContract,
 ) -> dict[str, Any]:
-    smi = runner.run(
-        [
-            "nvidia-smi",
-            "--query-gpu=index,name,memory.total,driver_version",
-            "--format=csv,noheader,nounits",
-        ],
-        cwd=cwd,
-        env=env,
-    )
-    devices = [_parse_smi(line) for line in smi.splitlines() if line.strip()]
-    _verify_devices(devices, "nvidia-smi")
-    drivers = {device["driver"] for device in devices}
-    if len(drivers) != 1 or _version_tuple(next(iter(drivers))) < MIN_DRIVER:
-        raise BootstrapError("NVIDIA driver is below the CUDA 12.9.1 requirement")
     nvcc = runner.run(["nvcc", "--version"], cwd=cwd, env=env)
     match = re.search(r"release\s+(\d+\.\d+)", nvcc)
-    if match is None or match.group(1) != CUDA_VERSION:
-        raise BootstrapError("nvcc must be exact CUDA 12.9")
+    if match is None or match.group(1) != contract.cuda_runtime:
+        raise BootstrapError(f"nvcc must be exact CUDA {contract.cuda_runtime}")
     torch = _probe_json(runner.run([str(python), "-c", _CUDA_PROBE], cwd=cwd, env=env), "RDAN_CUDA=")
-    if torch.get("cuda") != CUDA_VERSION:
-        raise BootstrapError("PyTorch must report CUDA 12.9")
-    if exact_torch and torch.get("torch") != "2.8.0+cu129":
-        raise BootstrapError("PyTorch must be exact 2.8.0+cu129")
+    if torch.get("cuda") != contract.cuda_runtime:
+        raise BootstrapError(f"PyTorch must report CUDA {contract.cuda_runtime}")
+    expected_packages = _runtime_expected_packages(contract)
+    if exact_torch and not _version_allowed("torch", str(torch.get("torch")), expected_packages, contract):
+        raise BootstrapError("PyTorch differs from the response runtime package contract")
     if torch.get("cuda_available") is not True or torch.get("nccl_available") is not True:
         raise BootstrapError("PyTorch CUDA and NCCL runtimes must both be available")
+    nccl_version = _required_nccl_version(contract)
+    if tuple(torch.get("nccl_version") or ()) != nccl_version:
+        expected_nccl = ".".join(map(str, nccl_version))
+        raise BootstrapError(f"PyTorch NCCL runtime must be exact {expected_nccl}")
     torch_devices = torch.get("devices")
     if not isinstance(torch_devices, list):
         raise BootstrapError("invalid PyTorch CUDA device report")
@@ -1168,43 +1608,70 @@ def _verify_gpu(
         for item in torch_devices
         if isinstance(item, dict)
     ]
-    _verify_devices(normalized, "PyTorch")
+    _verify_devices(normalized, "PyTorch", contract)
     return {
-        "count": GPU_COUNT,
-        "cuda": CUDA_VERSION,
-        "driver": next(iter(drivers)),
-        "devices": [
-            {"index": item["index"], "name": item["name"], "memory_mib": item["memory_mib"]} for item in devices
-        ],
+        "count": static["count"],
+        "cuda": contract.cuda_runtime,
+        "driver": static["driver"],
+        "devices": static["devices"],
+        "nccl": ".".join(map(str, nccl_version)),
+        "topology": static["topology"],
         "torch": torch["torch"],
     }
 
 
 def _parse_smi(line: str) -> dict[str, Any]:
     fields = [field.strip() for field in line.split(",")]
-    if len(fields) != 4:
+    if len(fields) != 7:
         raise BootstrapError("invalid nvidia-smi device report")
     try:
-        return {"index": int(fields[0]), "name": fields[1], "memory_mib": int(fields[2]), "driver": fields[3]}
+        return {
+            "index": int(fields[0]),
+            "uuid": fields[1],
+            "name": fields[2],
+            "memory_mib": int(fields[3]),
+            "memory_used_mib": int(fields[4]),
+            "utilization_percent": int(fields[5]),
+            "driver": fields[6],
+        }
     except ValueError as error:
         raise BootstrapError("invalid numeric field in nvidia-smi report") from error
 
 
-def _verify_devices(devices: Sequence[Mapping[str, Any]], source: str) -> None:
-    if len(devices) != GPU_COUNT:
+def _verify_devices(
+    devices: Sequence[Mapping[str, Any]],
+    source: str,
+    contract: RuntimeContract,
+) -> None:
+    if len(devices) != contract.gpu_count:
         raise BootstrapError(f"{source} must expose exactly two GPUs")
     for index, device in enumerate(devices):
         if device.get("index") != index:
             raise BootstrapError(f"{source} GPU indexes must be contiguous 0 and 1")
-        if "A100" not in str(device.get("name", "")).upper():
+        if contract.gpu_model.upper() not in str(device.get("name", "")).upper():
             raise BootstrapError(f"{source} must expose only A100 GPUs")
         memory = device.get("memory_mib")
-        if not isinstance(memory, int) or memory < MIN_GPU_MIB:
-            raise BootstrapError(f"{source} A100 memory must be at least 79 GiB per device")
+        if not isinstance(memory, int) or memory < contract.minimum_gpu_memory_mib:
+            minimum_gib = contract.minimum_gpu_memory_mib // 1024
+            raise BootstrapError(f"{source} A100 memory must be at least {minimum_gib} GiB per device")
 
 
-def _verify_packages(python: Path, runner: Runner, cwd: Path, env: Mapping[str, str]) -> dict[str, str]:
-    expected = _locked_packages() | {"flash-attn": _expected_packages()["flash-attn"]}
+def _required_nccl_version(contract: RuntimeContract) -> tuple[int, ...]:
+    version = _runtime_expected_packages(contract).get(contract.nccl_package, "")
+    parsed = _version_tuple(version)
+    if len(parsed) != 3:
+        raise BootstrapError("resolved lock has no exact three-part NCCL runtime identity")
+    return parsed
+
+
+def _verify_packages(
+    python: Path,
+    runner: Runner,
+    cwd: Path,
+    env: Mapping[str, str],
+    contract: RuntimeContract,
+) -> dict[str, str]:
+    expected = _runtime_expected_packages(contract)
     runner.run([str(python), "-m", "pip", "--isolated", "check"], cwd=cwd, env=env)
     output = runner.run([str(python), "-c", _PACKAGE_PROBE], cwd=cwd, env=env)
     raw = _probe_json(output, "RDAN_PACKAGES=")
@@ -1213,12 +1680,8 @@ def _verify_packages(python: Path, runner: Runner, cwd: Path, env: Mapping[str, 
         missing = sorted(set(expected) - set(observed))
         extra = sorted(set(observed) - set(expected))
         raise BootstrapError(f"installed distribution set mismatch: missing={missing}, extra={extra}")
-    for name, version in expected.items():
-        actual = observed.get(name)
-        allowed = {version}
-        if name in {"torch", "torchvision", "torchaudio"}:
-            allowed.add(f"{version}+cu129")
-        if actual not in allowed:
+    for name in expected:
+        if not _version_allowed(name, str(observed.get(name)), expected, contract):
             raise BootstrapError(f"installed distribution mismatch for {name}")
     return {name: str(observed[name]) for name in sorted(expected)}
 
@@ -1318,6 +1781,24 @@ def _subprocess_env(env: Mapping[str, str]) -> dict[str, str]:
     return clean
 
 
+def _docker_environment(env: Mapping[str, str]) -> dict[str, str]:
+    clean = _subprocess_env(env)
+    for name in SECRET_ENV_NAMES:
+        if env.get(name, "").strip():
+            clean[name] = env[name]
+    return clean
+
+
+def _docker_secret_env_names(args: Sequence[str]) -> set[str]:
+    if list(args[:2]) != ["docker", "run"]:
+        return set()
+    return {
+        args[index + 1]
+        for index, value in enumerate(args[:-1])
+        if value == "--env" and args[index + 1] in SECRET_ENV_NAMES
+    }
+
+
 def _alias_path(path: Path) -> Path:
     expanded = path.expanduser()
     return expanded.parent.resolve() / expanded.name
@@ -1352,15 +1833,12 @@ def _expected_packages() -> dict[str, str]:
     return expected
 
 
-def _verify_lock(expected: Mapping[str, str]) -> None:
+def _verify_lock(expected: Mapping[str, str], contract: RuntimeContract) -> None:
     locked = _locked_packages()
-    for name, version in expected.items():
+    for name in expected:
         if name == "flash-attn":
             continue
-        allowed = {version}
-        if name in {"torch", "torchvision", "torchaudio"}:
-            allowed.add(f"{version}+cu129")
-        if locked.get(name) not in allowed:
+        if not _version_allowed(name, str(locked.get(name)), expected, contract):
             raise BootstrapError(f"resolved lock differs from direct contract for {name}")
 
 
@@ -1404,19 +1882,16 @@ def _packages_from(path: Path) -> dict[str, str]:
     return packages
 
 
-def _verify_container_contract() -> None:
-    try:
-        payload = json.loads(CONTAINER_CONTRACT.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise BootstrapError(f"invalid container contract: {error}") from error
+def _verify_container_contract(contract: RuntimeContract) -> None:
+    payload = _load_json_object(_container_contract_path(), "container contract")
     expected = {
-        "cuda": CONTAINER_CUDA,
-        "image": CONTAINER_IMAGE,
-        "linux_amd64_digest": CONTAINER_AMD64_DIGEST,
-        "manifest_digest": CONTAINER_INDEX_DIGEST,
-        "nvidia_pytorch_release": CONTAINER_RELEASE,
-        "os": {"id": "ubuntu", "version": CONTAINER_OS},
-        "python": {"major": PYTHON_VERSION[0], "minor": PYTHON_VERSION[1]},
+        "cuda": contract.container_cuda,
+        "image": contract.container_image,
+        "linux_amd64_digest": contract.container_amd64_digest,
+        "manifest_digest": contract.container_index_digest,
+        "nvidia_pytorch_release": contract.container_release,
+        "os": {"id": "ubuntu", "version": contract.container_os},
+        "python": {"major": contract.python_version[0], "minor": contract.python_version[1]},
         "schema_version": 1,
     }
     if payload != expected:
@@ -1450,6 +1925,141 @@ def _probe_json(output: str, prefix: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise BootstrapError(f"runtime probe {prefix[:-1]} record must be an object")
     return payload
+
+
+def _load_json_object(path: Path, name: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise BootstrapError(f"invalid {name}: {error}") from error
+    if not isinstance(payload, dict):
+        raise BootstrapError(f"{name} must contain one JSON object")
+    return payload
+
+
+def _required_mapping(value: Mapping[str, Any], key: str, name: str) -> Mapping[str, Any]:
+    item = value.get(key)
+    if not isinstance(item, Mapping):
+        raise BootstrapError(f"{name}.{key} must be an object")
+    return item
+
+
+def _required_string(value: Mapping[str, Any], key: str) -> str:
+    item = value.get(key)
+    if not isinstance(item, str) or not item:
+        raise BootstrapError(f"runtime contract {key} must be a non-empty string")
+    return item
+
+
+def _positive_int(value: Mapping[str, Any], key: str) -> int:
+    item = value.get(key)
+    if not isinstance(item, int) or isinstance(item, bool) or item <= 0:
+        raise BootstrapError(f"runtime contract {key} must be a positive integer")
+    return item
+
+
+def _required_digest(value: Mapping[str, Any], key: str) -> str:
+    item = _required_string(value, key)
+    if not _DIGEST.fullmatch(item):
+        raise BootstrapError(f"runtime contract {key} must be a SHA256 digest")
+    return item
+
+
+def _required_url(value: Mapping[str, Any], key: str) -> str:
+    item = _required_string(value, key)
+    if re.fullmatch(r"https://[A-Za-z0-9./_-]+", item) is None:
+        raise BootstrapError(f"runtime contract {key} must be an HTTPS URL")
+    return item
+
+
+def _required_version(value: Mapping[str, Any], key: str) -> tuple[int, ...]:
+    item = _required_string(value, key)
+    parsed = _version_tuple(item)
+    if len(parsed) != 3 or re.fullmatch(r"\d+\.\d+\.\d+", item) is None:
+        raise BootstrapError(f"runtime contract {key} must be a three-part version")
+    return parsed
+
+
+def _string_list(value: Mapping[str, Any], key: str) -> list[str]:
+    item = value.get(key)
+    if not isinstance(item, list) or not item or any(not isinstance(entry, str) or not entry for entry in item):
+        raise BootstrapError(f"runtime contract {key} must be a non-empty string list")
+    return item
+
+
+def _string_mapping(value: Mapping[str, Any], key: str) -> dict[str, str]:
+    item = value.get(key)
+    invalid = isinstance(item, Mapping) and any(
+        not isinstance(name, str) or not isinstance(pin, str) for name, pin in item.items()
+    )
+    if not isinstance(item, Mapping) or invalid:
+        raise BootstrapError(f"runtime contract {key} must map strings to strings")
+    return dict(item)
+
+
+def _exact_keys(value: Mapping[str, Any], expected: set[str], name: str) -> None:
+    if set(value) != expected:
+        raise BootstrapError(f"{name} fields differ from the supported contract")
+
+
+def _contract_path(value: Any, name: str) -> Path:
+    if not isinstance(value, str) or not value:
+        raise BootstrapError(f"{name} path must be a non-empty string")
+    path = (COMPUTE_CONTRACT.parent / value).resolve()
+    if not _is_within(path, REPO_ROOT) or not path.is_file() or path.is_symlink():
+        raise BootstrapError(f"{name} must be a regular file inside the repository")
+    return path
+
+
+def _container_contract_path() -> Path:
+    compute = _load_json_object(COMPUTE_CONTRACT, "compute contract")
+    runtime = _required_mapping(compute, "response_runtime", "compute contract")
+    platform_contract = _required_mapping(runtime, "platform", "response runtime")
+    return _contract_path(platform_contract.get("container_contract"), "container contract")
+
+
+def _container_python(container: Mapping[str, Any]) -> tuple[int, int]:
+    python = _required_mapping(container, "python", "container contract")
+    _exact_keys(python, {"major", "minor"}, "container Python")
+    return (_positive_int(python, "major"), _positive_int(python, "minor"))
+
+
+def _container_os(container: Mapping[str, Any]) -> str:
+    operating_system = _required_mapping(container, "os", "container contract")
+    _exact_keys(operating_system, {"id", "version"}, "container operating system")
+    if operating_system.get("id") != "ubuntu":
+        raise BootstrapError("response runtime requires Ubuntu")
+    return _required_string(operating_system, "version")
+
+
+def _runtime_expected_packages(contract: RuntimeContract) -> dict[str, str]:
+    expected: dict[str, str] = {}
+    for path in contract.package_contracts:
+        for name, version in _packages_from(path).items():
+            if name in expected and expected[name] != version:
+                raise BootstrapError(f"conflicting response runtime package identity: {name}")
+            expected[name] = version
+    return expected
+
+
+def _version_allowed(
+    name: str,
+    actual: str,
+    expected: Mapping[str, str],
+    contract: RuntimeContract,
+) -> bool:
+    version = expected.get(name)
+    if version is None:
+        return False
+    allowed = {version}
+    suffix = contract.allowed_local_suffixes.get(name)
+    if suffix:
+        allowed.add(f"{version}+{suffix}")
+    return actual in allowed
+
+
+def _supported_topology_link(value: str, prefixes: Sequence[str]) -> bool:
+    return any(value == prefix or (prefix == "NV" and re.fullmatch(r"NV\d+", value)) for prefix in prefixes)
 
 
 def _normalize_name(name: str) -> str:

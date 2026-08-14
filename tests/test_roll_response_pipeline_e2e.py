@@ -7,6 +7,7 @@ import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import torch
@@ -26,6 +27,13 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
     pipeline._resume_manifest = None
     pipeline.completed_step = 0
     pipeline.stop_after_step = 1
+    pipeline.artifact_root = Path("artifacts")
+    pipeline.checkpoint_identity = object()
+    pipeline.runtime_identity = {}
+    pipeline.model_identity = {}
+    pipeline.artifact_root = Path("artifacts")
+    pipeline._lifecycle_predecessor = None
+    pipeline._resume_path = None
     pipeline.pipeline_config = SimpleNamespace(num_return_sequences_in_group=8)
     pipeline.response_config = SimpleNamespace(method="rdan_scalar", quality_weight=0.5, mix_weight=None)
     pipeline.certificate = {"ready": True}
@@ -45,16 +53,23 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
     pipeline._generate = lambda step: events.append(f"generate:{step}") or object()
     pipeline._save_step = lambda *args: events.append("checkpoint") or Path("step-000001")
 
-    def train(**kwargs):
+    def train(**kwargs: Any) -> SimpleNamespace:
         events.append("train")
         kwargs["observe_training_state"]()
         kwargs["transfer_after_update"]()
         kwargs["observe_post_transaction_memory"]()
-        return SimpleNamespace(promotion_ready=True, metrics={"actor/clipfrac": 0.0}, peak_memory_fraction=0.5)
+        return SimpleNamespace(
+            promotion_ready=True,
+            metrics={"rdan/response_token_clipfrac": 0.0},
+            peak_memory_fraction=0.5,
+        )
 
     pipeline.actor_train.rdan_training_state = lambda **kwargs: events.append("state") or []
     pipeline.actor_train.rdan_cuda_memory = lambda **kwargs: events.append("memory") or []
     monkeypatch.setattr(module, "run_response_train_step", train)
+    monkeypatch.setattr(module, "_load_publication_state", lambda pipeline: None)
+    monkeypatch.setattr(module, "_create_publication_state", lambda pipeline, checkpoints: {})
+    monkeypatch.setattr(module, "_publish_artifacts", lambda pipeline, state: events.append("publish"))
     monkeypatch.setattr(
         module,
         "_group_diagnostics",
@@ -65,7 +80,8 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
         },
     )
 
-    assert pipeline.run() == [Path("step-000001")]
+    completed = pipeline.run()
+    assert completed.checkpoints == (Path("step-000001"),)
     assert events == [
         "receipt:initial:0",
         "reset_actor",
@@ -77,6 +93,7 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
         "memory",
         "checkpoint",
         "log",
+        "publish",
         "shutdown",
         "finish",
     ]
@@ -111,6 +128,7 @@ def test_cleanup_attempts_both_boundaries_and_preserves_primary(monkeypatch: pyt
         raise ValueError("primary generation failure")
 
     pipeline._generate = fail_generation
+    monkeypatch.setattr(module, "_load_publication_state", lambda value: None)
     with pytest.raises(ValueError, match="primary generation failure"):
         pipeline.run()
     assert events[-2:] == ["shutdown", "finish-primary"]
@@ -143,26 +161,27 @@ def test_resume_restores_dcp_driver_inference_rng_before_resume_receipt() -> Non
     source = SOURCE.read_text(encoding="utf-8")
     restore = source.index("self._restore_checkpoint()")
     run = source.index("def run(")
-    resume_receipt = source.index('initial_phase = "resume_initial"', run)
+    run_steps = source.index("def _run_steps(", run)
+    resume_receipt = source.index('phase = "resume_initial"', run_steps)
     load_dcp = source.index("rdan_load_dcp", restore)
     driver_rng = source.index("WorkerState.load_rng_state", restore)
     inference_rng = source.index("rdan_load_rng.remote", restore)
     assert restore < load_dcp < driver_rng < inference_rng
-    assert restore < run < resume_receipt
+    assert restore < run < run_steps < resume_receipt
 
 
 def test_receipts_bracket_generation_training_and_atomic_promotion() -> None:
-    source = SOURCE.read_text(encoding="utf-8")
-    initial = source.index("receipt = self._transfer(initial_phase")
-    generate = source.index("rewarded = self._generate(step)")
-    train = source.index("result = run_response_train_step")
-    post = source.index('value = self._transfer("post_update", step)')
-    save = source.index("checkpoint = self._save_step")
-    checkpoint_call = source.index("checkpoint = self._save_checkpoint", save)
-    upload = source.index("self.tracker.log_artifact", checkpoint_call)
-    promote = source.index("return promote_checkpoint", upload)
-    assert initial < generate < train
-    assert post < save < checkpoint_call < upload < promote
+    run_steps = _method_source("_run_steps")
+    run_step = _method_source("_run_step")
+    observers = _method_source("_step_observers")
+    save_step = _method_source("_save_step")
+    save_checkpoint = _method_source("_save_checkpoint")
+    assert run_steps.index("receipt = self._transfer") < run_steps.index("self._run_step")
+    assert run_steps.index("self._run_step") < run_steps.index("self._save_step")
+    assert run_step.index("self._generate(step)") < run_step.index("run_response_train_step")
+    assert 'self._transfer("post_update", step)' in observers
+    assert "self._log_step_artifact" not in save_step
+    assert "promote_checkpoint" in save_checkpoint
 
 
 def test_mixed_hir_rubrichub_rows_reach_reward_contract_without_arrow_loss(
@@ -334,6 +353,9 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
         },
     )
     pipeline.checkpoint_identity = identity
+    pipeline.runtime_identity = {"runtime": "pinned"}
+    pipeline.model_identity = {"model": "pinned"}
+    pipeline._start_step = 1
 
     def save_dcp(path: str, step: int, **kwargs: object) -> None:
         target = Path(path)
@@ -365,7 +387,7 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
     )
     result = SimpleNamespace(
         promotion_ready=True,
-        metrics={"actor/clipfrac": 0.2, "actor/grad_norm": 1.0},
+        metrics={"rdan/response_token_clipfrac": 0.2, "actor/grad_norm": 1.0},
         peak_memory_fraction=0.8,
     )
     observations = {
@@ -378,6 +400,20 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
     manifest = load_checkpoint(checkpoint, identity=identity)
     assert manifest["group_diagnostics"]["response_active_group_rate"] == 1.0
     assert manifest["clipping_fraction"] == 0.2
+    assert logged == []
+    publication = module._create_publication_state(pipeline, [checkpoint])
+
+    def fail_upload(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("artifact upload failed")
+
+    pipeline.tracker = SimpleNamespace(log_artifact=fail_upload)
+    with pytest.raises(RuntimeError, match="artifact upload failed"):
+        module._publish_artifacts(pipeline, publication)
+    recovered = module._load_publication_state(pipeline)
+    assert recovered is not None
+    assert recovered["artifacts"][0]["published"] is False
+    pipeline.tracker = SimpleNamespace(log_artifact=lambda path, **kwargs: logged.append(Path(path)))
+    module._publish_artifacts(pipeline, recovered)
     assert logged == [artifact_root / "step-000001"]
     rows = (logged[0] / "responses.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(rows) == 4
@@ -399,23 +435,34 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
     with pytest.raises(RuntimeError, match="interleaved"):
         module._group_diagnostics(interleaved, 2)
 
-    promoted = False
+    assert json.loads((artifact_root / "publication-state.json").read_text())["artifacts"][0]["published"] is True
 
-    def observe_promotion(*args: object, **kwargs: object) -> Path:
-        nonlocal promoted
-        promoted = True
-        return Path("unexpected")
 
-    def fail_upload(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("artifact upload failed")
+def test_finish_failure_retries_publication_without_optimizer_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_pipeline(monkeypatch)
+    pipeline = module.ResponseTrainingPipeline.__new__(module.ResponseTrainingPipeline)
+    pipeline.scheduler = SimpleNamespace(shutdown=SimpleNamespace(remote=lambda: None))
+    pipeline.tracker = SimpleNamespace(finish=lambda: (_ for _ in ()).throw(RuntimeError("finish failed")))
+    pipeline.checkpoint_identity = object()
+    pipeline.runtime_identity = {}
+    pipeline.model_identity = {}
+    pipeline.artifact_root = Path("artifacts")
+    pipeline._lifecycle_predecessor = None
+    pipeline._resume_path = None
+    publication = {"checkpoints": ["checkpoint"]}
+    events: list[str] = []
+    monkeypatch.setattr(module, "_load_publication_state", lambda value: publication)
+    monkeypatch.setattr(module, "_publication_checkpoints", lambda state, identity: [Path("checkpoint")])
+    monkeypatch.setattr(module, "_publish_artifacts", lambda value, state: events.append("publish"))
+    pipeline._run_steps = lambda: (_ for _ in ()).throw(AssertionError("optimizer work repeated"))
 
-    monkeypatch.setattr(module, "promote_checkpoint", observe_promotion)
-    pipeline.tracker = SimpleNamespace(log_artifact=fail_upload)
-    pipeline.stop_after_step = 2
-    with pytest.raises(RuntimeError, match="artifact upload failed"):
-        pipeline._save_step(2, Batch(), {"status": "receipt_passed"}, result, observations)
-    assert promoted is True
-    assert (checkpoint_root / ".incomplete-step-000002").is_dir()
+    with pytest.raises(RuntimeError, match="finish failed"):
+        pipeline.run()
+    pipeline.tracker = SimpleNamespace(finish=lambda: events.append("finish"))
+    completed = pipeline.run()
+
+    assert completed.checkpoints == (Path("checkpoint"),)
+    assert events == ["publish", "publish", "finish"]
 
 
 def _constructor(tree: ast.AST) -> ast.FunctionDef:
@@ -425,6 +472,18 @@ def _constructor(tree: ast.AST) -> ast.FunctionDef:
                 child for child in node.body if isinstance(child, ast.FunctionDef) and child.name == "__init__"
             )
     raise AssertionError("ResponseTrainingPipeline.__init__ not found")
+
+
+def _method_source(name: str) -> str:
+    source = SOURCE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "ResponseTrainingPipeline":
+            method = next(child for child in node.body if isinstance(child, ast.FunctionDef) and child.name == name)
+            value = ast.get_source_segment(source, method)
+            assert value is not None
+            return value
+    raise AssertionError(f"ResponseTrainingPipeline.{name} not found")
 
 
 def _statement_index(statements: list[ast.stmt], target: str) -> int:

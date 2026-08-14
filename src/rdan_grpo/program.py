@@ -1319,22 +1319,33 @@ def _valid_hir_id(value: Any) -> bool:
 
 
 def _validate_compute(compute: JsonObject) -> None:
-    _exact_keys(
-        compute,
-        {
-            "schema_version",
-            "id",
-            "rtt_released_topology",
-            "adapted_deviations",
-            "target_topology",
-            "analytical_memory",
-            "workloads",
-            "run_matrix",
-            "cost_accounting",
-        },
-        "compute",
-    )
-    _expect(compute["schema_version"] == 3 and compute["id"] == "qwen_a100_2x", "compute identity is invalid")
+    _validate_compute_identity(compute)
+    _validate_compute_topology(compute)
+    _validate_response_runtime(_object(compute["response_runtime"], "compute.response_runtime"))
+    _validate_analytical_memory(compute["analytical_memory"])
+    _validate_workloads(_object(compute["workloads"], "compute.workloads"))
+    _validate_run_matrix(_object(compute["run_matrix"], "compute.run_matrix"))
+    _validate_cost_accounting(_object(compute["cost_accounting"], "compute.cost_accounting"))
+
+
+def _validate_compute_identity(compute: JsonObject) -> None:
+    keys = {
+        "schema_version",
+        "id",
+        "rtt_released_topology",
+        "adapted_deviations",
+        "target_topology",
+        "response_runtime",
+        "analytical_memory",
+        "workloads",
+        "run_matrix",
+        "cost_accounting",
+    }
+    _exact_keys(compute, keys, "compute")
+    _expect(compute["schema_version"] == 4 and compute["id"] == "qwen_a100_2x", "compute identity is invalid")
+
+
+def _validate_compute_topology(compute: JsonObject) -> None:
     _expect(
         compute["rtt_released_topology"]
         == {
@@ -1375,8 +1386,11 @@ def _validate_compute(compute: JsonObject) -> None:
         },
         "target A100 topology is invalid",
     )
+
+
+def _validate_analytical_memory(memory: Any) -> None:
     _expect(
-        compute["analytical_memory"]
+        memory
         == {
             "evidence": "calculated_not_measured",
             "model_parameters": 4_022_468_096,
@@ -1392,9 +1406,41 @@ def _validate_compute(compute: JsonObject) -> None:
         },
         "analytical memory contract is invalid",
     )
-    _validate_workloads(_object(compute["workloads"], "compute.workloads"))
-    _validate_run_matrix(_object(compute["run_matrix"], "compute.run_matrix"))
-    _validate_cost_accounting(_object(compute["cost_accounting"], "compute.cost_accounting"))
+
+
+def _validate_response_runtime(runtime: JsonObject) -> None:
+    _expect(
+        runtime
+        == {
+            "profile": "fsdp2-hf-sdpa-2xa100",
+            "host": {"minimum_ram_gib": 192, "minimum_free_disk_gib": 512},
+            "platform": {
+                "system": "Linux",
+                "machines": ["x86_64", "AMD64"],
+                "receipt": "Ubuntu-24.04-x86_64",
+                "container_contract": "../../requirements/a100-response-container.json",
+            },
+            "gpu": {
+                "topology_contract": "target_topology",
+                "minimum_driver": "575.57.08",
+                "cuda_runtime": "12.9",
+                "nccl_package": "nvidia-nccl-cu12",
+                "require_idle": True,
+                "supported_links": ["NV", "PIX", "PXB", "PHB", "NODE", "SYS"],
+            },
+            "packages": {
+                "index_url": "https://pypi.org/simple",
+                "torch_index_url": "https://download.pytorch.org/whl/cu129",
+                "torch_backend": "cu129",
+                "contracts": [
+                    "../../requirements/a100-response-linux-py312.lock",
+                    "../../requirements/a100-response-flash.txt",
+                ],
+                "allowed_local_suffixes": {"torch": "cu129", "torchaudio": "cu129", "torchvision": "cu129"},
+            },
+        },
+        "response runtime contract is invalid",
+    )
 
 
 def _validate_workloads(workloads: JsonObject) -> None:
@@ -1497,6 +1543,27 @@ def _validate_experiment(
     artifact_hashes: JsonObject,
     repo_root: Path,
 ) -> None:
+    _validate_program_references(program)
+    _validate_launch_configs(program, repo_root)
+    _validate_program_seeds(program)
+    tuning_runs = _validate_selection(
+        _object(program["selection"], "program.selection"),
+        program["readiness"],
+        dev_split_artifact,
+        selection_artifact,
+        artifact_hashes,
+    )
+    trainable = _validate_methods(program["methods"])
+    _validate_execution_priority(program["execution_priority"])
+    _validate_program_counts(_object(program["counts"], "program.counts"), tuning_runs, trainable)
+    _validate_rl_recipe(_object(program["rl_recipe"], "program.rl_recipe"))
+    _validate_program_readiness(_object(program["readiness"], "program.readiness"))
+    _validate_benchmarks(program["benchmarks"])
+    _validate_ood_evaluation(_object(program["ood_evaluation"], "program.ood_evaluation"))
+    _validate_pilot(_object(program["pilot"], "program.pilot"))
+
+
+def _validate_program_references(program: JsonObject) -> None:
     _expect(program["schema_version"] == 1 and program["id"] == "qwen_first", "program identity is invalid")
     _expect(program["targets_config"] == "../models/targets.json", "program target registry reference is invalid")
     _expect(program["model_config"] == "../models/qwen3_4b.json", "program model reference is invalid")
@@ -1511,8 +1578,17 @@ def _validate_experiment(
         "program baseline references are invalid",
     )
     _expect(program["artifact_config"] == "../artifacts/qwen_evidence.json", "program artifact reference is invalid")
+
+
+def _validate_launch_configs(program: JsonObject, repo_root: Path) -> None:
     launch = _object(program["launch_train_config"], "program.launch_train_config")
-    _exact_keys(launch, {"path", "sha256", "preflight_sha256", "purpose"}, "program.launch_train_config")
+    _exact_keys(
+        launch,
+        {"path", "sha256", "preflight_sha256", "hydra_parent", "purpose"},
+        "program.launch_train_config",
+    )
+    hydra_parent = _object(launch["hydra_parent"], "program.launch_train_config.hydra_parent")
+    _exact_keys(hydra_parent, {"path", "sha256"}, "program.launch_train_config.hydra_parent")
     _expect(
         launch["path"] == "configs/roll/qwen_rtt_papo_response_train.yaml"
         and launch["purpose"] == "500_step_recipe_with_stop_after_step_pilot_gate"
@@ -1520,6 +1596,14 @@ def _validate_experiment(
         and launch["preflight_sha256"]
         == _file_sha256(repo_root / "configs/roll/qwen_rtt_papo_response_preflight.yaml"),
         "program launch train config pin is invalid",
+    )
+    _expect(
+        hydra_parent
+        == {
+            "path": "configs/roll/qwen_scalar_train.yaml",
+            "sha256": _file_sha256(repo_root / "configs/roll/qwen_scalar_train.yaml"),
+        },
+        "program launch Hydra parent config pin is invalid",
     )
     same_backend = _object(program["same_backend_configs"], "program.same_backend_configs")
     _exact_keys(same_backend, {"diagnostic", "production"}, "program.same_backend_configs")
@@ -1543,20 +1627,18 @@ def _validate_experiment(
         and production["sha256"] == _file_sha256(repo_root / production["path"])
     )
     _expect(frozen_production, "same-backend production config pin is invalid")
+
+
+def _validate_program_seeds(program: JsonObject) -> None:
     seeds = _object(program["seeds"], "program.seeds")
     _exact_keys(seeds, {"tuning", "confirmation"}, "program.seeds")
     _expect(seeds["tuning"] == TUNING_SEED, "program tuning seed is invalid")
     _expect(tuple(seeds["confirmation"]) == CONFIRMATION_SEEDS, "program confirmation seeds are invalid")
     _expect(seeds["tuning"] not in seeds["confirmation"], "tuning and confirmation seeds must be disjoint")
     _expect(len(set(seeds["confirmation"])) == len(CONFIRMATION_SEEDS), "confirmation seeds must be unique")
-    tuning_runs = _validate_selection(
-        _object(program["selection"], "program.selection"),
-        program["readiness"],
-        dev_split_artifact,
-        selection_artifact,
-        artifact_hashes,
-    )
-    methods = program["methods"]
+
+
+def _validate_methods(methods: Any) -> int:
     _expect(isinstance(methods, list), "program.methods must be an array")
     _expect(
         tuple(method.get("id") for method in methods if isinstance(method, dict)) == METHOD_IDS,
@@ -1571,9 +1653,10 @@ def _validate_experiment(
             item["initial_checkpoint"] == MODEL_ID, f"method {item['id']} must start independently from {MODEL_ID}"
         )
         _expect(item["objective"] == objective, f"method {item['id']} objective is invalid")
-    _validate_execution_priority(program["execution_priority"])
-    trainable = sum(method["trainable"] is True for method in methods)
-    counts = _object(program["counts"], "program.counts")
+    return sum(method["trainable"] is True for method in methods)
+
+
+def _validate_program_counts(counts: JsonObject, tuning_runs: int, trainable: int) -> None:
     _exact_keys(
         counts,
         {"tuning_runs", "confirmation_runs", "trainable_runs", "evaluation_suites"},
@@ -1584,8 +1667,9 @@ def _validate_experiment(
     _expect(confirmation_runs == counts["confirmation_runs"] == 27, "confirmation run count must be 27")
     _expect(tuning_runs + confirmation_runs == counts["trainable_runs"] == 36, "trainable run count must be 36")
     _expect(1 + counts["trainable_runs"] == counts["evaluation_suites"] == 37, "evaluation suite count must be 37")
-    _validate_rl_recipe(_object(program["rl_recipe"], "program.rl_recipe"))
-    readiness = _object(program["readiness"], "program.readiness")
+
+
+def _validate_program_readiness(readiness: JsonObject) -> None:
     _exact_keys(
         readiness,
         {
@@ -1618,9 +1702,6 @@ def _validate_experiment(
         readiness["gpqa"] in {"ready", "blocked_until_revision_hash_and_access_manifest_frozen"},
         "GPQA readiness is invalid",
     )
-    _validate_benchmarks(program["benchmarks"])
-    _validate_ood_evaluation(_object(program["ood_evaluation"], "program.ood_evaluation"))
-    _validate_pilot(_object(program["pilot"], "program.pilot"))
 
 
 def _validate_rl_recipe(recipe: JsonObject) -> None:
@@ -2931,30 +3012,52 @@ def _calibration_case_rows(path: Path) -> list[JsonObject]:
 
 
 def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, configs: JsonObject) -> None:
-    _exact_keys(
-        artifact,
-        {
-            "schema_version",
-            "id",
-            "status",
-            "model",
-            "tokenizer",
-            "chat_template",
-            "runtime_backend",
-            "weight_receipt",
-            "rollout_logprob_evidence",
-        },
-        "runtime parity artifact",
-    )
+    _validate_runtime_parity_keys(artifact)
     model = _object(artifact["model"], "runtime parity model")
     tokenizer = _object(artifact["tokenizer"], "runtime parity tokenizer")
     template = _object(artifact["chat_template"], "runtime parity chat template")
     backend = _object(artifact["runtime_backend"], "runtime parity backend")
+    evidence = _object(artifact["rollout_logprob_evidence"], "runtime parity rollout logprob evidence")
+    receipt = _object(artifact["weight_receipt"], "runtime parity weight receipt")
+    thresholds = _validate_runtime_parity_nested_keys(backend, receipt, evidence)
+    diagnostic = _object(configs["diagnostic"], "same-backend diagnostic config")
+    production = _object(configs["production"], "same-backend production config")
+    valid = (
+        _runtime_parity_identity_valid(artifact, reference, model, tokenizer, template)
+        and _runtime_parity_backend_valid(backend, diagnostic, production)
+        and _runtime_parity_evidence_valid(evidence, thresholds, receipt, backend)
+    )
+    _expect(valid, "model, tokenizer, template, or logprob parity artifact is invalid")
+
+
+def _validate_runtime_parity_keys(artifact: JsonObject) -> None:
+    keys = {
+        "schema_version",
+        "id",
+        "status",
+        "model",
+        "tokenizer",
+        "chat_template",
+        "runtime_backend",
+        "weight_receipt",
+        "rollout_logprob_evidence",
+    }
+    _exact_keys(artifact, keys, "runtime parity artifact")
+
+
+def _validate_runtime_parity_nested_keys(
+    backend: JsonObject,
+    receipt: JsonObject,
+    evidence: JsonObject,
+) -> JsonObject:
     _exact_keys(
         backend,
         {
             "train_config_sha256",
             "production_train_config_sha256",
+            "production_resolved_config_sha256",
+            "preflight_train_config_sha256",
+            "preflight_resolved_config_sha256",
             "resolved_config_sha256",
             "actor_train_strategy",
             "actor_infer_strategy",
@@ -2964,8 +3067,6 @@ def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, config
         },
         "runtime parity backend",
     )
-    evidence = _object(artifact["rollout_logprob_evidence"], "runtime parity rollout logprob evidence")
-    receipt = _object(artifact["weight_receipt"], "runtime parity weight receipt")
     _exact_keys(
         receipt,
         {"transaction_id", "artifact_sha256", "resolved_config_sha256"},
@@ -2989,9 +3090,17 @@ def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, config
     )
     thresholds = _object(evidence["thresholds"], "runtime parity thresholds")
     _exact_keys(thresholds, {"max_abs_error_at_most", "mean_abs_error_at_most"}, "runtime parity thresholds")
-    diagnostic = _object(configs["diagnostic"], "same-backend diagnostic config")
-    production = _object(configs["production"], "same-backend production config")
-    _expect(
+    return thresholds
+
+
+def _runtime_parity_identity_valid(
+    artifact: JsonObject,
+    reference: JsonObject,
+    model: JsonObject,
+    tokenizer: JsonObject,
+    template: JsonObject,
+) -> bool:
+    return bool(
         artifact["schema_version"] == 2
         and artifact["id"] == reference["artifact_id"]
         and artifact["status"] == "parity_passed"
@@ -3002,21 +3111,49 @@ def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, config
         and _sha256(tokenizer["files_sha256"])
         and template == {"source": "pinned_tokenizer", "enable_thinking": False, "sha256": template.get("sha256")}
         and _sha256(template["sha256"])
-        and backend
+    )
+
+
+def _runtime_parity_backend_valid(
+    backend: JsonObject,
+    diagnostic: JsonObject,
+    production: JsonObject,
+) -> bool:
+    expected = {
+        "train_config_sha256": diagnostic.get("sha256"),
+        "production_train_config_sha256": production.get("sha256"),
+        "production_resolved_config_sha256": backend.get("production_resolved_config_sha256"),
+        "preflight_train_config_sha256": backend.get("preflight_train_config_sha256"),
+        "preflight_resolved_config_sha256": backend.get("preflight_resolved_config_sha256"),
+        "resolved_config_sha256": backend.get("resolved_config_sha256"),
+        "actor_train_strategy": "fsdp2_train",
+        "actor_infer_strategy": "hf_infer",
+        "transformer_impl": "huggingface",
+        "rtt_revision": RTT_REVISION,
+        **GENERATION_SOURCE_IDENTITY,
+    }
+    return bool(
+        backend
         == {
-            "train_config_sha256": diagnostic.get("sha256"),
-            "production_train_config_sha256": production.get("sha256"),
-            "resolved_config_sha256": backend.get("resolved_config_sha256"),
-            "actor_train_strategy": "fsdp2_train",
-            "actor_infer_strategy": "hf_infer",
-            "transformer_impl": "huggingface",
-            "rtt_revision": RTT_REVISION,
-            **GENERATION_SOURCE_IDENTITY,
+            **expected,
         }
         and _sha256(backend["resolved_config_sha256"])
+        and _sha256(backend["preflight_train_config_sha256"])
+        and _sha256(backend["production_resolved_config_sha256"])
+        and _sha256(backend["preflight_resolved_config_sha256"])
         and production.get("status") == "frozen"
         and _sha256(production.get("sha256"))
-        and receipt.get("resolved_config_sha256") == backend["resolved_config_sha256"]
+    )
+
+
+def _runtime_parity_evidence_valid(
+    evidence: JsonObject,
+    thresholds: JsonObject,
+    receipt: JsonObject,
+    backend: JsonObject,
+) -> bool:
+    return bool(
+        receipt.get("resolved_config_sha256") == backend["resolved_config_sha256"]
         and isinstance(receipt.get("transaction_id"), str)
         and bool(receipt["transaction_id"])
         and _sha256(receipt.get("artifact_sha256"))
@@ -3037,8 +3174,7 @@ def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, config
         and math.isfinite(evidence["max_abs_error"])
         and math.isfinite(evidence["mean_abs_error"])
         and evidence["max_abs_error"] <= thresholds["max_abs_error_at_most"]
-        and evidence["mean_abs_error"] <= thresholds["mean_abs_error_at_most"],
-        "model, tokenizer, template, or logprob parity artifact is invalid",
+        and evidence["mean_abs_error"] <= thresholds["mean_abs_error_at_most"]
     )
 
 
@@ -3061,7 +3197,18 @@ def _validate_no_update_artifact(artifact: JsonObject, reference: JsonObject, bu
     body = {key: value for key, value in artifact.items() if key != "certificate_id"}
     source_hashes = _object(artifact["source_sha256"], "no-update source hashes")
     metrics = _object(artifact["metrics"], "no-update metrics")
-    metric_keys = {
+    _validate_no_update_metric_keys(metrics)
+    response_data = _no_update_response_data(bundle)
+    valid = (
+        _no_update_identity_valid(artifact, reference, body, bundle)
+        and _no_update_sources_valid(source_hashes, response_data, bundle)
+        and _no_update_metrics_valid(metrics, bundle)
+    )
+    _expect(valid, "no-update artifact is invalid or not cross-linked to launch inputs")
+
+
+def _validate_no_update_metric_keys(metrics: JsonObject) -> None:
+    keys = {
         "prompt_count",
         "response_count",
         "group_size",
@@ -3074,40 +3221,50 @@ def _validate_no_update_artifact(artifact: JsonObject, reference: JsonObject, bu
         "quality_active_group_rate",
         "finite",
     }
-    _exact_keys(metrics, metric_keys, "no-update metrics")
-    prompt_count = metrics["prompt_count"]
-    batch_count = metrics["batch_count"]
-    response_active = metrics["response_active_group_count"]
-    quality_active = metrics["quality_active_group_count"]
-    counts_valid = all(
-        isinstance(value, int) and not isinstance(value, bool)
-        for value in (
-            prompt_count,
-            metrics["response_count"],
-            metrics["group_size"],
-            metrics["optimizer_updates"],
-            batch_count,
-            metrics["valid_batch_count"],
-            response_active,
-            quality_active,
-        )
-    )
-    rates_valid = all(
-        isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
-        for value in (metrics["response_active_group_rate"], metrics["quality_active_group_rate"])
-    )
+    _exact_keys(metrics, keys, "no-update metrics")
+
+
+def _no_update_response_data(bundle: ProgramBundle) -> Mapping[str, str | int]:
     try:
-        response_data = response_data_identity(bundle.repo_root / "configs/program/qwen_first.json")
+        return response_data_identity(bundle.repo_root / "configs/program/qwen_first.json")
     except (ResponseIdentityError, OSError, ValueError) as error:
         raise ProgramContractError(f"no-update response data identity is invalid: {error}") from error
-    _expect(
+
+
+def _no_update_identity_valid(
+    artifact: JsonObject,
+    reference: JsonObject,
+    body: JsonObject,
+    bundle: ProgramBundle,
+) -> bool:
+    return bool(
         artifact["schema_version"] == 2
         and artifact["certificate_id"] == reference["artifact_id"] == _json_sha256(body)
         and artifact["ready"] is True
         and artifact["method"] == "rtt_papo_response"
         and artifact["quality_weight"] == 0.5
         and artifact["config_sha256"] == bundle.program["launch_train_config"]["preflight_sha256"]
-        and source_hashes.get("train_config") == bundle.program["launch_train_config"]["sha256"]
+        and artifact["reasons"] == []
+    )
+
+
+def _no_update_sources_valid(
+    source_hashes: JsonObject,
+    response_data: Mapping[str, str | int],
+    bundle: ProgramBundle,
+) -> bool:
+    parity = bundle.lifecycle_artifacts.get("runtime_parity")
+    backend = parity.get("runtime_backend") if isinstance(parity, Mapping) else None
+    composed = (
+        source_hashes.get("train_resolved_config") == backend.get("production_resolved_config_sha256")
+        and source_hashes.get("preflight_resolved_config") == backend.get("preflight_resolved_config_sha256")
+        if isinstance(backend, Mapping)
+        else _sha256(source_hashes.get("train_resolved_config"))
+        and _sha256(source_hashes.get("preflight_resolved_config"))
+    )
+    return bool(
+        source_hashes.get("train_config") == bundle.program["launch_train_config"]["sha256"]
+        and composed
         and source_hashes.get("scalar_data_manifest") == bundle.program["lifecycle_artifacts"]["scalar_data"]["sha256"]
         and source_hashes.get("response_data_manifest")
         == bundle.program["lifecycle_artifacts"]["response_data"]["sha256"]
@@ -3121,7 +3278,31 @@ def _validate_no_update_artifact(artifact: JsonObject, reference: JsonObject, bu
         and source_hashes.get("judge_calibration")
         == bundle.program["lifecycle_artifacts"]["judge_calibration"]["sha256"]
         and source_hashes.get("runtime_parity") == bundle.program["lifecycle_artifacts"]["runtime_parity"]["sha256"]
-        and counts_valid
+    )
+
+
+def _no_update_metrics_valid(metrics: JsonObject, bundle: ProgramBundle) -> bool:
+    prompt_count = metrics["prompt_count"]
+    batch_count = metrics["batch_count"]
+    response_active = metrics["response_active_group_count"]
+    quality_active = metrics["quality_active_group_count"]
+    integer_values = (
+        prompt_count,
+        metrics["response_count"],
+        metrics["group_size"],
+        metrics["optimizer_updates"],
+        batch_count,
+        metrics["valid_batch_count"],
+        response_active,
+        quality_active,
+    )
+    counts_valid = all(isinstance(value, int) and not isinstance(value, bool) for value in integer_values)
+    rates = (metrics["response_active_group_rate"], metrics["quality_active_group_rate"])
+    rates_valid = all(
+        isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) for value in rates
+    )
+    return bool(
+        counts_valid
         and bundle.program["pilot"]["preflight"]["prompt_count"]["minimum"]
         <= prompt_count
         <= bundle.program["pilot"]["preflight"]["prompt_count"]["maximum"]
@@ -3138,8 +3319,6 @@ def _validate_no_update_artifact(artifact: JsonObject, reference: JsonObject, bu
         and metrics["quality_active_group_rate"]
         >= bundle.program["pilot"]["gates"]["minimum_active_quality_group_rate"]
         and metrics["finite"] is True
-        and artifact["reasons"] == [],
-        "no-update artifact is invalid or not cross-linked to launch inputs",
     )
 
 

@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -39,7 +40,7 @@ def _render_tmp_data_paths_from_repo_root(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(scalar_data, "_display_path", display)
 
 
-def _program():
+def _program() -> Any:
     return check_program(ROOT / "configs/program/qwen_first.json")
 
 
@@ -466,6 +467,11 @@ def _parity_artifact(root: Path = ROOT, production_sha256: str = "c" * 64) -> di
                 (root / "configs/roll/qwen_rtt_papo_response_parity.yaml").read_bytes()
             ).hexdigest(),
             "production_train_config_sha256": production_sha256,
+            "production_resolved_config_sha256": "d" * 64,
+            "preflight_train_config_sha256": hashlib.sha256(
+                (root / "configs/roll/qwen_rtt_papo_response_preflight.yaml").read_bytes()
+            ).hexdigest(),
+            "preflight_resolved_config_sha256": "e" * 64,
             "resolved_config_sha256": "a" * 64,
             "actor_train_strategy": "fsdp2_train",
             "actor_infer_strategy": "hf_infer",
@@ -493,8 +499,9 @@ def _parity_artifact(root: Path = ROOT, production_sha256: str = "c" * 64) -> di
     }
 
 
-def _no_update_artifact(bundle) -> tuple[dict, dict]:
+def _no_update_artifact(bundle: Any) -> tuple[dict[str, Any], dict[str, Any]]:
     response_data = program_contract.response_data_identity(bundle.repo_root / "configs/program/qwen_first.json")
+    parity = bundle.lifecycle_artifacts.get("runtime_parity", {}).get("runtime_backend", {})
     metrics = {
         "prompt_count": 256,
         "response_count": 2048,
@@ -516,6 +523,8 @@ def _no_update_artifact(bundle) -> tuple[dict, dict]:
         "config_sha256": bundle.program["launch_train_config"]["preflight_sha256"],
         "source_sha256": {
             "train_config": bundle.program["launch_train_config"]["sha256"],
+            "train_resolved_config": parity.get("production_resolved_config_sha256", "d" * 64),
+            "preflight_resolved_config": parity.get("preflight_resolved_config_sha256", "e" * 64),
             "scalar_data_manifest": bundle.program["lifecycle_artifacts"]["scalar_data"]["sha256"],
             "response_data_manifest": response_data["manifest_sha256"],
             "response_data_output": response_data["output_sha256"],
@@ -600,6 +609,40 @@ def test_current_program_freezes_scalar_gate_but_keeps_launch_closed() -> None:
     assert bundle.program["readiness"]["scalar_training"] == "ready"
     assert bundle.program["readiness"]["launch"] == "blocked_until_all_launch_artifacts_frozen"
     assert all(config["readiness"] == "blocked_until_frozen_data_manifest" for config in bundle.baselines.values())
+
+
+def test_program_rejects_hydra_parent_recipe_drift(tmp_path: Path) -> None:
+    program_path = _contract_copy(tmp_path)
+    parent = program_path.parent.parent / "roll/qwen_scalar_train.yaml"
+    parent.write_text(
+        parent.read_text(encoding="utf-8").replace("prompt_length: 2048", "prompt_length: 1024"), encoding="utf-8"
+    )
+
+    with pytest.raises(ProgramContractError, match="Hydra parent config pin"):
+        check_program(program_path)
+
+
+@pytest.mark.parametrize(
+    ("keys", "value"),
+    [
+        (("host", "minimum_ram_gib"), 191),
+        (("gpu", "require_idle"), False),
+        (("packages", "torch_backend"), "cu128"),
+    ],
+)
+def test_program_rejects_response_runtime_drift(
+    tmp_path: Path,
+    keys: tuple[str, str],
+    value: object,
+) -> None:
+    program_path = _contract_copy(tmp_path)
+    compute_path = program_path.parent.parent / "compute/qwen_a100_2x.json"
+    compute = _read(compute_path)
+    compute["response_runtime"][keys[0]][keys[1]] = value
+    _write(compute_path, compute)
+
+    with pytest.raises(ProgramContractError, match="response runtime contract"):
+        check_program(program_path)
 
 
 def test_repo_backed_frozen_manifests_enable_lifecycle_states(tmp_path: Path) -> None:

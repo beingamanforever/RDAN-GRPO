@@ -392,6 +392,8 @@ def test_cli_fails_before_rtt_import_ray_or_artifacts_on_existing_output(
             str(tmp_path / "config.yaml"),
             "--production-config",
             str(tmp_path / "production.yaml"),
+            "--preflight-config",
+            str(tmp_path / "preflight.yaml"),
             "--snapshot",
             str(tmp_path / "snapshot"),
             "--output",
@@ -444,6 +446,8 @@ def test_cli_rejects_generation_source_drift_before_pipeline_construction(
             str(config),
             "--production-config",
             str(tmp_path / "production.yaml"),
+            "--preflight-config",
+            str(tmp_path / "preflight.yaml"),
             "--snapshot",
             str(snapshot),
             "--output",
@@ -618,6 +622,8 @@ def test_cli_success_and_receipt_failure_are_exclusive(
     failure_args.weight_receipt_output.write_text("{}\n", encoding="utf-8")
     production_config = failure_dir / "production.yaml"
     production_config.write_text("production\n", encoding="utf-8")
+    preflight_config = failure_dir / "preflight.yaml"
+    preflight_config.write_text("preflight\n", encoding="utf-8")
     script._seal_receipt_failure(
         config,
         identity,
@@ -629,6 +635,9 @@ def test_cli_success_and_receipt_failure_are_exclusive(
             "resolved_config_sha256": "a" * 64,
         },
         production_config,
+        "c" * 64,
+        preflight_config,
+        "d" * 64,
         failure_args,
     )
     assert failure_args.failure_output.is_file()

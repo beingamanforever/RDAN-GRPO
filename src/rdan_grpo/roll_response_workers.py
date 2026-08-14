@@ -6,8 +6,9 @@ import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+import numpy as np
 import torch
 from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.protocol import DataProto
@@ -28,37 +29,50 @@ from rdan_grpo.roll_same_backend import SynchronousHFInferWorker
 _COUNTER_ATTR = "_rdan_response_counters"
 _CLIP_ATTR = "_rdan_response_clip_fractions"
 _TRAIN_STATE_ATTR = "_rdan_response_train_state"
+_GENERATION_COUNT_ATTR = "_rdan_generation_count"
+RESPONSE_CLIP_METRIC = "rdan/response_token_clipfrac"
 
 
 class ResponseActorWorker(ActorWorker):
     """Train through RTT RLVR while observing exact optimizer and receipt state."""
 
     def loss_func(self, data: DataProto, output_tensor: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        """Record the PPO clipping fraction emitted by the actor loss."""
+
         loss, metrics = super().loss_func(data, output_tensor)
-        value = metrics.get("actor/ppo_ratio_clipfrac")
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
-            raise RuntimeError("response training requires a finite PPO clipping fraction")
-        getattr(self, _CLIP_ATTR).append(float(value))
+        value = _response_clip_fraction(self, data, output_tensor)
+        metrics[RESPONSE_CLIP_METRIC] = value
+        getattr(self, _CLIP_ATTR).append(value)
         return loss, metrics
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_begin_response_receipt(self, transaction_id: str) -> None:
+        """Begin a named actor-to-inference weight receipt transaction."""
+
         begin_fsdp_hf_receipt(self, transaction_id, _rank(self))
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_get_response_receipt(self) -> dict[str, Any]:
+        """Return the completed actor side of the active weight receipt."""
+
         return get_fsdp_actor_receipt(self)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_reset_response_receipt(self) -> dict[str, Any]:
+        """Validate and clear the completed actor weight receipt."""
+
         return reset_fsdp_hf_receipt(self)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_train_counters(self) -> dict[str, int]:
+        """Return exact rank-local optimizer and scheduler counters."""
+
         return {"rank": _rank(self), **_counters(self)}
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_training_state(self) -> dict[str, int | bool]:
+        """Return rank-local optimizer safety state for the current step."""
+
         counters = _counters(self)
         state = _train_state(self)
         return {
@@ -70,18 +84,26 @@ class ResponseActorWorker(ActorWorker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_save_dcp(self, checkpoint_dir: str, pipeline_step: int) -> dict[str, Any]:
+        """Save rank-local distributed checkpoint state and exact counters."""
+
         return _save_dcp(self, checkpoint_dir, pipeline_step)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_load_dcp(self, checkpoint_dir: str) -> dict[str, Any]:
+        """Restore rank-local distributed checkpoint state and counters."""
+
         return _load_dcp(self, checkpoint_dir)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_reset_cuda_peak(self) -> None:
+        """Reset rank-local CUDA peak memory statistics."""
+
         torch.cuda.reset_peak_memory_stats()
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_cuda_memory(self) -> dict[str, int]:
+        """Return rank-local CUDA peak and capacity bytes."""
+
         return _cuda_memory(self)
 
     @register(dispatch_mode=Dispatch.DP_MP_DISPATCH_FIRST)
@@ -99,38 +121,17 @@ class ResponseActorWorker(ActorWorker):
         setattr(self, _CLIP_ATTR, [])
         optimizer_step = optimizer.step
         scheduler_step = scheduler.step
-
-        def observed_optimizer_step(*args: Any, **kwargs: Any) -> Any:
-            fractions = getattr(self, _CLIP_ATTR)
-            if not fractions:
-                raise RuntimeError("response training did not report PPO clipping evidence")
-            if not _all_ranks_grad_finite(strategy):
-                counters["skipped_optimizer_steps"] += 1
-                state.update(grad_finite=False, update_skipped=True)
-                optimizer.zero_grad(set_to_none=True)
-                raise RuntimeError("response training blocked a non-finite gradient update")
-            if _all_ranks_fully_clipped(fractions):
-                counters["skipped_optimizer_steps"] += 1
-                state.update(update_skipped=True)
-                optimizer.zero_grad(set_to_none=True)
-                raise RuntimeError("response training blocked a fully clipped optimizer update")
-            result = optimizer_step(*args, **kwargs)
-            fractions.clear()
-            counters["optimizer_steps"] += 1
-            counters["finite_steps"] += 1
-            return result
-
-        def observed_scheduler_step(*args: Any, **kwargs: Any) -> Any:
-            if counters["optimizer_steps"] <= counters["scheduler_steps"]:
-                counters["skipped_optimizer_steps"] += 1
-                state.update(grad_finite=False, update_skipped=True)
-                raise RuntimeError("RTT attempted to advance the scheduler without a successful optimizer step")
-            result = scheduler_step(*args, **kwargs)
-            counters["scheduler_steps"] += 1
-            return result
-
-        optimizer.step = observed_optimizer_step
-        scheduler.step = observed_scheduler_step
+        handle_optimizer_step, handle_scheduler_step = _step_handlers(
+            self,
+            strategy,
+            optimizer,
+            counters,
+            state,
+            optimizer_step,
+            scheduler_step,
+        )
+        optimizer.step = handle_optimizer_step
+        scheduler.step = handle_scheduler_step
         try:
             output = super().train_step(data)
         finally:
@@ -144,6 +145,8 @@ class ResponseActorWorker(ActorWorker):
         return output
 
     def start_model_update(self, model_update_name: str) -> DataProto:
+        """Run a named FSDP-to-HF model update under receipt tracking."""
+
         return run_receipted_fsdp_hf_update(
             self,
             model_update_name,
@@ -156,24 +159,34 @@ class ResponseInferWorker(SynchronousHFInferWorker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_begin_response_receipt(self, transaction_id: str) -> None:
+        """Begin a named inference-side weight receipt transaction."""
+
         begin_hf_infer_receipt(self, transaction_id, _rank(self))
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_finish_response_receipt(self) -> dict[str, Any]:
+        """Finish and return the active inference-side weight receipt."""
+
         return finish_hf_infer_receipt(self)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_reset_response_receipt(self) -> dict[str, Any]:
+        """Validate and clear the completed inference-side receipt."""
+
         return reset_fsdp_hf_receipt(self)
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_save_rng(self) -> dict[str, torch.Tensor]:
+        """Snapshot exact CPU and CUDA inference RNG state."""
+
         if not torch.cuda.is_available():
             raise RuntimeError("response inference RNG requires CUDA")
         return {"cpu": torch.get_rng_state().clone(), "cuda": torch.cuda.get_rng_state().clone()}
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_load_rng(self, state: Mapping[str, torch.Tensor]) -> None:
+        """Restore exact CPU and CUDA inference RNG state."""
+
         if not isinstance(state, Mapping) or set(state) != {"cpu", "cuda"}:
             raise RuntimeError("response inference RNG state is invalid")
         if any(not isinstance(state[name], torch.Tensor) or state[name].dtype != torch.uint8 for name in state):
@@ -183,10 +196,14 @@ class ResponseInferWorker(SynchronousHFInferWorker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_reset_cuda_peak(self) -> None:
+        """Reset rank-local CUDA peak memory statistics."""
+
         torch.cuda.reset_peak_memory_stats()
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_cuda_memory(self) -> dict[str, int]:
+        """Return rank-local CUDA peak and capacity bytes."""
+
         return _cuda_memory(self)
 
     @register(dispatch_mode=Dispatch.DP_MP_COMPUTE)
@@ -196,11 +213,137 @@ class ResponseInferWorker(SynchronousHFInferWorker):
         size = getattr(self.worker_config, "infer_batch_size", None)
         if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
             raise RuntimeError("response inference requires a positive infer_batch_size")
-        if len(data) <= size:
-            return super().generate(data)
         generate = super().generate
-        outputs = [generate(data[start : start + size]) for start in range(0, len(data), size)]
-        return DataProto.concat(outputs)
+        output = (
+            generate(data)
+            if len(data) <= size
+            else DataProto.concat([generate(data[start : start + size]) for start in range(0, len(data), size)])
+        )
+        step = data.meta_info.get("global_step")
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise RuntimeError("response inference requires a positive global step")
+        start = getattr(self, _GENERATION_COUNT_ATTR, 0)
+        rank = _rank(self)
+        output.non_tensor_batch["generation_id"] = np.asarray(
+            [f"gen-{step:06d}-r{rank}-{index:012d}" for index in range(start, start + len(output))],
+            dtype=object,
+        )
+        setattr(self, _GENERATION_COUNT_ATTR, start + len(output))
+        return output
+
+
+def _step_handlers(
+    worker: Any,
+    strategy: Any,
+    optimizer: Any,
+    counters: dict[str, int],
+    state: dict[str, bool],
+    optimizer_step: Callable[..., Any],
+    scheduler_step: Callable[..., Any],
+) -> tuple[Callable[..., Any], Callable[..., Any]]:
+    def handle_optimizer_step(*args: Any, **kwargs: Any) -> Any:
+        """Validate and count one optimizer step."""
+
+        fractions = getattr(worker, _CLIP_ATTR)
+        if not fractions:
+            raise RuntimeError("response training did not report PPO clipping evidence")
+        if not _all_ranks_grad_finite(strategy):
+            _block_update(counters, state, optimizer, finite=False)
+            raise RuntimeError("response training blocked a non-finite gradient update")
+        if _all_ranks_fully_clipped(fractions):
+            _block_update(counters, state, optimizer, finite=True)
+            raise RuntimeError("response training blocked a fully clipped optimizer update")
+        result = optimizer_step(*args, **kwargs)
+        fractions.clear()
+        counters["optimizer_steps"] += 1
+        counters["finite_steps"] += 1
+        return result
+
+    def handle_scheduler_step(*args: Any, **kwargs: Any) -> Any:
+        """Advance the scheduler only after a successful optimizer step."""
+
+        if counters["optimizer_steps"] <= counters["scheduler_steps"]:
+            counters["skipped_optimizer_steps"] += 1
+            state.update(grad_finite=False, update_skipped=True)
+            raise RuntimeError("RTT attempted to advance the scheduler without a successful optimizer step")
+        result = scheduler_step(*args, **kwargs)
+        counters["scheduler_steps"] += 1
+        return result
+
+    return handle_optimizer_step, handle_scheduler_step
+
+
+def _response_clip_fraction(worker: Any, data: DataProto, output_tensor: torch.Tensor) -> float:
+    batch = getattr(data, "batch", None)
+    if not isinstance(batch, Mapping):
+        raise RuntimeError("response clipping requires the training tensor batch")
+    mask = batch.get("final_response_mask")
+    old_log_probs = batch.get("old_log_probs")
+    log_probs = _current_log_probs(worker, batch, output_tensor)
+    if not _aligned_clip_tensors(log_probs, old_log_probs, mask):
+        raise RuntimeError("response clipping tensors are missing or misaligned")
+    active = mask.to(torch.bool)
+    ratio = _importance_ratio(worker, log_probs, old_log_probs, active)
+    low, high = _clip_bounds(worker)
+    clipped = ((ratio < 1 - low) | (ratio > 1 + high)) & active
+    return float(clipped.sum().div(active.sum()).item())
+
+
+def _current_log_probs(worker: Any, batch: Mapping[str, Any], output_tensor: torch.Tensor) -> torch.Tensor:
+    input_ids = batch.get("input_ids")
+    response_mask = batch.get("response_mask")
+    if not isinstance(input_ids, torch.Tensor) or not isinstance(response_mask, torch.Tensor):
+        raise RuntimeError("response clipping requires input IDs and response mask")
+    with torch.no_grad():
+        return worker.strategy.op_compute_log_probs(
+            logits=output_tensor.detach(),
+            input_ids=input_ids,
+            attention_mask=response_mask,
+        )
+
+
+def _aligned_clip_tensors(log_probs: Any, old_log_probs: Any, mask: Any) -> bool:
+    return bool(
+        isinstance(log_probs, torch.Tensor)
+        and isinstance(old_log_probs, torch.Tensor)
+        and isinstance(mask, torch.Tensor)
+        and log_probs.shape == old_log_probs.shape == mask.shape
+        and mask.to(torch.bool).any()
+        and torch.isfinite(log_probs).all()
+        and torch.isfinite(old_log_probs).all()
+    )
+
+
+def _importance_ratio(
+    worker: Any,
+    log_probs: torch.Tensor,
+    old_log_probs: torch.Tensor,
+    mask: torch.Tensor,
+) -> torch.Tensor:
+    log_ratio = log_probs - old_log_probs
+    mode = getattr(worker.pipeline_config, "importance_sampling", None)
+    if mode == "token":
+        return log_ratio.exp()
+    if mode == "seq":
+        mean = (log_ratio * mask).sum(dim=-1) / mask.sum(dim=-1)
+        return mean.exp().unsqueeze(-1).expand_as(log_ratio)
+    raise RuntimeError("response clipping requires token or sequence importance sampling")
+
+
+def _clip_bounds(worker: Any) -> tuple[float, float]:
+    config = worker.pipeline_config
+    ranged = getattr(config, "use_pg_clip_range", None)
+    low = getattr(config, "pg_clip_low", None) if ranged is True else getattr(config, "pg_clip", None)
+    high = getattr(config, "pg_clip_high", None) if ranged is True else getattr(config, "pg_clip", None)
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 for value in (low, high)):
+        raise RuntimeError("response clipping bounds are invalid")
+    return float(low), float(high)
+
+
+def _block_update(counters: dict[str, int], state: dict[str, bool], optimizer: Any, *, finite: bool) -> None:
+    counters["skipped_optimizer_steps"] += 1
+    state.update(grad_finite=finite, update_skipped=True)
+    optimizer.zero_grad(set_to_none=True)
 
 
 def _counters(worker: Any) -> dict[str, int]:

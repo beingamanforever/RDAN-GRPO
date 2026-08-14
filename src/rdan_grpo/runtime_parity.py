@@ -172,6 +172,9 @@ def run_runtime_parity(
     rtt_revision: str,
     weight_receipt: Mapping[str, str],
     production_train_config_sha256: str | None = None,
+    production_resolved_config_sha256: str | None = None,
+    preflight_train_config_sha256: str | None = None,
+    preflight_resolved_config_sha256: str | None = None,
     responses: int = MIN_RESPONSES,
     artifact_id: str = "qwen_runtime_parity_v1",
     failure_output: str | Path | None = None,
@@ -183,24 +186,54 @@ def run_runtime_parity(
         raise ParityError(f"runtime parity requires at least {MIN_RESPONSES} responses")
     generation_config = build_generation_config(pipeline_config, backend_profile)
     _validate_identity(identity)
+    config_hashes = (
+        production_train_config_sha256,
+        production_resolved_config_sha256,
+        preflight_train_config_sha256,
+        preflight_resolved_config_sha256,
+    )
     backend = _backend_identity(
         pipeline_config,
         train_config_sha256,
         resolved_config_sha256,
         rtt_revision,
         backend_profile,
-        production_train_config_sha256,
+        *config_hashes,
     )
     receipt_linkage = _validate_receipt_linkage(weight_receipt, resolved_config_sha256)
+    artifact_context = identity, backend, receipt_linkage, artifact_id, failure_output
+    observation = _collect_parity_observation(boundary, responses, generation_config, *artifact_context)
+    evidence = _assess_parity_observation(observation, responses, backend_profile, *artifact_context)
+    return _parity_artifact(identity, backend, receipt_linkage, evidence, artifact_id)
+
+
+def _collect_parity_observation(
+    boundary: ParityBoundary,
+    responses: int,
+    generation_config: Mapping[str, Any],
+    identity: RuntimeIdentity,
+    backend: Mapping[str, str],
+    receipt_linkage: Mapping[str, str],
+    artifact_id: str,
+    failure_output: str | Path | None,
+) -> ParityObservation:
     try:
-        observation = boundary.collect_parity(responses, generation_config)
+        return boundary.collect_parity(responses, generation_config)
     except Exception as error:
-        if failure_output is not None:
-            write_artifact(
-                failure_output,
-                _failure_artifact(identity, backend, receipt_linkage, None, error, artifact_id),
-            )
+        _write_parity_failure(failure_output, identity, backend, receipt_linkage, None, error, artifact_id)
         raise
+
+
+def _assess_parity_observation(
+    observation: ParityObservation,
+    responses: int,
+    backend_profile: BackendProfile,
+    identity: RuntimeIdentity,
+    backend: Mapping[str, str],
+    receipt_linkage: Mapping[str, str],
+    artifact_id: str,
+    failure_output: str | Path | None,
+) -> dict[str, Any]:
     try:
         if (
             not isinstance(observation.input_ids, torch.Tensor)
@@ -208,14 +241,36 @@ def run_runtime_parity(
             or observation.input_ids.shape[0] < responses
         ):
             raise ParityError("runtime parity returned fewer responses than requested")
-        evidence = _assess(observation, backend_profile)
+        return _assess(observation, backend_profile)
     except ParityError as error:
-        if failure_output is not None:
-            write_artifact(
-                failure_output,
-                _failure_artifact(identity, backend, receipt_linkage, observation, error, artifact_id),
-            )
+        _write_parity_failure(failure_output, identity, backend, receipt_linkage, observation, error, artifact_id)
         raise
+
+
+def _write_parity_failure(
+    failure_output: str | Path | None,
+    identity: RuntimeIdentity,
+    backend: Mapping[str, str],
+    receipt_linkage: Mapping[str, str],
+    observation: ParityObservation | None,
+    error: Exception,
+    artifact_id: str,
+) -> None:
+    if failure_output is None:
+        return
+    write_artifact(
+        failure_output,
+        _failure_artifact(identity, backend, receipt_linkage, observation, error, artifact_id),
+    )
+
+
+def _parity_artifact(
+    identity: RuntimeIdentity,
+    backend: Mapping[str, str],
+    receipt_linkage: Mapping[str, str],
+    evidence: Mapping[str, Any],
+    artifact_id: str,
+) -> dict[str, Any]:
     return {
         "schema_version": 2,
         "id": artifact_id,
@@ -691,18 +746,14 @@ def _backend_identity(
     rtt_revision: str,
     backend_profile: BackendProfile,
     production_train_config_sha256: str | None,
+    production_resolved_config_sha256: str | None,
+    preflight_train_config_sha256: str | None,
+    preflight_resolved_config_sha256: str | None,
 ) -> dict[str, str]:
-    actor_train = getattr(pipeline_config, "actor_train", None)
-    actor_infer = getattr(pipeline_config, "actor_infer", None)
-    train_args = getattr(actor_train, "strategy_args", None)
-    infer_args = getattr(actor_infer, "strategy_args", None)
-    train_config = getattr(train_args, "strategy_config", None)
-    transformer_impl = (
-        train_config.get("transformer_impl")
-        if isinstance(train_config, Mapping)
-        else getattr(train_config, "transformer_impl", None)
-    )
-    identity = {
+    train_args = getattr(getattr(pipeline_config, "actor_train", None), "strategy_args", None)
+    infer_args = getattr(getattr(pipeline_config, "actor_infer", None), "strategy_args", None)
+    transformer_impl = _transformer_impl(getattr(train_args, "strategy_config", None))
+    identity: dict[str, str] = {
         "train_config_sha256": train_config_sha256,
         "resolved_config_sha256": resolved_config_sha256,
         "actor_train_strategy": getattr(train_args, "strategy_name", None),
@@ -710,13 +761,34 @@ def _backend_identity(
         "transformer_impl": transformer_impl,
         "rtt_revision": rtt_revision,
     }
+    _validate_backend_values(identity, backend_profile)
+    if backend_profile == FSDP2_HF_PROFILE:
+        identity.update(
+            _same_backend_config_hashes(
+                production_train_config_sha256,
+                production_resolved_config_sha256,
+                preflight_train_config_sha256,
+                preflight_resolved_config_sha256,
+            )
+        )
+        identity.update(verify_transformers_generation_boundary())
+    return identity
+
+
+def _transformer_impl(train_config: Any) -> Any:
+    if isinstance(train_config, Mapping):
+        return train_config.get("transformer_impl")
+    return getattr(train_config, "transformer_impl", None)
+
+
+def _validate_backend_values(identity: Mapping[str, str], backend_profile: BackendProfile) -> None:
     if not all(isinstance(value, str) and value for value in identity.values()):
         raise ParityError("runtime backend identity is incomplete")
     for name, digest in {
-        "train config": train_config_sha256,
-        "resolved config": resolved_config_sha256,
+        "train config": identity["train_config_sha256"],
+        "resolved config": identity["resolved_config_sha256"],
     }.items():
-        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        if not _is_sha256(digest):
             raise ParityError(f"{name} contains an invalid SHA-256 digest")
     if identity["actor_train_strategy"] != backend_profile.actor_train_strategy:
         raise ParityError(f"runtime parity requires the {backend_profile.actor_train_strategy} actor-train strategy")
@@ -724,14 +796,29 @@ def _backend_identity(
         raise ParityError(f"runtime parity requires the {backend_profile.actor_infer_strategy} actor-infer strategy")
     if identity["transformer_impl"] != backend_profile.transformer_impl:
         raise ParityError(f"runtime parity requires transformer_impl={backend_profile.transformer_impl}")
-    if len(rtt_revision) != 40 or any(character not in "0123456789abcdef" for character in rtt_revision):
+    if not _git_revision(identity["rtt_revision"]):
         raise ParityError("RTT revision must be a full Git revision")
-    if backend_profile == FSDP2_HF_PROFILE:
-        if not _is_sha256(production_train_config_sha256):
-            raise ParityError("same-backend parity requires the exact production train config digest")
-        identity["production_train_config_sha256"] = production_train_config_sha256
-        identity.update(verify_transformers_generation_boundary())
-    return identity
+
+
+def _same_backend_config_hashes(
+    production_train_config_sha256: str | None,
+    production_resolved_config_sha256: str | None,
+    preflight_train_config_sha256: str | None,
+    preflight_resolved_config_sha256: str | None,
+) -> dict[str, str]:
+    hashes = {
+        "production_train_config_sha256": production_train_config_sha256,
+        "production_resolved_config_sha256": production_resolved_config_sha256,
+        "preflight_train_config_sha256": preflight_train_config_sha256,
+        "preflight_resolved_config_sha256": preflight_resolved_config_sha256,
+    }
+    if not all(_is_sha256(digest) for digest in hashes.values()):
+        raise ParityError("same-backend parity requires exact raw and resolved production and preflight digests")
+    return {name: digest for name, digest in hashes.items() if isinstance(digest, str)}
+
+
+def _git_revision(value: Any) -> bool:
+    return isinstance(value, str) and len(value) == 40 and all(character in "0123456789abcdef" for character in value)
 
 
 def _is_sha256(value: Any) -> bool:

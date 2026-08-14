@@ -26,13 +26,11 @@ _ACTOR_FIELDS = (
     "actor_attention_mask",
     "actor_response_mask",
 )
-_SAMPLE_PROFILE = {
+_SAME_BACKEND_INVARIANTS = {
     "do_sample": True,
-    "temperature": 1.0,
-    "top_p": 1.0,
-    "top_k": 0,
     "num_beams": 1,
 }
+_CONFIGURED_SAMPLE_FIELDS = ("temperature", "top_p", "top_k")
 _FINAL_PROCESSOR_PROFILE = {
     "min_p": None,
     "typical_p": 1.0,
@@ -46,7 +44,7 @@ _FINAL_PROCESSOR_PROFILE = {
 class SynchronousHFInferWorker(Worker):
     """Run RTT rollout generation through the synchronous Hugging Face model."""
 
-    def __init__(self, worker_config: Any):
+    def __init__(self, worker_config: Any) -> None:
         super().__init__(worker_config=worker_config)
         self.tokenizer = None
         self.strategy = None
@@ -274,6 +272,7 @@ def _require_sync_hf_worker(worker: Any) -> None:
 
 
 def _generation_config(worker: Any, data: DataProto) -> dict[str, Any]:
+    expected = _configured_sample_profile(worker)
     supplied = data.meta_info.get("generation_config")
     if supplied is None:
         supplied = worker.worker_config.generating_args.to_dict()
@@ -282,8 +281,8 @@ def _generation_config(worker: Any, data: DataProto) -> dict[str, Any]:
     config = copy.deepcopy(dict(supplied))
     if "logits_processor" in config:
         raise RuntimeError("caller-supplied logits_processor is not allowed")
-    for name, expected in _SAMPLE_PROFILE.items():
-        _require_profile_value(name, config.get(name), expected)
+    for name, value in expected.items():
+        _require_profile_value(name, config.get(name), value)
     for name, expected in _FINAL_PROCESSOR_PROFILE.items():
         _require_profile_value(name, config.get(name, expected), expected)
         config[name] = expected
@@ -306,6 +305,23 @@ def _generation_config(worker: Any, data: DataProto) -> dict[str, Any]:
     )
     config["pad_token_id"] = worker.tokenizer.pad_token_id
     return config
+
+
+def _configured_sample_profile(worker: Any) -> dict[str, bool | int | float]:
+    generating_args = getattr(getattr(worker, "worker_config", None), "generating_args", None)
+    configured = generating_args.to_dict() if hasattr(generating_args, "to_dict") else None
+    if not isinstance(configured, Mapping):
+        raise RuntimeError("same-backend rollout requires configured generation arguments")
+    expected: dict[str, bool | int | float] = {}
+    for name, required in _SAME_BACKEND_INVARIANTS.items():
+        _require_profile_value(name, configured.get(name), required)
+        expected[name] = required
+    for name in _CONFIGURED_SAMPLE_FIELDS:
+        value = configured.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise RuntimeError(f"same-backend rollout requires configured {name}")
+        expected[name] = value
+    return expected
 
 
 def _require_profile_value(name: str, value: Any, expected: bool | int | float | None) -> None:

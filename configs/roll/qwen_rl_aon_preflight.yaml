@@ -17,6 +17,7 @@ validation:
     disable_gradient_checkpointing: true
     dtype: bf16
   generating_args:
+    do_sample: true
     max_new_tokens: ${response_length}
     top_p: 0.99
     top_k: 100

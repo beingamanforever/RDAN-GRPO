@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -29,36 +30,122 @@ def response_source_hashes(
     train_config: str | Path,
     preflight_config: str | Path,
     program: str | Path,
+    train_resolved_config_sha256: str,
+    preflight_resolved_config_sha256: str,
 ) -> dict[str, str]:
     """Hash the exact code, configs, data, and lifecycle evidence for preflight."""
 
     source = Path(source_dir).resolve()
     root = source.parents[1]
-    files = {
+    files = _response_source_files(
+        source,
+        root,
+        evaluator_rows=evaluator_rows,
+        train_config=train_config,
+        preflight_config=preflight_config,
+    )
+    for label, digest in (
+        ("production resolved config", train_resolved_config_sha256),
+        ("preflight resolved config", preflight_resolved_config_sha256),
+    ):
+        if not _sha256(digest):
+            raise ResponseIdentityError(f"{label} hash is invalid")
+    return {
+        **{name: file_sha256(path) for name, path in files.items()},
+        "train_resolved_config": train_resolved_config_sha256,
+        "preflight_resolved_config": preflight_resolved_config_sha256,
+        **lifecycle_source_hashes(program),
+    }
+
+
+def _response_source_files(
+    source: Path,
+    root: Path,
+    *,
+    evaluator_rows: str | Path,
+    train_config: str | Path,
+    preflight_config: str | Path,
+) -> dict[str, Path]:
+    return {
         "advantages": source / "advantages.py",
+        "evaluator_cert": source / "evaluator_cert.py",
         "evaluator_rows": Path(evaluator_rows),
         "fsdp_hf_receipt": source / "fsdp_hf_receipt.py",
+        "hir": source / "hir.py",
+        "judge": source / "judge.py",
+        "program": source / "program.py",
         "preflight_cli": root / "scripts" / "run_roll_preflight.py",
         "preflight_config": Path(preflight_config),
+        "readiness_cli": root / "scripts" / "run_response_readiness.py",
         "response_checkpoint": source / "roll_response_checkpoint.py",
         "response_config": source / "roll_response_config.py",
         "response_identity": source / "response_identity.py",
+        "response_pilot_lifecycle": source / "response_pilot_lifecycle.py",
         "response_pipeline": source / "roll_response_pipeline.py",
+        "response_readiness": source / "response_readiness.py",
         "response_receipt": source / "roll_response_receipt.py",
         "response_sampling": source / "response_sampling.py",
         "response_train": source / "roll_response_train.py",
         "response_workers": source / "roll_response_workers.py",
         "rewards": source / "rewards.py",
+        "rubrichub_rules": source / "rubrichub_rules.py",
         "roll_bridge": source / "roll_bridge.py",
+        "roll_compat": source / "roll_compat.py",
         "roll_fsdp_hf_receipt": source / "roll_fsdp_hf_receipt.py",
         "roll_live": source / "roll_live.py",
         "roll_reward": source / "roll_reward.py",
+        "roll_same_backend": source / "roll_same_backend.py",
+        "roll_same_backend_live": source / "roll_same_backend_live.py",
         "roll_scalar": source / "roll_scalar.py",
+        "roll_weight_receipt": source / "roll_weight_receipt.py",
+        "runtime_parity": source / "runtime_parity.py",
+        "safe_rule": source / "safe_rule.py",
+        "same_backend_cli": root / "scripts" / "run_same_backend_parity.py",
+        "scalar_data": source / "scalar_data.py",
         "train_cli": root / "scripts" / "run_response_train.py",
         "train_config": Path(train_config),
         "wandb_tracking": source / "wandb_tracking.py",
+        "weight_receipt": source / "weight_receipt.py",
     }
-    return {name: file_sha256(path) for name, path in files.items()} | lifecycle_source_hashes(program)
+
+
+def clean_repository_revision(path: str | Path, expected: str | None = None) -> str:
+    """Return HEAD only when the containing Git worktree is clean and exact."""
+
+    root = Path(path).resolve()
+    if root.is_file():
+        root = root.parent
+    status = _git(root, "status", "--porcelain=v1", "--untracked-files=normal")
+    if status:
+        raise ResponseIdentityError("response evidence requires a clean Git worktree")
+    revision = _git(root, "rev-parse", "HEAD")
+    if len(revision) != 40 or any(character not in "0123456789abcdef" for character in revision):
+        raise ResponseIdentityError("response evidence cannot resolve an exact Git revision")
+    if expected is not None and revision != expected:
+        raise ResponseIdentityError("response evidence revision differs from the clean checkout")
+    return revision
+
+
+def _git(root: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise ResponseIdentityError("response evidence path is not inside a Git worktree")
+    return result.stdout.strip()
+
+
+def canonical_resolved_config_sha256(config: Mapping[str, Any]) -> str:
+    """Hash one fully composed and resolved Hydra config canonically."""
+
+    try:
+        payload = json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise ResponseIdentityError(f"resolved config is not canonical JSON: {error}") from error
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def lifecycle_source_hashes(program_path: str | Path) -> dict[str, str]:

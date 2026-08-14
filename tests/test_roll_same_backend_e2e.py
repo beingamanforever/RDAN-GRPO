@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 import torch
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -138,8 +139,9 @@ class FakeModel:
         return SimpleNamespace(sequences=self.sequences.clone())
 
 
-def _infer_worker(module: types.ModuleType, model: FakeModel) -> Any:
-    worker = module.SynchronousHFInferWorker.__new__(module.SynchronousHFInferWorker)
+def _infer_worker(module: types.ModuleType, model: FakeModel, worker_class: type[Any] | None = None) -> Any:
+    worker_type = worker_class or module.SynchronousHFInferWorker
+    worker = worker_type.__new__(worker_type)
     worker.pipeline_config = SimpleNamespace(
         async_pipeline=False,
         async_generation_ratio=0,
@@ -149,6 +151,7 @@ def _infer_worker(module: types.ModuleType, model: FakeModel) -> Any:
     worker.worker_config = SimpleNamespace(
         strategy_args=SimpleNamespace(strategy_name="hf_infer"),
         infer_batch_size=2,
+        generating_args=SimpleNamespace(to_dict=lambda: _generation_config()),
     )
     worker.tokenizer = SimpleNamespace(eos_token_id=2, pad_token_id=0)
     worker.strategy = SimpleNamespace(
@@ -164,14 +167,75 @@ def _infer_worker(module: types.ModuleType, model: FakeModel) -> Any:
 def _generation_config(**overrides: Any) -> dict[str, Any]:
     return {
         "do_sample": True,
-        "temperature": 1.0,
-        "top_p": 1.0,
-        "top_k": 0,
+        "temperature": 0.99,
+        "top_p": 0.99,
+        "top_k": 100,
         "num_beams": 1,
         "num_return_sequences": 2,
         "max_new_tokens": 3,
         **overrides,
     }
+
+
+def _load_response_workers(monkeypatch: pytest.MonkeyPatch, same_backend: types.ModuleType) -> types.ModuleType:
+    receipt = types.ModuleType("rdan_grpo.roll_fsdp_hf_receipt")
+    for name in (
+        "begin_fsdp_hf_receipt",
+        "begin_hf_infer_receipt",
+        "finish_hf_infer_receipt",
+        "get_fsdp_actor_receipt",
+        "reset_fsdp_hf_receipt",
+        "run_receipted_fsdp_hf_update",
+    ):
+        setattr(receipt, name, lambda *args, **kwargs: None)
+    monkeypatch.setitem(sys.modules, "rdan_grpo.roll_fsdp_hf_receipt", receipt)
+    monkeypatch.setitem(sys.modules, "rdan_grpo.roll_same_backend", same_backend)
+    path = ROOT / "src/rdan_grpo/roll_response_workers.py"
+    spec = importlib.util.spec_from_file_location("test_response_sampling_worker", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _compose_response_generation() -> dict[str, Any]:
+    config_dir = ROOT / "configs/roll"
+    child = yaml.safe_load((config_dir / "qwen_rtt_papo_response_train.yaml").read_text(encoding="utf-8"))
+    parent_name = child["defaults"][0]
+    parent = yaml.safe_load((config_dir / f"{parent_name}.yaml").read_text(encoding="utf-8"))
+    generation = {
+        **parent["actor_infer"]["generating_args"],
+        **child["actor_infer"]["generating_args"],
+    }
+    generation["max_new_tokens"] = child.get("response_length", parent["response_length"])
+    generation["num_return_sequences"] = child.get(
+        "num_return_sequences_in_group", parent["num_return_sequences_in_group"]
+    )
+    return generation
+
+
+def test_response_worker_uses_composed_sampling_profile_and_rejects_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module(monkeypatch)
+    workers = _load_response_workers(monkeypatch, module)
+    configured = _compose_response_generation()
+    worker = _infer_worker(
+        module,
+        FakeModel(torch.ones(8, 6, dtype=torch.long), []),
+        workers.ResponseInferWorker,
+    )
+    worker.worker_config.generating_args = SimpleNamespace(to_dict=lambda: dict(configured))
+
+    observed = module._generation_config(worker, FakeData({}, {"generation_config": dict(configured)}))
+
+    assert observed["do_sample"] is True
+    assert observed["temperature"] == 0.99
+    assert observed["top_p"] == 0.99
+    assert observed["top_k"] == 100
+    drifted = dict(configured, top_k=0)
+    with pytest.raises(RuntimeError, match="top_k"):
+        module._generation_config(worker, FakeData({}, {"generation_config": drifted}))
 
 
 def test_sync_hf_generation_preserves_prompt_return_and_early_eos_alignment(
