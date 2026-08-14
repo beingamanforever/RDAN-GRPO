@@ -550,7 +550,7 @@ def check_environment(
     credentials = _verify_credentials(env)
     env = _subprocess_env(env)
     host = host or _host_info(env)
-    python = (python or Path(sys.executable)).resolve()
+    python = _alias_path(python or Path(sys.executable))
     _verify_host(host, contract)
     _verify_inputs(inputs, contract)
     revisions = _verify_repositories(inputs, runner)

@@ -358,6 +358,35 @@ def test_check_passes_without_exposing_secrets(contract: tuple[Any, FakeRunner, 
     assert all("PIP_CONSTRAINT" not in item for item in runner.envs)
 
 
+def test_check_preserves_venv_python_launcher(
+    contract: tuple[Any, FakeRunner, dict[str, str]], tmp_path: Path
+) -> None:
+    inputs, runner, env = contract
+    base_python = tmp_path / "base" / "python"
+    base_python.parent.mkdir()
+    base_python.write_text("", encoding="utf-8")
+    launcher = tmp_path / "venv" / "bin" / "python"
+    launcher.parent.mkdir(parents=True)
+    launcher.symlink_to(base_python)
+
+    BOOTSTRAP.check_environment(inputs, runner, env, host=_host(), python=launcher)
+
+    python_commands = [command for command in runner.commands if len(command) > 1 and command[1] in {"-c", "-m"}]
+    assert len(python_commands) == 5
+    assert {Path(command[0]) for command in python_commands} == {launcher}
+
+
+def test_check_rejects_alpha_torch_runtime(
+    contract: tuple[Any, FakeRunner, dict[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs, runner, env = contract
+    runtime = runner._cuda() | {"torch": "2.8.0a0+5228986c39.nv25.6"}
+    monkeypatch.setattr(runner, "_cuda", lambda: runtime)
+
+    with pytest.raises(BOOTSTRAP.BootstrapError, match="PyTorch differs from the response runtime package contract"):
+        BOOTSTRAP.check_environment(inputs, runner, env, host=_host())
+
+
 def test_data_package_contract_matches_preparation_runtime() -> None:
     direct = BOOTSTRAP._packages_from(BOOTSTRAP.DATA_REQUIREMENTS)
 
