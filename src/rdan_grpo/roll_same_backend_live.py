@@ -14,7 +14,6 @@ from typing import Any
 import ray
 import torch
 from roll.datasets.collator import DataCollatorWithPaddingForPaddedKeys
-from roll.datasets.dataset import get_dataset
 from roll.distributed.executor.cluster import Cluster
 from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.protocol import DataProto
@@ -27,6 +26,7 @@ from rdan_grpo.fsdp_hf_receipt import (
     build_fsdp_hf_receipt_artifact,
     seal_fsdp_hf_receipt,
 )
+from rdan_grpo.response_dataset import load_response_dataset
 from rdan_grpo.roll_fsdp_hf_receipt import (
     begin_fsdp_hf_receipt,
     begin_hf_infer_receipt,
@@ -373,7 +373,11 @@ def _validate_live_topology(actor_train: Any, actor_infer: Any) -> None:
 
 
 def _load_dataset(config: Any, tokenizer: Any) -> Any:
-    data = get_dataset(config.actor_train.data_args)
+    data_args = config.actor_train.data_args
+    data = load_response_dataset(
+        data_args.file_name,
+        dataset_dir=getattr(data_args, "dataset_dir", "."),
+    )
     template = config.global_template or config.actor_train.data_args.template
     encode = get_encode_function(template, tokenizer, config.actor_train.data_args)
     data = preprocess_dataset(data, config.prompt_length, encode, config.actor_train.data_args)

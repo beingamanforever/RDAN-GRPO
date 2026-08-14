@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 import torch
-import yaml
 
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY
 
@@ -51,7 +50,7 @@ def _load_live(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     collator = types.ModuleType("roll.datasets.collator")
     collator.DataCollatorWithPaddingForPaddedKeys = object
     dataset = types.ModuleType("roll.datasets.dataset")
-    dataset.get_dataset = lambda _: []
+    dataset.get_dataset = lambda _: pytest.fail("RTT dataset loader was called")
     cluster = types.ModuleType("roll.distributed.executor.cluster")
     cluster.Cluster = object
     decorator = types.ModuleType("roll.distributed.scheduler.decorator")
@@ -203,56 +202,45 @@ def test_topology_sampling_and_rewardless_contract(monkeypatch: pytest.MonkeyPat
     assert "rewards: null" in payload
 
 
-def test_same_backend_config_resolves_the_real_rtt_loader_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    parent = yaml.safe_load((ROOT / "configs/roll/qwen_scalar_train.yaml").read_text(encoding="utf-8"))
-    child = yaml.safe_load((ROOT / "configs/roll/qwen_scalar_same_backend_parity.yaml").read_text(encoding="utf-8"))
-    assert "data_args" not in child["actor_train"]
-    parent_data = parent["actor_train"]["data_args"]
-    calls: list[tuple[str, list[str]]] = []
-    datasets = types.ModuleType("datasets")
-    datasets.Dataset = type("Dataset", (), {})
-    datasets.IterableDataset = type("IterableDataset", (), {})
-
-    def load_dataset(kind: str, data_files: list[str], **kwargs: Any) -> dict[str, str]:
-        del kwargs
-        calls.append((kind, data_files))
-        return {"train": "loaded"}
-
-    datasets.load_dataset = load_dataset
-    configs = types.ModuleType("roll.configs")
-    configs.DataArguments = object
-    data_args_module = types.ModuleType("roll.configs.data_args")
-    data_args_module.DataArguments = object
-    logging = types.ModuleType("roll.utils.logging")
-    logging.get_logger = lambda: SimpleNamespace(info=lambda *args, **kwargs: None)
-    for name, module in {
-        "datasets": datasets,
-        "roll": types.ModuleType("roll"),
-        "roll.configs": configs,
-        "roll.configs.data_args": data_args_module,
-        "roll.utils": types.ModuleType("roll.utils"),
-        "roll.utils.logging": logging,
-    }.items():
-        monkeypatch.setitem(sys.modules, name, module)
-    path = ROOT.parent / "Rubrics-To-Tokens/roll/datasets/dataset.py"
-    spec = importlib.util.spec_from_file_location("test_pinned_rtt_dataset", path)
-    assert spec is not None and spec.loader is not None
-    loader = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(loader)
-    monkeypatch.chdir(ROOT)
-
-    result = loader.get_dataset(
-        SimpleNamespace(
-            file_name=parent_data["file_name"],
-            dataset_dir=parent_data["dataset_dir"],
-            dataset_type="json",
-            prompt=None,
-            response="solution",
-        )
+def test_same_backend_parity_loads_mixed_response_schema_canonically(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "id": index,
+            "prompt": f"Prompt {index}",
+            "rubrics": [{"id": 1, "parameters": {"count": index}}],
+            "source": "type1" if index % 2 else "type3",
+            "ground_truth": {
+                "constraint_pattern": ["language:response_language"] if index % 2 else "detectable_format:json_format"
+            },
+        }
+        for index in range(1, 5)
+    ]
+    path = tmp_path / "mixed.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    module = _load_live(monkeypatch)
+    config = _config(module)
+    config.prompt_length = 2048
+    config.tag_2_domain = {}
+    config.actor_train.data_args = SimpleNamespace(
+        file_name=[str(path)],
+        dataset_dir=".",
+        preprocessing_num_workers=1,
+        template="qwen3_nothinking",
     )
+    config.actor_infer.generating_args = SimpleNamespace(num_return_sequences=8)
 
-    assert result == "loaded"
-    assert calls == [("json", ["./data/HIR_trainv1_rdan_scalar_certified.jsonl"])]
+    dataset = module._load_dataset(config, object())
+
+    assert [dataset[index]["id"] for index in range(4)] == [str(row["id"]) for row in rows]
+    assert [dataset[index]["rubrics"] for index in range(4)] == [
+        json.dumps(row["rubrics"], sort_keys=True, separators=(",", ":")) for row in rows
+    ]
+    assert [dataset[index]["ground_truth"] for index in range(4)] == [
+        json.dumps(row["ground_truth"], sort_keys=True, separators=(",", ":")) for row in rows
+    ]
 
 
 def test_receipt_seals_before_generation_and_preserves_zero_state(

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import importlib.util
 import json
 import os
 import subprocess
 import sys
+import types
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
+import datasets as hf_datasets
 import pytest
 import torch
 
@@ -112,6 +117,81 @@ def _install_real_roll_compat() -> None:
     install_rtt_compat(Path(root))
 
 
+def _load_roll_live(
+    monkeypatch: pytest.MonkeyPatch,
+    pipeline_init: Callable[[Any, Any, types.ModuleType], None],
+) -> tuple[types.ModuleType, types.ModuleType]:
+    def add(name: str, **attrs: object) -> types.ModuleType:
+        module = types.ModuleType(name)
+        module.__path__ = []
+        module.__dict__.update(attrs)
+        monkeypatch.setitem(sys.modules, name, module)
+        return module
+
+    class Stub:
+        pass
+
+    class SchedulerBase:
+        async def set_scheduler(self, **kwargs: Any) -> None:
+            self.dataset = kwargs["dataset"]
+
+    rollout_module = types.ModuleType("roll.pipeline.rlvr.rlvr_rollout_pipeline")
+    rollout_module.datasets = hf_datasets
+    rollout_module.DynamicSamplingScheduler = SchedulerBase
+
+    class RolloutPipeline:
+        def __init__(self, config: Any) -> None:
+            pipeline_init(self, config, rollout_module)
+
+    rollout_module.RLVRRolloutPipeline = RolloutPipeline
+    add("ray")
+    add("ray.util")
+    add("ray.util.scheduling_strategies", NodeAffinitySchedulingStrategy=Stub)
+    add("roll")
+    add("roll.datasets")
+    add("roll.datasets.collator", DataCollatorWithPaddingForPaddedKeys=Stub)
+    add("roll.distributed")
+    add("roll.distributed.executor")
+    add("roll.distributed.executor.cluster", Cluster=Stub)
+    add("roll.distributed.scheduler")
+    add(
+        "roll.distributed.scheduler.decorator",
+        Dispatch=SimpleNamespace(DP_MP_COMPUTE=0, DP_MP_DISPATCH_FIRST=1),
+        register=lambda **kwargs: lambda target: target,
+    )
+    add("roll.distributed.scheduler.generate_scheduler", DynamicSamplingScheduler=SchedulerBase)
+    add("roll.distributed.scheduler.protocol", DataProto=Stub)
+    add("roll.models")
+    add("roll.models.model_providers", default_tokenizer_provider=lambda **kwargs: None)
+    add("roll.pipeline")
+    add("roll.pipeline.base_pipeline", BasePipeline=Stub)
+    add("roll.pipeline.base_worker", InferWorker=Stub)
+    add("roll.pipeline.rlvr")
+    add("roll.pipeline.rlvr.actor_worker", ActorWorker=Stub)
+    monkeypatch.setitem(sys.modules, rollout_module.__name__, rollout_module)
+    add(
+        "roll.pipeline.rlvr.rubircs_pipeline",
+        get_encode_function=lambda *args, **kwargs: None,
+        preprocess_dataset=lambda *args, **kwargs: None,
+        update_dataset_domain=lambda *args, **kwargs: None,
+    )
+    add("roll.platforms", current_platform=SimpleNamespace(device_type="cpu"))
+    add("roll.utils")
+    add("roll.utils.context_managers", state_offload_manger=lambda *args, **kwargs: None)
+    add(
+        "roll.utils.functionals",
+        concatenate_input_and_output=lambda *args, **kwargs: None,
+        postprocess_generate=lambda *args, **kwargs: None,
+    )
+    add("roll.utils.offload_states", OffloadStateType=SimpleNamespace(model_params="model_params"))
+    path = Path("src/rdan_grpo/roll_live.py")
+    spec = importlib.util.spec_from_file_location("test_response_roll_live", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, rollout_module
+
+
 def test_roll_live_import_does_not_load_optional_receipt_backends() -> None:
     script = """
 import importlib.abc
@@ -202,6 +282,106 @@ assert not any(name.startswith("roll.third_party.megatron") for name in sys.modu
     result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_scalar_preflight_inherited_init_gets_canonical_dataset_and_restores_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "id": index,
+            "prompt": f"Prompt {index}",
+            "rubrics": [{"id": 1, "parameters": {"count": index}}],
+            "source": PREFLIGHT_SOURCES[index % len(PREFLIGHT_SOURCES)],
+            "ground_truth": {
+                "constraint_pattern": ["language:response_language"] if index % 2 else "detectable_format:json_format"
+            },
+        }
+        for index in range(256)
+    ]
+    path = tmp_path / "mixed.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    observed: dict[str, Any] = {"fail": False}
+
+    def initialize(instance: Any, config: Any, rollout_module: types.ModuleType) -> None:
+        loader = rollout_module.datasets
+        with pytest.raises(ValueError, match="unconfigured request"):
+            loader.load_dataset("json", data_files=[str(path), str(tmp_path / "other.jsonl")])
+        dataset_dict = loader.load_dataset("json", data_files=config.validation.data_args.file_name)
+        observed["dataset_dict"] = dataset_dict
+        assert isinstance(dataset_dict["train"][0]["rubrics"], str)
+        dataset = dataset_dict["train"].map(
+            lambda batch: {
+                "input_ids": [[1, 2]] * len(batch["prompt"]),
+                "rubrics_were_strings": [all(isinstance(value, str) for value in batch["rubrics"])]
+                * len(batch["prompt"]),
+            },
+            batched=True,
+            load_from_cache_file=False,
+        )
+        dataset = dataset.filter(lambda row: len(row["input_ids"]) > 1, load_from_cache_file=False)
+
+        def add_domain(row: dict[str, Any]) -> dict[str, Any]:
+            assert isinstance(row["rubrics"], str)
+            row["domain"] = "llm_judge"
+            return row
+
+        dataset = dataset.map(
+            add_domain,
+            num_proc=1,
+            desc="update_val_dataset_domain",
+            load_from_cache_file=False,
+        )
+        observed["pre_scheduler_dataset"] = dataset
+        instance.pipeline_config = config
+        instance.val_dataset = dataset
+        scheduler = rollout_module.DynamicSamplingScheduler()
+        asyncio.run(
+            scheduler.set_scheduler(
+                actor_cluster=object(),
+                reward_clusters={},
+                dataset=dataset,
+                collect_fn_cls=object,
+                collect_fn_kwargs={},
+                is_val=True,
+            )
+        )
+        observed["scheduler_dataset"] = scheduler.dataset
+        if observed["fail"]:
+            raise RuntimeError("inherited init failed")
+
+    module, rollout_module = _load_roll_live(monkeypatch, initialize)
+    original_alias = rollout_module.datasets
+    original_scheduler = rollout_module.DynamicSamplingScheduler
+    original_loader = hf_datasets.load_dataset
+    config = SimpleNamespace(
+        validation=SimpleNamespace(
+            data_args=SimpleNamespace(file_name=[str(path)], dataset_dir="."),
+            generating_args=SimpleNamespace(num_return_sequences=8),
+        )
+    )
+
+    pipeline = module.ScalarPreflightPipeline(config)
+
+    assert isinstance(observed["dataset_dict"], hf_datasets.DatasetDict)
+    assert isinstance(observed["dataset_dict"]["train"][0]["rubrics"], str)
+    assert all(observed["pre_scheduler_dataset"]["rubrics_were_strings"])
+    assert isinstance(observed["pre_scheduler_dataset"][0]["rubrics"], str)
+    assert isinstance(observed["scheduler_dataset"][0]["rubrics"], list)
+    assert isinstance(observed["scheduler_dataset"][0]["ground_truth"], str)
+    assert isinstance(pipeline.val_dataset[0]["rubrics"], list)
+    assert isinstance(pipeline.val_dataset[0]["ground_truth"], str)
+    assert rollout_module.datasets is original_alias
+    assert rollout_module.DynamicSamplingScheduler is original_scheduler
+    assert hf_datasets.load_dataset is original_loader
+
+    observed["fail"] = True
+    with pytest.raises(RuntimeError, match="inherited init failed"):
+        module.ScalarPreflightPipeline(config)
+    assert rollout_module.datasets is original_alias
+    assert rollout_module.DynamicSamplingScheduler is original_scheduler
+    assert hf_datasets.load_dataset is original_loader
 
 
 def test_reward_boundary_preserves_hard_soft_provenance() -> None:

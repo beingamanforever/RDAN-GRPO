@@ -622,7 +622,11 @@ def test_rewardless_parity_constructor_and_boundary(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(roll_live.BasePipeline, "set_checkpoint_clusters", lambda self, *clusters: None)
     monkeypatch.setattr(roll_live, "Cluster", Cluster)
     monkeypatch.setattr(roll_live, "default_tokenizer_provider", lambda **kwargs: object())
-    monkeypatch.setattr(roll_live, "get_dataset", lambda data_args: Dataset())
+    monkeypatch.setattr(
+        roll_live,
+        "load_response_dataset",
+        lambda file_names, *, dataset_dir: Dataset(),
+    )
     monkeypatch.setattr(roll_live, "get_encode_function", lambda *args: object())
     monkeypatch.setattr(roll_live, "preprocess_dataset", lambda dataset, *args, **kwargs: dataset)
     monkeypatch.setattr(roll_live.ray, "remote", lambda cls: RemoteScheduler())
@@ -638,6 +642,8 @@ def test_rewardless_parity_constructor_and_boundary(monkeypatch: pytest.MonkeyPa
         reward_config = {"llm_judge": object()}
         data_args = SimpleNamespace(
             domain_interleave_probs={"llm_judge": 1.0},
+            file_name=["data/qwen_hir_rubrichub_if_rl_eligible.jsonl"],
+            dataset_dir=".",
             preprocessing_num_workers=1,
             template="qwen3_nothinking",
         )

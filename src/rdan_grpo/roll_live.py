@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping
 
+import datasets as hf_datasets
 import ray
 import torch
 
@@ -26,7 +27,6 @@ if _rtt_root:
 
 from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
 from roll.datasets.collator import DataCollatorWithPaddingForPaddedKeys
-from roll.datasets.dataset import get_dataset
 from roll.distributed.executor.cluster import Cluster
 from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.generate_scheduler import DynamicSamplingScheduler
@@ -34,6 +34,7 @@ from roll.distributed.scheduler.protocol import DataProto
 from roll.models.model_providers import default_tokenizer_provider
 from roll.pipeline.base_pipeline import BasePipeline
 from roll.pipeline.base_worker import InferWorker
+from roll.pipeline.rlvr import rlvr_rollout_pipeline as rtt_rollout_pipeline
 from roll.pipeline.rlvr.actor_worker import ActorWorker
 from roll.pipeline.rlvr.rlvr_rollout_pipeline import RLVRRolloutPipeline
 from roll.pipeline.rlvr.rubircs_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
@@ -43,6 +44,7 @@ from roll.utils.functionals import concatenate_input_and_output, postprocess_gen
 from roll.utils.offload_states import OffloadStateType
 from torch.nn.utils.rnn import pad_sequence
 
+from rdan_grpo.response_dataset import load_response_dataset
 from rdan_grpo.response_sampling import balanced_preflight_indices
 from rdan_grpo.roll_bridge import assess_scalar_batch
 from rdan_grpo.roll_scalar import ScalarMethod
@@ -271,7 +273,11 @@ class RuntimeParityPipeline(BasePipeline):
         self._weight_receipt_required = strategy_config.get("worker_extension_cls") == RECEIPT_WORKER_EXTENSION
         self._weight_receipt_passed = False
         self.tokenizer = default_tokenizer_provider(model_args=pipeline_config.actor_train.model_args)
-        dataset = get_dataset(pipeline_config.actor_train.data_args)
+        data_args = pipeline_config.actor_train.data_args
+        dataset = load_response_dataset(
+            data_args.file_name,
+            dataset_dir=getattr(data_args, "dataset_dir", "."),
+        )
         template = pipeline_config.global_template or pipeline_config.actor_train.data_args.template
         encode = get_encode_function(template, self.tokenizer, pipeline_config.actor_train.data_args)
         dataset = preprocess_dataset(
@@ -502,7 +508,16 @@ class ScalarPreflightPipeline(RLVRRolloutPipeline):
     group_size = 8
 
     def __init__(self, pipeline_config: Any):
-        super().__init__(pipeline_config)
+        original_datasets = rtt_rollout_pipeline.datasets
+        original_scheduler = rtt_rollout_pipeline.DynamicSamplingScheduler
+        rtt_rollout_pipeline.datasets = _ResponseDatasetProxy(pipeline_config.validation.data_args)
+        rtt_rollout_pipeline.DynamicSamplingScheduler = _ResponseDynamicSamplingScheduler
+        try:
+            super().__init__(pipeline_config)
+        finally:
+            rtt_rollout_pipeline.datasets = original_datasets
+            rtt_rollout_pipeline.DynamicSamplingScheduler = original_scheduler
+        self.val_dataset = self.val_dataset.with_transform(_restore_rubrics)
         if hasattr(self, "actor_train"):
             raise RuntimeError("no-update preflight constructed an actor training cluster")
         if len(self.val_dataset) < self.prompt_count:
@@ -546,6 +561,74 @@ class ScalarPreflightPipeline(RLVRRolloutPipeline):
         if len(batch) != expected:
             raise ValueError(f"preflight expected {expected} responses, received {len(batch)}")
         return batch
+
+
+class _ResponseDatasetProxy:
+    """Load only the configured response JSON files through the canonical schema."""
+
+    def __init__(self, data_args: Any) -> None:
+        self._data_args = data_args
+        self._data_files = _normalize_data_files(data_args.file_name)
+
+    def load_dataset(
+        self,
+        dataset_type: str,
+        *,
+        data_files: Any,
+        **kwargs: Any,
+    ) -> hf_datasets.DatasetDict:
+        """Return the canonical response dataset only for the exact pinned call."""
+
+        if dataset_type != "json" or kwargs or _normalize_data_files(data_files) != self._data_files:
+            raise ValueError("preflight dataset loader received an unconfigured request")
+        dataset = load_response_dataset(
+            self._data_args.file_name,
+            dataset_dir=getattr(self._data_args, "dataset_dir", "."),
+        )
+        return hf_datasets.DatasetDict({"train": dataset})
+
+
+class _ResponseDynamicSamplingScheduler(DynamicSamplingScheduler):
+    """Restore rubric objects only after the pinned RTT dataset maps complete."""
+
+    async def set_scheduler(
+        self,
+        actor_cluster: Any,
+        reward_clusters: dict[str, Any],
+        dataset: hf_datasets.Dataset,
+        collect_fn_cls: Any,
+        collect_fn_kwargs: dict[str, Any],
+        state: dict[str, Any] | None = None,
+        is_val: bool = False,
+    ) -> None:
+        """Pass a decoded-on-access dataset to the validation scheduler."""
+
+        if not is_val:
+            raise ValueError("response dataset scheduler is validation-only")
+        await super().set_scheduler(
+            actor_cluster=actor_cluster,
+            reward_clusters=reward_clusters,
+            dataset=dataset.with_transform(_restore_rubrics),
+            collect_fn_cls=collect_fn_cls,
+            collect_fn_kwargs=collect_fn_kwargs,
+            state=state,
+            is_val=is_val,
+        )
+
+
+def _normalize_data_files(data_files: Any) -> tuple[str, ...]:
+    values = (data_files,) if isinstance(data_files, (str, Path)) else tuple(data_files)
+    if not values or any(not isinstance(value, (str, Path)) for value in values):
+        raise ValueError("preflight data files must be configured paths")
+    return tuple(str(value) for value in values)
+
+
+def _restore_rubrics(batch: dict[str, list[Any]]) -> dict[str, list[Any]]:
+    if "rubrics" not in batch:
+        return batch
+    restored = dict(batch)
+    restored["rubrics"] = [json.loads(value) for value in batch["rubrics"]]
+    return restored
 
 
 def seal_live_batch(
