@@ -368,14 +368,17 @@ def _verify_data_python(python: Path) -> None:
         "'packages':{n:importlib.metadata.version(n) for n in "
         f"{list(DATA_PACKAGES)!r}}}}}))"
     )
-    output = subprocess.run(
+    result = subprocess.run(
         [str(target), "-c", probe],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         env=_clean_env(),
-    ).stdout
-    observed = json.loads(output)
+    )
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip()[-2000:] or "no diagnostic output"
+        raise PreparationError(f"data Python package probe failed with exit {result.returncode}: {detail}")
+    observed = json.loads(result.stdout)
     if observed != {"python": DATA_PYTHON, "packages": DATA_PACKAGES}:
         raise PreparationError(f"data Python differs from the frozen detector runtime: {observed}")
 

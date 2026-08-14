@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/bootstrap_a100_response.py"
+PREPARE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts/prepare_a100_response_data.py"
 
 
 def _load_module() -> ModuleType:
@@ -25,6 +26,18 @@ def _load_module() -> ModuleType:
 
 BOOTSTRAP = _load_module()
 RUNTIME = BOOTSTRAP._load_runtime_contract()
+
+
+def _load_prepare_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("prepare_a100_response_data", PREPARE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+PREPARE = _load_prepare_module()
 
 
 class FakeRunner:
@@ -343,6 +356,32 @@ def test_check_passes_without_exposing_secrets(contract: tuple[Any, FakeRunner, 
         for item in runner.envs
     )
     assert all("PIP_CONSTRAINT" not in item for item in runner.envs)
+
+
+def test_data_package_contract_matches_preparation_runtime() -> None:
+    direct = BOOTSTRAP._packages_from(BOOTSTRAP.DATA_REQUIREMENTS)
+
+    assert BOOTSTRAP.DATA_PACKAGE_PINS == PREPARE.DATA_PACKAGES
+    assert direct == PREPARE.DATA_PACKAGES
+    BOOTSTRAP._verify_data_lock()
+
+
+def test_data_python_probe_reports_child_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    python = tmp_path / "python"
+    python.write_text("", encoding="utf-8")
+    failure = subprocess.CompletedProcess(
+        [str(python)],
+        1,
+        "",
+        "PackageNotFoundError: No package metadata was found for jinja2\n",
+    )
+    monkeypatch.setattr(PREPARE.subprocess, "run", lambda *args, **kwargs: failure)
+
+    with pytest.raises(
+        PREPARE.PreparationError,
+        match="package probe failed with exit 1: PackageNotFoundError.*jinja2",
+    ):
+        PREPARE._verify_data_python(python)
 
 
 def test_parse_topology_strips_ansi_header_and_accepts_nvlink() -> None:
