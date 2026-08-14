@@ -64,8 +64,8 @@ def _observation() -> ParityObservation:
     tokens = torch.arange(32 * 5).reshape(32, 5)
     attention = torch.ones_like(tokens)
     response = torch.tensor([[0, 0, 1, 1, 1]] * 32)
-    infer = torch.full((32, 5), -0.5)
-    actor = torch.full((32, 5), -0.51)
+    infer = torch.full((32, 4), -0.5)
+    actor = torch.full((32, 4), -0.51)
     return ParityObservation(
         input_ids=tokens,
         attention_mask=attention,
