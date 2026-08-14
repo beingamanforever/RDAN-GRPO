@@ -37,6 +37,7 @@ from rdan_grpo.runtime_parity import (
 )
 
 RTT_ROOT_ENV = "RTT_ROOT"
+ROLLOUT_STRATEGIES = ("hf_infer", "vllm")
 
 
 class _ParityPaths(NamedTuple):
@@ -383,16 +384,9 @@ def _validate_production_config(payload: Any, snapshot: Path) -> None:
     }
     if actor_train.get("worker_cls") in diagnostic_workers or actor_infer.get("worker_cls") in diagnostic_workers:
         raise ParityError("same-backend production config cannot use diagnostic-only workers")
-    for name, worker, strategy in (
-        ("actor_train", actor_train, "fsdp2_train"),
-        ("actor_infer", actor_infer, "hf_infer"),
-    ):
-        strategy_args = worker.get("strategy_args")
+    _validate_production_strategies(actor_train, actor_infer)
+    for name, worker in (("actor_train", actor_train), ("actor_infer", actor_infer)):
         model_args = worker.get("model_args")
-        if not isinstance(strategy_args, Mapping) or strategy_args.get("strategy_name") != strategy:
-            raise ParityError(f"same-backend production config requires {name} strategy {strategy}")
-        if strategy_args.get("strategy_config", {}).get("transformer_impl") != "huggingface":
-            raise ParityError(f"same-backend production config requires {name} Hugging Face implementation")
         if worker.get("device_mapping") != [0, 1]:
             raise ParityError(f"same-backend production config requires {name} device mapping [0, 1]")
         if worker.get("world_size") != 2 or worker.get("num_gpus_per_worker") != 1:
@@ -409,6 +403,23 @@ def _validate_production_config(payload: Any, snapshot: Path) -> None:
         raise ParityError("same-backend production config must enable optimizer training steps")
     if not isinstance(payload.get("rewards"), Mapping) or not payload["rewards"]:
         raise ParityError("same-backend production config requires nonempty rewards")
+
+
+def _validate_production_strategies(actor_train: Mapping[str, Any], actor_infer: Mapping[str, Any]) -> None:
+    """Require the FSDP2 trainer this gate measures and any supported rollout backend."""
+
+    train_args = actor_train.get("strategy_args")
+    if not isinstance(train_args, Mapping) or train_args.get("strategy_name") != "fsdp2_train":
+        raise ParityError("same-backend production config requires actor_train strategy fsdp2_train")
+    if train_args.get("strategy_config", {}).get("transformer_impl") != "huggingface":
+        raise ParityError("same-backend production config requires actor_train Hugging Face implementation")
+    infer_args = actor_infer.get("strategy_args")
+    if not isinstance(infer_args, Mapping) or infer_args.get("strategy_name") not in ROLLOUT_STRATEGIES:
+        raise ParityError(f"same-backend production config requires an actor_infer strategy in {ROLLOUT_STRATEGIES}")
+    if infer_args["strategy_name"] != "hf_infer":
+        return
+    if infer_args.get("strategy_config", {}).get("transformer_impl") != "huggingface":
+        raise ParityError("same-backend production config requires actor_infer Hugging Face implementation")
 
 
 if __name__ == "__main__":
