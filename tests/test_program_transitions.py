@@ -587,7 +587,7 @@ def _no_update_artifact(bundle: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         "schema_version": 2,
         "ready": True,
         "method": "rtt_papo_response",
-        "quality_weight": 0.5,
+        "quality_weight": 1.0,
         "config_sha256": bundle.program["launch_train_config"]["preflight_sha256"],
         "source_sha256": {
             "train_config": bundle.program["launch_train_config"]["sha256"],

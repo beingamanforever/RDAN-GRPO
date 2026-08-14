@@ -32,7 +32,7 @@ def _module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
 
 
 def _payload(method: str = "rtt_papo_response") -> dict[str, Any]:
-    quality = 0.5 if method in {"rtt_papo_response", "rdan_scalar"} else None
+    quality = 1.0 if method == "rtt_papo_response" else 0.5 if method == "rdan_scalar" else None
     hybrid = method in {"rtt_papo_response", "rl_csr", "rl_aon"}
     data_path = "data/qwen_hir_rubrichub_if_hybrid.jsonl" if hybrid else "data/qwen_hir_rubrichub_if_rl_eligible.jsonl"
     reward_worker = (
@@ -182,7 +182,7 @@ def test_production_constructor_preserves_native_vllm_topology(monkeypatch: pyte
     assert config.actor_infer.worker_cls == module.INFER_WORKER_PATH
     assert config.actor_infer.strategy_args.strategy_name == "vllm"
     assert config.rewards == payload["rewards"]
-    assert config.rdan_response == module.ResponseConfig("rtt_papo_response", 0.5, None, "f" * 64)
+    assert config.rdan_response == module.ResponseConfig("rtt_papo_response", 1.0, None, "f" * 64)
     assert "rdan_response" not in observed["surrogate"]
 
 
@@ -310,7 +310,7 @@ def test_production_constructor_rejects_stock_or_weakened_profiles(
 @pytest.mark.parametrize(
     ("path", "method", "quality"),
     [
-        ("qwen_rtt_papo_response_train.yaml", "rtt_papo_response", 0.5),
+        ("qwen_rtt_papo_response_train.yaml", "rtt_papo_response", 1.0),
         ("qwen_rl_csr_train.yaml", "rl_csr", None),
         ("qwen_rl_aon_train.yaml", "rl_aon", None),
     ],

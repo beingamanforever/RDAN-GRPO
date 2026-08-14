@@ -3334,7 +3334,7 @@ def _no_update_identity_valid(
         and artifact["certificate_id"] == reference["artifact_id"] == _json_sha256(body)
         and artifact["ready"] is True
         and artifact["method"] == "rtt_papo_response"
-        and artifact["quality_weight"] == 0.5
+        and artifact["quality_weight"] == 1.0
         and artifact["config_sha256"] == bundle.program["launch_train_config"]["preflight_sha256"]
         and artifact["reasons"] == []
     )
