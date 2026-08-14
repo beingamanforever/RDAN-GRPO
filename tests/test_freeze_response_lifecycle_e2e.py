@@ -44,10 +44,14 @@ def _transitions():
     return _load("freeze_response_transition_fixtures", ROOT / "tests/test_program_transitions.py")
 
 
+LAUNCH_GATES = ("judge_calibration", "runtime_parity", "vllm_runtime_parity", "no_update")
+
+
 def _write_lifecycle_inputs(tmp_path: Path) -> tuple[object, Path]:
     fixtures = _transitions()
     program_path = fixtures._contract_copy(tmp_path)
     config_root = program_path.parent.parent
+    _reset_launch_gates(fixtures, program_path)
     judge = fixtures._calibration_artifact(config_root)
     fixtures._write(config_root / "artifacts/qwen_judge_calibration.json", judge)
     program = fixtures._read(program_path)
@@ -56,6 +60,15 @@ def _write_lifecycle_inputs(tmp_path: Path) -> tuple[object, Path]:
     vllm = fixtures._vllm_parity_artifact(tmp_path, program["same_backend_configs"]["production"]["sha256"])
     fixtures._write(config_root / "artifacts/qwen_vllm_runtime_parity.json", vllm)
     return fixtures, program_path
+
+
+def _reset_launch_gates(fixtures: object, program_path: Path) -> None:
+    """Return the launch gates to pending so the freeze transition is exercised from a known state."""
+
+    program = fixtures._read(program_path)
+    for gate in LAUNCH_GATES:
+        program["lifecycle_artifacts"][gate] |= {"artifact_id": "pending", "sha256": "pending", "status": "pending"}
+    fixtures._write(program_path, program)
 
 
 @pytest.mark.parametrize(

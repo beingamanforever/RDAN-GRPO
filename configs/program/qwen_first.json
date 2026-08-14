@@ -187,10 +187,10 @@
       "status": "frozen"
     },
     "runtime_parity": {
-      "artifact_id": "pending",
+      "artifact_id": "qwen_runtime_parity_v1",
       "path": "configs/artifacts/qwen_runtime_parity.json",
-      "sha256": "pending",
-      "status": "pending"
+      "sha256": "8c8fa3ae339906bf6395d4c698e423f3ceda2cf8ebdfdf9940ce05bb963c19dd",
+      "status": "frozen"
     },
     "scalar_data": {
       "artifact_id": "qwen_scalar_data_v1",
@@ -205,10 +205,10 @@
       "status": "pending"
     },
     "vllm_runtime_parity": {
-      "artifact_id": "pending",
+      "artifact_id": "qwen_vllm_runtime_parity_v1",
       "path": "configs/artifacts/qwen_vllm_runtime_parity.json",
-      "sha256": "pending",
-      "status": "pending"
+      "sha256": "cfa10c3a15cb8cfe97ef630cdee600d2dd5c1849d35a8bcc11374a31a6201919",
+      "status": "frozen"
     }
   },
   "methods": [
