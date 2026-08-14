@@ -16,6 +16,9 @@ PROCESS_SCORES = (0, 0.5, 1)
 SIGNED_PROCESS_SCORES = (-1.0, 0.0, 1.0)
 # Ordered by preference: the first non-inferior candidate becomes the selected effort.
 EFFORT_CANDIDATES = ("high", "medium", "low")
+# OpenRouter forwards this model on OpenAI's Responses API, which renames the request
+# parameters. Seed is not forwarded upstream at all, so the canary cannot assert it.
+UPSTREAM_PARAMETERS = ("max_output_tokens", "reasoning.effort", "text.format")
 
 
 @dataclass(frozen=True)
@@ -133,8 +136,9 @@ class OpenRouterJudge:
                 self.poll_attempts,
                 self.poll_interval_seconds,
             )
-            parameter_names = sorted(set(body or {}) & set(self.contract["required_parameters"]))
-            expected_names = sorted(self.contract["required_parameters"])
+            parameter_names = sorted(name for name in UPSTREAM_PARAMETERS if _dotted(body, name) is not None)
+            expected_names = sorted(UPSTREAM_PARAMETERS)
+            schema_format = _dotted(body, "text.format")
             direct_models = {
                 self.contract["model"],
                 self.contract["expected_canonical_slug"],
@@ -146,8 +150,11 @@ class OpenRouterJudge:
                 or not isinstance(body, Mapping)
                 or body.get("model") not in direct_models
                 or body.get("stream") is not True
-                or body.get("max_tokens") != self.contract["request"]["max_tokens"]
-                or body.get("reasoning_effort") != "none"
+                or _dotted(body, "max_output_tokens") != self.contract["request"]["max_tokens"]
+                or _dotted(body, "reasoning.effort") != "none"
+                or not isinstance(schema_format, Mapping)
+                or schema_format.get("name") != self.contract["response_format"]["json_schema"]["name"]
+                or schema_format.get("strict") is not True
                 or parameter_names != expected_names
                 or _field(generation, "id") != generation_id
                 or _field(generation, "provider_name") != "OpenAI"
@@ -426,6 +433,16 @@ def _validate_rows(rows: Any, ids: list[Any]) -> dict[int, JsonObject]:
             raise ValueError("judge reason is empty")
         result[row["id"]] = {"score": signed_process_score(row["score"]), "reason": row["reason"]}
     return result
+
+
+def _dotted(value: Any, path: str) -> Any:
+    """Read a dotted key path out of the echoed upstream request body."""
+
+    for name in path.split("."):
+        if not isinstance(value, Mapping):
+            return None
+        value = value.get(name)
+    return value
 
 
 def signed_process_score(score: float) -> float:

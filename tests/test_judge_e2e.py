@@ -199,12 +199,11 @@ def test_redacted_debug_canary_uses_first_stream_chunk_and_retains_only_hashes()
     contract, prompt = _contract()
     upstream = {
         "model": contract["model"],
-        "messages": [{"role": "user", "content": "redacted"}],
+        "input": [{"role": "user", "content": "redacted"}],
         "stream": True,
-        "max_tokens": 2048,
-        "reasoning_effort": "none",
-        "response_format": contract["response_format"],
-        "seed": 240520,
+        "max_output_tokens": 2048,
+        "reasoning": {"effort": "none", "summary": "detailed"},
+        "text": {"format": dict(contract["response_format"]["json_schema"], type="json_schema")},
     }
     first = {
         "id": "gen-debug",
@@ -216,7 +215,7 @@ def test_redacted_debug_canary_uses_first_stream_chunk_and_retains_only_hashes()
         "redacted instruction", "redacted response", [{"id": 1, "text": "redacted"}], 240520
     )
     assert result.valid
-    assert result.evidence["parameter_names"] == ["max_tokens", "reasoning_effort", "response_format", "seed"]
+    assert result.evidence["parameter_names"] == ["max_output_tokens", "reasoning.effort", "text.format"]
     assert "messages" not in result.evidence
     request = client.completions.calls[0]
     assert request["stream"] is True

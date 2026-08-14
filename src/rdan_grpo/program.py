@@ -2997,7 +2997,7 @@ def _validate_judge_calibration(
         and canary["provider"] == "OpenAI"
         and canary["model"]
         in {"openai/gpt-5.6-luna", "openai/gpt-5.6-luna-20260709", "gpt-5.6-luna", "gpt-5.6-luna-20260709"}
-        and canary["parameter_names"] == ["max_tokens", "reasoning_effort", "response_format", "seed"]
+        and canary["parameter_names"] == ["max_output_tokens", "reasoning.effort", "text.format"]
         and _sha256(canary["upstream_body_sha256"])
         and isinstance(canary["generation_metadata_polls"], int)
         and not isinstance(canary["generation_metadata_polls"], bool)

@@ -397,7 +397,7 @@ def _calibration_artifact(config_root: Path) -> dict:
             "generation_id": "gen-debug-1",
             "provider": "OpenAI",
             "model": "openai/gpt-5.6-luna",
-            "parameter_names": ["max_tokens", "reasoning_effort", "response_format", "seed"],
+            "parameter_names": ["max_output_tokens", "reasoning.effort", "text.format"],
             "upstream_body_sha256": "7" * 64,
             "generation_metadata_polls": 1,
             "request_sha256": "8" * 64,
