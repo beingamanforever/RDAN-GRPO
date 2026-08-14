@@ -115,6 +115,8 @@ def _load_workers(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     same.SynchronousHFInferWorker = FakeInferWorker
     compat = types.ModuleType("rdan_grpo.roll_compat")
     compat.install_vllm_sampling_seed_compat = lambda: None
+    response_config = types.ModuleType("rdan_grpo.roll_response_config")
+    response_config.UPDATES_PER_STEP = 2
     for name, module in {
         "roll": types.ModuleType("roll"),
         "roll.distributed": types.ModuleType("roll.distributed"),
@@ -128,6 +130,7 @@ def _load_workers(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
         "rdan_grpo.roll_fsdp_hf_receipt": receipt,
         "rdan_grpo.roll_same_backend": same,
         "rdan_grpo.roll_compat": compat,
+        "rdan_grpo.roll_response_config": response_config,
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
     path = ROOT / "src/rdan_grpo/roll_response_workers.py"
