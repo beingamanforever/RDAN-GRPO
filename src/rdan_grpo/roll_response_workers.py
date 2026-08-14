@@ -360,7 +360,7 @@ class ResponseVLLMInferWorker(InferWorker):
         generation_config["seed"] = _generation_seed(_base_seed(self), step, ordinal, _rank(self))
         request.meta_info["generation_config"] = generation_config
         output = await super().generate(request)
-        output.meta_info["vllm_metrics"] = _vllm_engine_metrics(self.strategy)
+        output.meta_info["vllm_metrics"] = _vllm_engine_metrics(getattr(self, "strategy", None))
         output.non_tensor_batch["generation_id"] = np.asarray(
             [f"gen-{step:06d}-r{_rank(self)}-c{ordinal:04d}-{index:012d}" for index in range(len(output))],
             dtype=object,
