@@ -360,6 +360,7 @@ class ResponseVLLMInferWorker(InferWorker):
         generation_config["seed"] = _generation_seed(_base_seed(self), step, ordinal, _rank(self))
         request.meta_info["generation_config"] = generation_config
         output = await super().generate(request)
+        output.meta_info["vllm_metrics"] = _vllm_engine_metrics(self.strategy)
         output.non_tensor_batch["generation_id"] = np.asarray(
             [f"gen-{step:06d}-r{_rank(self)}-c{ordinal:04d}-{index:012d}" for index in range(len(output))],
             dtype=object,
@@ -367,6 +368,23 @@ class ResponseVLLMInferWorker(InferWorker):
         setattr(self, _VLLM_GENERATION_STEP_ATTR, step)
         setattr(self, _VLLM_GENERATION_ORDINAL_ATTR, ordinal)
         return output
+
+
+def _vllm_engine_metrics(strategy: Any) -> dict[str, Any]:
+    """Return the rollout engine metrics vLLM aggregated since the previous generation.
+
+    A reader failure is recorded by name rather than dropped, so a missing curve is never silent.
+    """
+
+    reader = getattr(strategy, "get_metrics", None)
+    if reader is None:
+        return {"vllm/metrics_available": False}
+    try:
+        metrics = reader() or {}
+    except Exception as error:
+        return {"vllm/metrics_available": False, "vllm/metrics_error": type(error).__name__}
+    values = {name: float(value) for name, value in metrics.items() if isinstance(value, (int, float))}
+    return {"vllm/metrics_available": True, **values}
 
 
 def _vllm_response_receipt(value: Any) -> dict[str, Any]:
