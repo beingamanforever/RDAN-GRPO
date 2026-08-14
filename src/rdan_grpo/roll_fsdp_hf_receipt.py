@@ -15,6 +15,11 @@ from rdan_grpo.fsdp_hf_receipt import (
 )
 
 _RECEIPT_ATTR = "_rdan_fsdp_hf_receipt"
+_TRANSPORT_DTYPES = {
+    "bf16": torch.bfloat16,
+    "fp16": torch.float16,
+    "fp32": torch.float32,
+}
 
 
 def begin_fsdp_hf_receipt(worker: Any, transaction_id: str, infer_rank: int) -> None:
@@ -48,12 +53,13 @@ def run_receipted_fsdp_hf_update(worker: Any, model_update_name: str, update: Ca
     strategy_name = getattr(getattr(infer_config, "strategy_args", None), "strategy_name", None)
     if strategy_name != "hf_infer" or getattr(infer_config, "num_gpus_per_worker", None) != 1:
         raise FSDPHFReceiptError("FSDP2 to HF receipt requires paired HF TP1 inference")
+    transport_dtype = _paired_transport_dtype(updater)
     original = fsdp2_model_update.gather_fsdp2_weights
     if getattr(original, "__rdan_receipt_owner__", None) is not None:
         raise FSDPHFReceiptError("conflicting RTT FSDP2 weight generator wrapper")
 
     def gather_fsdp2_weights(*args: Any, **kwargs: Any) -> Any:
-        receipt.open_actor_stream()
+        receipt.open_actor_stream(transport_dtype)
         return receipt.wrap_actor_batches(original(*args, **kwargs))
 
     gather_fsdp2_weights.__rdan_receipt_owner__ = "rdan-grpo"
@@ -125,3 +131,18 @@ def _worker_rank(worker: Any) -> int:
     if not isinstance(rank, int) or isinstance(rank, bool):
         raise FSDPHFReceiptError("worker DP rank is unavailable")
     return rank
+
+
+def _paired_transport_dtype(updater: Any) -> torch.dtype:
+    actor_dtype = _configured_dtype(getattr(updater, "worker_config", None), "actor")
+    infer_dtype = _configured_dtype(getattr(updater, "infer_worker_config", None), "infer")
+    if actor_dtype != infer_dtype:
+        raise FSDPHFReceiptError("actor and HF inference dtype contracts must match")
+    return _TRANSPORT_DTYPES[actor_dtype]
+
+
+def _configured_dtype(config: Any, side: str) -> str:
+    dtype = getattr(getattr(config, "model_args", None), "dtype", None)
+    if not isinstance(dtype, str) or dtype not in _TRANSPORT_DTYPES:
+        raise FSDPHFReceiptError(f"{side} model dtype contract is missing or unsupported")
+    return dtype

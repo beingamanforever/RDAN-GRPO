@@ -312,7 +312,7 @@ def test_receipt_reset_requires_one_completed_transaction(monkeypatch: pytest.Mo
     with pytest.raises(FSDPHFReceiptError, match="completed"):
         module.reset_fsdp_hf_receipt(worker)
 
-    receipt.open_actor_stream()
+    receipt.open_actor_stream(torch.float32)
     list(receipt.wrap_actor_batches([[("weight", torch.ones(1))]]))
     snapshot = module.reset_fsdp_hf_receipt(worker)
 

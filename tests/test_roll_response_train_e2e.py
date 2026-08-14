@@ -288,6 +288,15 @@ def _rank_receipt(transaction_id: str, side: str, rank: int, items: list[dict[st
         "accelerator_name": "NVIDIA A100-SXM4-80GB",
         "stream_started": True,
         "stream_complete": True,
+        "transport": (
+            {
+                "source_dtypes": ["torch.float32"],
+                "transport_dtype": "torch.float32",
+                "normalization": "cast_to_configured_dtype_before_rtt_serialization",
+            }
+            if side == "actor"
+            else None
+        ),
         "items": items,
         "tensor_count": len(items),
         "total_bytes": sum(item["nbytes"] for item in items),

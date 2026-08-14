@@ -46,6 +46,10 @@ def _weights() -> list[tuple[str, torch.Tensor]]:
     ]
 
 
+def _source_weights() -> list[tuple[str, torch.Tensor]]:
+    return [(name, tensor.float()) for name, tensor in _weights()]
+
+
 def _receipt(
     side: str, rank: int, paired_rank: int, weights: list[tuple[str, torch.Tensor]] | None = None
 ) -> dict[str, Any]:
@@ -57,7 +61,7 @@ def _receipt(
     )
     values = weights or _weights()
     if side == "actor":
-        receipt.open_actor_stream()
+        receipt.open_actor_stream(torch.bfloat16)
         list(receipt.wrap_actor_batches([values]))
     else:
         receipt.finish_infer(values)
@@ -92,7 +96,9 @@ def test_exact_fsdp2_to_hf_receipt_passes() -> None:
     assert artifact["status"] == "receipt_passed"
     assert artifact["optimizer_updates"] == artifact["pipeline_steps"] == 0
     assert artifact["generation_started_before_seal"] is False
-    assert artifact["diagnostic_target"] == "FSDP2 gathered full tensors through paired HF model loader"
+    assert artifact["diagnostic_target"] == (
+        "configured-dtype FSDP2 transport bytes versus final paired HF parameter bytes"
+    )
     assert artifact["model"] == MODEL_IDENTITY
     assert {key: artifact["runtime"][key] for key in GENERATION_SOURCE_IDENTITY} == GENERATION_SOURCE_IDENTITY
     assert artifact["topology"]["pairs"] == [
@@ -100,6 +106,11 @@ def test_exact_fsdp2_to_hf_receipt_passes() -> None:
         {"actor_rank": 1, "infer_rank": 1},
     ]
     assert all(receipt["transaction"] == {"calls": 1, "complete": True} for receipt in artifact["actor_receipts"])
+    assert artifact["actor_receipts"][0]["transport"] == {
+        "source_dtypes": ["torch.bfloat16"],
+        "transport_dtype": "torch.bfloat16",
+        "normalization": "cast_to_configured_dtype_before_rtt_serialization",
+    }
     serialized = json.dumps(artifact, sort_keys=True)
     assert "vllm" not in serialized.lower()
     assert all(field not in serialized for field in ("prompt", "response", "secret", "credential", "environment"))
@@ -171,7 +182,7 @@ def test_order_rank_pair_transaction_and_replica_fail_closed() -> None:
         "actor",
         accelerator_name="NVIDIA A100-SXM4-80GB",
     )
-    incomplete.open_actor_stream()
+    incomplete.open_actor_stream(torch.bfloat16)
     stream = incomplete.wrap_actor_batches([_weights()])
     next(iter(stream))
     assert ("incomplete", None) in _checks(_artifact(actors=[incomplete.snapshot(), _receipt("actor", 1, 1)]))
@@ -184,6 +195,25 @@ def test_order_rank_pair_transaction_and_replica_fail_closed() -> None:
     )
     assert ("actor_cross_replica", "sha256") in _checks(cross_replica)
     assert ("infer_cross_replica", "sha256") in _checks(cross_replica)
+
+
+def test_transport_provenance_is_validated_cross_replica_and_manifest_bound() -> None:
+    baseline = _artifact()
+    actors = [_receipt("actor", 0, 0), _receipt("actor", 1, 1)]
+    for actor in actors:
+        actor["transport"]["source_dtypes"] = ["torch.float32"]
+    normalized = _artifact(actors=actors)
+
+    assert normalized["status"] == "receipt_passed"
+    assert normalized["receipt_manifest_sha256"] != baseline["receipt_manifest_sha256"]
+
+    actors[1]["transport"]["source_dtypes"] = ["torch.bfloat16"]
+    inconsistent = _artifact(actors=actors)
+    assert ("actor_cross_replica", "transport") in _checks(inconsistent)
+
+    actors[0]["transport"]["transport_dtype"] = "torch.float16"
+    invalid = _artifact(actors=actors)
+    assert ("transport_provenance", None) in _checks(invalid)
 
 
 def test_revision_boundary_config_accelerator_and_step_counts_are_gated() -> None:
@@ -200,7 +230,7 @@ def test_revision_boundary_config_accelerator_and_step_counts_are_gated() -> Non
 
 def _load_roll_hook(monkeypatch: pytest.MonkeyPatch) -> tuple[types.ModuleType, types.ModuleType]:
     fake_model_update = types.ModuleType("roll.third_party.fsdp2.model_update")
-    fake_model_update.gather_fsdp2_weights = lambda *args, **kwargs: iter((_weights(),))
+    fake_model_update.gather_fsdp2_weights = lambda *args, **kwargs: iter((_source_weights(),))
     fsdp2_package = types.ModuleType("roll.third_party.fsdp2")
     fsdp2_package.model_update = fake_model_update
     for name, module in {
@@ -218,19 +248,24 @@ def _load_roll_hook(monkeypatch: pytest.MonkeyPatch) -> tuple[types.ModuleType, 
     return hook, fake_model_update
 
 
-def test_real_gather_wrapper_and_final_hf_parameters_form_one_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
-    hook, model_update = _load_roll_hook(monkeypatch)
-    monkeypatch.setattr(torch.cuda, "get_device_name", lambda: "NVIDIA A100-SXM4-80GB")
-    infer_config = SimpleNamespace(
-        strategy_args=SimpleNamespace(strategy_name="hf_infer"),
-        num_gpus_per_worker=1,
-    )
-    updater = SimpleNamespace(
+def _updater(actor_dtype: str | None = "bf16", infer_dtype: str | None = "bf16") -> SimpleNamespace:
+    return SimpleNamespace(
         model_update_name="update",
         is_lora=False,
         is_colocated=True,
-        infer_worker_config=infer_config,
+        worker_config=SimpleNamespace(model_args=SimpleNamespace(dtype=actor_dtype)),
+        infer_worker_config=SimpleNamespace(
+            strategy_args=SimpleNamespace(strategy_name="hf_infer"),
+            num_gpus_per_worker=1,
+            model_args=SimpleNamespace(dtype=infer_dtype),
+        ),
     )
+
+
+def test_real_gather_wrapper_and_final_hf_parameters_form_one_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    hook, model_update = _load_roll_hook(monkeypatch)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda: "NVIDIA A100-SXM4-80GB")
+    updater = _updater()
     actor = SimpleNamespace(
         rank=0,
         strategy=SimpleNamespace(weight_updaters={"update": updater}),
@@ -241,12 +276,15 @@ def test_real_gather_wrapper_and_final_hf_parameters_form_one_transaction(monkey
     def update() -> None:
         batches = list(model_update.gather_fsdp2_weights(object(), 10))
         assert [[name for name, _ in batch] for batch in batches] == [[name for name, _ in _weights()]]
+        assert all(tensor.dtype == torch.bfloat16 for batch in batches for _, tensor in batch)
 
     hook.run_receipted_fsdp_hf_update(actor, "update", update)
     assert model_update.gather_fsdp2_weights is original
     actor_receipt = hook.get_fsdp_actor_receipt(actor)
     assert actor_receipt["stream_complete"] is True
     assert actor_receipt["transaction"]["calls"] == 1
+    assert actor_receipt["transport"]["source_dtypes"] == ["torch.float32"]
+    assert actor_receipt["transport"]["transport_dtype"] == "torch.bfloat16"
 
     infer = SimpleNamespace(
         rank=0,
@@ -265,14 +303,7 @@ def test_real_gather_wrapper_and_final_hf_parameters_form_one_transaction(monkey
 def test_gather_wrapper_restores_rtt_and_rejects_second_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     hook, model_update = _load_roll_hook(monkeypatch)
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda: "NVIDIA A100-SXM4-80GB")
-    updater = SimpleNamespace(
-        model_update_name="update",
-        is_lora=False,
-        is_colocated=True,
-        infer_worker_config=SimpleNamespace(
-            strategy_args=SimpleNamespace(strategy_name="hf_infer"), num_gpus_per_worker=1
-        ),
-    )
+    updater = _updater()
     worker = SimpleNamespace(rank=0, strategy=SimpleNamespace(weight_updaters={"update": updater}))
     hook.begin_fsdp_hf_receipt(worker, TRANSACTION, 0)
     original = model_update.gather_fsdp2_weights
@@ -286,14 +317,61 @@ def test_gather_wrapper_restores_rtt_and_rejects_second_stream(monkeypatch: pyte
     assert model_update.gather_fsdp2_weights is original
 
 
+@pytest.mark.parametrize(
+    ("actor_dtype", "infer_dtype", "message"),
+    [
+        ("float8", "float8", "unsupported"),
+        (None, "bf16", "missing"),
+        ("fp32", "bf16", "must match"),
+    ],
+)
+def test_transport_dtype_contract_fails_closed_and_restores_rtt(
+    monkeypatch: pytest.MonkeyPatch,
+    actor_dtype: str | None,
+    infer_dtype: str | None,
+    message: str,
+) -> None:
+    hook, model_update = _load_roll_hook(monkeypatch)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda: "NVIDIA A100-SXM4-80GB")
+    worker = SimpleNamespace(
+        rank=0,
+        strategy=SimpleNamespace(weight_updaters={"update": _updater(actor_dtype, infer_dtype)}),
+    )
+    hook.begin_fsdp_hf_receipt(worker, TRANSACTION, 0)
+    original = model_update.gather_fsdp2_weights
+
+    with pytest.raises(FSDPHFReceiptError, match=message):
+        hook.run_receipted_fsdp_hf_update(worker, "update", lambda: None)
+
+    assert model_update.gather_fsdp2_weights is original
+
+
 def test_failure_artifact_is_sealed_before_exception(tmp_path: Path) -> None:
     output = tmp_path / "fsdp-hf-receipt.json"
-    artifact = _artifact(update_error="RuntimeError")
+    artifact = _artifact(update_error={"type": "RuntimeError", "code": "unclassified"})
     with pytest.raises(FSDPHFReceiptError, match="model_update"):
         seal_fsdp_hf_receipt(output, artifact)
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "receipt_failed"
     with pytest.raises(FileExistsError):
         seal_fsdp_hf_receipt(output, _artifact())
+
+
+def test_failure_artifact_never_persists_arbitrary_exception_text() -> None:
+    private_text = (
+        "Basic cGFzc3dvcmQ= password=hunter2 https://secret.example.com/private "
+        "2001:db8::1 secret.internal /root/secrets.env"
+    )
+    artifact = _artifact(
+        update_error={
+            "type": "BasicPasswordSecret",
+            "code": "cuda_ipc_failure",
+            "detail": private_text,
+        }
+    )
+
+    assert artifact["failures"][0]["reason"] == {"type": "Exception", "code": "cuda_ipc_failure"}
+    serialized = json.dumps(artifact)
+    assert all(token not in serialized for token in private_text.split())
 
 
 @pytest.mark.skipif(not RTT_ROOT.is_dir(), reason="pinned RTT checkout is unavailable")

@@ -6,7 +6,15 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from rdan_grpo.fsdp_hf_receipt import MODEL, MODEL_REVISION, RTT_REVISION, canonical_sha256, manifest_summary
+from rdan_grpo.fsdp_hf_receipt import (
+    MODEL,
+    MODEL_REVISION,
+    RTT_REVISION,
+    FSDPHFReceiptError,
+    canonical_sha256,
+    manifest_summary,
+    validate_actor_transport,
+)
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY
 
 PHASES = {"initial", "post_update", "resume_initial"}
@@ -117,6 +125,13 @@ def _receipt(value: Mapping[str, Any], side: str) -> dict[str, Any]:
             or not _sha256(item.get("sha256"))
         ):
             raise ResponseReceiptError("response receipt tensor manifest is invalid")
+    try:
+        if side == "actor":
+            validate_actor_transport(receipt.get("transport"), [item["dtype"] for item in items])
+        elif receipt.get("transport") is not None:
+            raise FSDPHFReceiptError("inference receipt must not declare actor transport provenance")
+    except FSDPHFReceiptError as error:
+        raise ResponseReceiptError("response receipt transport provenance is invalid") from error
     if any(receipt.get(key) != value for key, value in manifest_summary(items).items()):
         raise ResponseReceiptError("response receipt tensor summary is invalid")
     return receipt
@@ -140,6 +155,8 @@ def _validate_pairs(actors: list[dict[str, Any]], infers: list[dict[str, Any]]) 
             raise ResponseReceiptError("response receipt actor and inference bytes differ")
     if actors[0]["items"] != actors[1]["items"] or infers[0]["items"] != infers[1]["items"]:
         raise ResponseReceiptError("response receipt replicas differ")
+    if actors[0]["transport"] != actors[1]["transport"]:
+        raise ResponseReceiptError("response receipt actor transport provenance differs")
     return transaction_id
 
 

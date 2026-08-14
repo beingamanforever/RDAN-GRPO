@@ -134,7 +134,7 @@ class SameBackendParityPipeline(BasePipeline):
         transaction_id = uuid.uuid4().hex
         actor_receipts: list[Mapping[str, Any]] = []
         infer_receipts: list[Mapping[str, Any]] = []
-        update_error: str | None = None
+        update_error: dict[str, str] | None = None
         try:
             ray.get(
                 [
@@ -154,7 +154,7 @@ class SameBackendParityPipeline(BasePipeline):
                 [worker.rdan_finish_fsdp_hf_receipt.remote() for worker in self.actor_infer.workers]
             )
         except Exception as error:
-            update_error = type(error).__name__
+            update_error = _classified_exception(error)
             actor_receipts = _available_actor_receipts(self.actor_train.workers)
             infer_receipts = _available_infer_receipts(self.actor_infer.workers)
         artifact = build_fsdp_hf_receipt_artifact(
@@ -421,3 +421,28 @@ def _available_receipts(workers: list[Any], method: str) -> list[Mapping[str, An
         if isinstance(value, Mapping):
             receipts.append(value)
     return receipts
+
+
+def _classified_exception(error: Exception) -> dict[str, str]:
+    cause = getattr(error, "cause", None)
+    if not isinstance(cause, BaseException):
+        cause = error.__cause__ if isinstance(error.__cause__, BaseException) else error
+    message = str(cause).lower()
+    error_type = type(cause).__name__
+    if error_type == "OutOfMemoryError" or ("cuda" in message and "out of memory" in message):
+        code = "cuda_out_of_memory"
+    elif "cuda ipc" in message or "cuda_ipc" in message:
+        code = "cuda_ipc_failure"
+    elif any(token in message for token in ("deserialize", "deserialization", "unpickl", "forkingpickler")):
+        code = "deserialization_failure"
+    elif "shape" in message and any(token in message for token in ("mismatch", "must match", "size")):
+        code = "shape_mismatch"
+    elif "device" in message and any(token in message for token in ("mismatch", "expected", "same device")):
+        code = "device_mismatch"
+    elif "dtype" in message and any(token in message for token in ("mismatch", "expected", "same dtype")):
+        code = "dtype_mismatch"
+    elif any(token in message for token in ("copy_", "copy parameter", "parameter copy")):
+        code = "parameter_copy_failure"
+    else:
+        code = "unclassified"
+    return {"type": error_type, "code": code}

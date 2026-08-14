@@ -97,7 +97,7 @@ def _worker_receipt(side: str, rank: int, transaction: str, weight: int) -> dict
     )
     values = [("model.weight", torch.tensor([weight], dtype=torch.bfloat16))]
     if side == "actor":
-        receipt.open_actor_stream()
+        receipt.open_actor_stream(torch.bfloat16)
         list(receipt.wrap_actor_batches([values]))
     else:
         receipt.finish_infer(values)

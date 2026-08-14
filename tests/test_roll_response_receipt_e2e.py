@@ -48,7 +48,7 @@ def _receipt(side: str, rank: int) -> dict[str, Any]:
         accelerator_name="NVIDIA A100-SXM4-80GB",
     )
     if side == "actor":
-        receipt.open_actor_stream()
+        receipt.open_actor_stream(torch.bfloat16)
         list(receipt.wrap_actor_batches([_weights()]))
     else:
         receipt.finish_infer(_weights())
@@ -124,6 +124,7 @@ def test_production_response_receipt_preserves_exact_dp2_evidence(
     assert len(artifact["receipt_manifest_sha256"]) == 64
     assert artifact["actor_counters"] == _counters(steps)
     assert artifact["actor_receipts"][0]["items"] == artifact["infer_receipts"][0]["items"]
+    assert artifact["actor_receipts"][0]["transport"]["transport_dtype"] == "torch.bfloat16"
 
 
 @pytest.mark.parametrize("field", ["sha256", "name", "dtype", "shape", "nbytes"])
@@ -155,6 +156,25 @@ def test_response_receipt_rejects_rank_counter_and_phase_drift() -> None:
         _build("post_update", 3, 2)
     with pytest.raises(ResponseReceiptError, match="nonzero training state"):
         _build("resume_initial", 0, 2)
+
+
+def test_response_receipt_validates_and_binds_transport_provenance() -> None:
+    baseline = _build()
+    actors = [_receipt("actor", 0), _receipt("actor", 1)]
+    for actor in actors:
+        actor["transport"]["source_dtypes"] = ["torch.float32"]
+    normalized = _build(actors=actors)
+
+    assert normalized["actor_receipts"][0]["transport"]["source_dtypes"] == ["torch.float32"]
+    assert normalized["receipt_manifest_sha256"] != baseline["receipt_manifest_sha256"]
+
+    actors[1]["transport"]["source_dtypes"] = ["torch.bfloat16"]
+    with pytest.raises(ResponseReceiptError, match="transport provenance differs"):
+        _build(actors=actors)
+
+    actors[0]["transport"]["normalization"] = "undisclosed_cast"
+    with pytest.raises(ResponseReceiptError, match="transport provenance is invalid"):
+        _build(actors=actors)
 
 
 @pytest.mark.parametrize(

@@ -310,6 +310,85 @@ def test_receipt_seals_before_generation_and_preserves_zero_state(
         blocked.collect_parity(32, {"num_return_sequences": 8})
 
 
+def test_receipt_failure_persists_only_allowlisted_nested_cause_classification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_live(monkeypatch)
+    pipeline = module.SameBackendParityPipeline.__new__(module.SameBackendParityPipeline)
+    pipeline._receipt_passed = False
+    pipeline._generation_started = False
+    pipeline._optimizer_updates = 0
+    pipeline._pipeline_steps = 0
+    workers = [
+        SimpleNamespace(
+            rdan_begin_fsdp_hf_receipt=FakeRemote(),
+            rdan_get_fsdp_hf_receipt=FakeRemote({}),
+            rdan_finish_fsdp_hf_receipt=FakeRemote({}),
+        )
+        for _ in range(2)
+    ]
+    pipeline.actor_train = SimpleNamespace(workers=workers)
+    pipeline.actor_infer = SimpleNamespace(workers=workers)
+    private_text = (
+        "CUDA IPC failed Basic cGFzc3dvcmQ= password=hunter2 "
+        "https://secret.example.com/private 2001:db8::1 secret.internal /root/secrets.env"
+    )
+    cause = RuntimeError(private_text)
+    error = RuntimeError("RayTaskError(RuntimeError)")
+    error.cause = cause
+
+    def fail_update(step: int) -> None:
+        del step
+        raise error
+
+    pipeline.model_update = fail_update
+    built: dict[str, Any] = {}
+
+    def build(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        del args
+        built.update(kwargs)
+        return {"status": "receipt_failed", "transaction_id": kwargs["transaction_id"]}
+
+    monkeypatch.setattr(module, "build_fsdp_hf_receipt_artifact", build)
+    monkeypatch.setattr(module, "seal_fsdp_hf_receipt", lambda *args: None)
+    pipeline.seal_weight_receipt(
+        tmp_path / "receipt.json",
+        model_identity=SimpleNamespace(),
+        resolved_config_sha256="a" * 64,
+        rtt_revision="b" * 40,
+        rtt_boundary_sha256={},
+        generation_source_identity=GENERATION_SOURCE_IDENTITY,
+    )
+
+    detail = built["update_error"]
+    assert detail == {"type": "RuntimeError", "code": "cuda_ipc_failure"}
+    serialized = json.dumps(detail)
+    assert all(token not in serialized for token in private_text.split())
+
+
+@pytest.mark.parametrize(
+    ("message", "code"),
+    [
+        ("CUDA out of memory", "cuda_out_of_memory"),
+        ("CUDA IPC handle failed", "cuda_ipc_failure"),
+        ("could not deserialize ForkingPickler payload", "deserialization_failure"),
+        ("shape mismatch while loading", "shape_mismatch"),
+        ("expected all tensors on same device", "device_mismatch"),
+        ("dtype mismatch", "dtype_mismatch"),
+        ("parameter copy_ failed", "parameter_copy_failure"),
+        ("unknown transport problem", "unclassified"),
+    ],
+)
+def test_exception_classification_is_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+    message: str,
+    code: str,
+) -> None:
+    module = _load_live(monkeypatch)
+    assert module._classified_exception(RuntimeError(message)) == {"type": "RuntimeError", "code": code}
+
+
 def test_receipt_link_rebuilds_exact_pairing_and_rejects_tampering(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

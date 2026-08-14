@@ -24,6 +24,30 @@ MODEL_IDENTITY_KEYS = {
     "chat_template_sha256",
 }
 EXPECTED_PAIRS = ((0, 0), (1, 1))
+TRANSPORT_NORMALIZATION = "cast_to_configured_dtype_before_rtt_serialization"
+TRANSPORT_KEYS = {"source_dtypes", "transport_dtype", "normalization"}
+SUPPORTED_TRANSPORT_DTYPES = {"torch.bfloat16", "torch.float16", "torch.float32"}
+UPDATE_ERROR_CODES = {
+    "cuda_out_of_memory",
+    "cuda_ipc_failure",
+    "deserialization_failure",
+    "device_mismatch",
+    "dtype_mismatch",
+    "parameter_copy_failure",
+    "shape_mismatch",
+    "unclassified",
+}
+UPDATE_ERROR_TYPES = {
+    "AssertionError",
+    "EOFError",
+    "Exception",
+    "OutOfMemoryError",
+    "RayTaskError",
+    "RuntimeError",
+    "TypeError",
+    "UnpicklingError",
+    "ValueError",
+}
 RTT_BOUNDARY_SHA256 = {
     "roll/configs/worker_config.py": "e9aa9e95a0575dfde86d2c0055eac69653a6b5ae1dd550fd8952f006c20a285d",
     "roll/distributed/executor/model_update_group.py": (
@@ -78,22 +102,38 @@ class FSDPHFStreamReceipt:
         self.stream_started = False
         self.stream_complete = False
         self.calls = 0
+        self._configured_dtype: str | None = None
+        self._source_dtypes: set[str] = set()
 
-    def open_actor_stream(self) -> None:
+    def open_actor_stream(self, transport_dtype: torch.dtype | None = None) -> None:
+        """Open one actor stream with its configured transport dtype."""
+
         if self.side != "actor":
             raise FSDPHFReceiptError("only an actor receipt can wrap gather_fsdp2_weights")
         self.calls += 1
         if self.calls != 1 or self.stream_started or self.stream_complete:
             raise FSDPHFReceiptError("gather_fsdp2_weights must be called exactly once per transaction")
         self.stream_started = True
+        if transport_dtype is not None:
+            configured_dtype = str(transport_dtype)
+            if configured_dtype not in SUPPORTED_TRANSPORT_DTYPES:
+                raise FSDPHFReceiptError("actor transport dtype is unsupported")
+            self._configured_dtype = configured_dtype
 
     def wrap_actor_batches(self, batches: Iterable[Any]) -> Iterable[Any]:
-        """Hash raw batches as the real FSDP2 update consumes them."""
+        """Normalize and hash batches exactly as the real update consumes them."""
 
         for batch in batches:
+            transported: list[tuple[str, torch.Tensor]] = []
             for name, tensor in _named_tensors(batch):
-                self.items.append(tensor_manifest_entry(name, tensor, len(self.items)))
-            yield batch
+                source_dtype = str(tensor.dtype)
+                if source_dtype not in SUPPORTED_TRANSPORT_DTYPES:
+                    raise FSDPHFReceiptError("actor source dtype is unsupported")
+                self._source_dtypes.add(source_dtype)
+                normalized = tensor.to(dtype=_torch_dtype(self._configured_dtype))
+                self.items.append(tensor_manifest_entry(name, normalized, len(self.items)))
+                transported.append((name, normalized))
+            yield transported
         self.stream_complete = True
 
     def finish_infer(self, named_parameters: Iterable[tuple[str, torch.Tensor]]) -> None:
@@ -119,10 +159,42 @@ class FSDPHFStreamReceipt:
             "accelerator_name": self.accelerator_name,
             "stream_started": self.stream_started,
             "stream_complete": self.stream_complete,
+            "transport": self._transport_provenance() if self.side == "actor" else None,
             "items": list(self.items),
             **summary,
             "transaction": {"calls": self.calls, "complete": self.stream_complete and self.calls == 1},
         }
+
+    def _transport_provenance(self) -> dict[str, Any]:
+        return {
+            "source_dtypes": sorted(self._source_dtypes),
+            "transport_dtype": self._configured_dtype,
+            "normalization": TRANSPORT_NORMALIZATION,
+        }
+
+
+def validate_actor_transport(value: Any, item_dtypes: Sequence[str]) -> dict[str, Any]:
+    """Return canonical actor transport provenance or fail closed."""
+
+    if not isinstance(value, Mapping) or set(value) != TRANSPORT_KEYS:
+        raise FSDPHFReceiptError("actor transport provenance is invalid")
+    source_dtypes = value.get("source_dtypes")
+    configured_dtype = value.get("transport_dtype")
+    if (
+        not isinstance(source_dtypes, list)
+        or not source_dtypes
+        or source_dtypes != sorted(set(source_dtypes))
+        or any(dtype not in SUPPORTED_TRANSPORT_DTYPES for dtype in source_dtypes)
+        or configured_dtype not in SUPPORTED_TRANSPORT_DTYPES
+        or value.get("normalization") != TRANSPORT_NORMALIZATION
+        or set(item_dtypes) != {configured_dtype}
+    ):
+        raise FSDPHFReceiptError("actor transport provenance is invalid")
+    return {
+        "source_dtypes": list(source_dtypes),
+        "transport_dtype": configured_dtype,
+        "normalization": TRANSPORT_NORMALIZATION,
+    }
 
 
 def tensor_manifest_entry(name: str, tensor: torch.Tensor, index: int) -> dict[str, Any]:
@@ -201,13 +273,14 @@ def build_fsdp_hf_receipt_artifact(
     optimizer_updates: int = 0,
     pipeline_steps: int = 0,
     generation_started_before_seal: bool = False,
-    update_error: str | None = None,
+    update_error: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build immutable pass or failure evidence for one FSDP2 to HF update."""
 
     actors = [_sanitize_receipt(receipt) for receipt in actor_receipts]
     infers = [_sanitize_receipt(receipt) for receipt in infer_receipts]
-    failures = _receipt_failures(actors, infers, transaction_id)
+    failures = _transport_input_failures(actor_receipts, infer_receipts)
+    failures.extend(_receipt_failures(actors, infers, transaction_id))
     if rtt_revision != RTT_REVISION:
         failures.insert(0, {"check": "rtt_revision"})
     if dict(rtt_boundary_sha256) != RTT_BOUNDARY_SHA256:
@@ -224,7 +297,7 @@ def build_fsdp_hf_receipt_artifact(
     if generation_started_before_seal is not False:
         failures.insert(0, {"check": "generation_started_before_seal"})
     if update_error is not None:
-        failures.insert(0, {"check": "model_update", "reason": update_error})
+        failures.insert(0, {"check": "model_update", "reason": _safe_update_error(update_error)})
     identity, identity_valid = _model_identity(model_identity)
     if not identity_valid:
         failures.insert(0, {"check": "model_identity"})
@@ -233,11 +306,11 @@ def build_fsdp_hf_receipt_artifact(
         "id": "qwen_a100_fsdp2_hf_weight_receipt_v1",
         "status": "receipt_passed" if not failures else "receipt_failed",
         "claim": (
-            "FSDP2 gathered full tensors matched the final named parameters of each paired HF model byte for byte"
+            "FSDP2 tensors transported at the configured dtype matched final paired HF parameters byte for byte"
             if not failures
             else None
         ),
-        "diagnostic_target": "FSDP2 gathered full tensors through paired HF model loader",
+        "diagnostic_target": "configured-dtype FSDP2 transport bytes versus final paired HF parameter bytes",
         "transaction_id": transaction_id,
         "optimizer_updates": optimizer_updates,
         "pipeline_steps": pipeline_steps,
@@ -301,6 +374,8 @@ def _receipt_failures(
             1,
             failures,
         )
+        if actor_by_rank[0].get("transport") != actor_by_rank[1].get("transport"):
+            failures.append({"check": "actor_cross_replica", "field": "transport"})
     if len(infer_by_rank) == len(EXPECTED_PAIRS):
         _compare_items(
             infer_by_rank[0].get("items"),
@@ -343,6 +418,14 @@ def _validate_receipt(receipt: Mapping[str, Any], failures: list[dict[str, Any]]
     if not _well_formed_items(items):
         failures.append({"check": "malformed", "side": side, "rank": rank})
         return
+    transport = receipt.get("transport")
+    if side == "actor":
+        try:
+            validate_actor_transport(transport, [item["dtype"] for item in items])
+        except FSDPHFReceiptError:
+            failures.append({"check": "transport_provenance", "side": side, "rank": rank})
+    elif transport is not None:
+        failures.append({"check": "transport_provenance", "side": side, "rank": rank})
     if receipt.get("stream_started") is not True or receipt.get("stream_complete") is not True:
         failures.append({"check": "incomplete", "side": side, "rank": rank})
     transaction = receipt.get("transaction")
@@ -426,6 +509,7 @@ def _sanitize_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
         "accelerator_name": receipt.get("accelerator_name"),
         "stream_started": receipt.get("stream_started"),
         "stream_complete": receipt.get("stream_complete"),
+        "transport": _sanitize_transport(receipt.get("transport")),
         "items": _sanitize_items(receipt.get("items")),
         "tensor_count": receipt.get("tensor_count"),
         "total_bytes": receipt.get("total_bytes"),
@@ -456,6 +540,62 @@ def _sanitize_items(value: Any) -> Any:
         )
         for item in value
     ]
+
+
+def _sanitize_transport(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return None
+    source_dtypes = value.get("source_dtypes")
+    return {
+        "source_dtypes": (
+            [dtype for dtype in source_dtypes if dtype in SUPPORTED_TRANSPORT_DTYPES]
+            if isinstance(source_dtypes, list)
+            else None
+        ),
+        "transport_dtype": (
+            value.get("transport_dtype") if value.get("transport_dtype") in SUPPORTED_TRANSPORT_DTYPES else None
+        ),
+        "normalization": (TRANSPORT_NORMALIZATION if value.get("normalization") == TRANSPORT_NORMALIZATION else None),
+    }
+
+
+def _transport_input_failures(
+    actors: Sequence[Mapping[str, Any]], infers: Sequence[Mapping[str, Any]]
+) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for receipt in actors:
+        items = receipt.get("items")
+        item_dtypes = (
+            [item.get("dtype") for item in items if isinstance(item, Mapping)] if isinstance(items, list) else []
+        )
+        try:
+            validate_actor_transport(receipt.get("transport"), item_dtypes)
+        except FSDPHFReceiptError:
+            failures.append({"check": "transport_provenance", "side": "actor", "rank": receipt.get("rank")})
+    for receipt in infers:
+        if receipt.get("transport") is not None:
+            failures.append({"check": "transport_provenance", "side": "infer", "rank": receipt.get("rank")})
+    return failures
+
+
+def _safe_update_error(value: Mapping[str, Any]) -> dict[str, str]:
+    error_type = value.get("type")
+    code = value.get("code")
+    return {
+        "type": error_type if error_type in UPDATE_ERROR_TYPES else "Exception",
+        "code": code if code in UPDATE_ERROR_CODES else "unclassified",
+    }
+
+
+def _torch_dtype(value: str | None) -> torch.dtype:
+    dtypes = {
+        "torch.bfloat16": torch.bfloat16,
+        "torch.float16": torch.float16,
+        "torch.float32": torch.float32,
+    }
+    if value not in dtypes:
+        raise FSDPHFReceiptError("actor transport dtype was not configured")
+    return dtypes[value]
 
 
 def _named_tensors(batch: Any) -> Iterable[tuple[str, torch.Tensor]]:
