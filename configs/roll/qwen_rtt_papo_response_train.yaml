@@ -116,5 +116,5 @@ rewards:
 
 rdan_response:
   method: rtt_papo_response
-  quality_weight: 0.5
+  quality_weight: 1.0
   mix_weight: null

@@ -147,7 +147,7 @@
     "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
     "preflight_sha256": "5ac44695e7d5108523164473744dd2fbc8c7a82f0e1d99c7cd3cb474842edc8c",
     "purpose": "500_step_recipe_with_stop_after_step_pilot_gate",
-    "sha256": "0e97ae6ded2a6ae33ef64c9f6e1c02f1f544bd2ad020b09140cbdf751df5941a"
+    "sha256": "865ec70e8eb073fea55dac29252504679bef5f36ba3c09a1e8571064a332d0f1"
   },
   "lifecycle_artifacts": {
     "discriminator_certificate": {
@@ -433,7 +433,7 @@
     },
     "production": {
       "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
-      "sha256": "0e97ae6ded2a6ae33ef64c9f6e1c02f1f544bd2ad020b09140cbdf751df5941a",
+      "sha256": "865ec70e8eb073fea55dac29252504679bef5f36ba3c09a1e8571064a332d0f1",
       "status": "frozen"
     },
     "vllm_diagnostic": {

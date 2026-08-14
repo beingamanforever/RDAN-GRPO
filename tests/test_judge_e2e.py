@@ -102,6 +102,25 @@ def _generation(**overrides: Any) -> dict[str, Any]:
     }
 
 
+@pytest.mark.parametrize(("process", "signed"), [(0, -1.0), (0.5, 0.0), (1, 1.0)])
+def test_strict_judge_maps_process_scores_onto_the_signed_scale(process: float, signed: float) -> None:
+    contract, prompt = _contract()
+    content = '{"rubrics":[{"id":1,"score":%s,"reason":"clear"}]}' % process
+    judge = OpenRouterJudge(contract, prompt, "redacted", client=FakeClient(_response(content), _generation()))
+    result = judge.judge("instruction", "response", [{"id": 1, "text": "quality"}], 240520, "low")
+
+    assert result.valid and result.judgments[1]["score"] == signed
+
+
+def test_strict_judge_rejects_a_process_score_outside_the_three_tiers() -> None:
+    contract, prompt = _contract()
+    content = '{"rubrics":[{"id":1,"score":-1,"reason":"clear"}]}'
+    judge = OpenRouterJudge(contract, prompt, "redacted", client=FakeClient(_response(content), _generation()))
+    result = judge.judge("instruction", "response", [{"id": 1, "text": "quality"}], 240520, "low")
+
+    assert not result.valid and result.evidence["error"] == "ValueError"
+
+
 def test_strict_judge_reuses_client_and_cross_checks_generation_metadata() -> None:
     contract, prompt = _contract()
     client = FakeClient(_response(), _generation())

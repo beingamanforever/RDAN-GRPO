@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 JsonObject = dict[str, Any]
+PROCESS_SCORES = (0, 0.5, 1)
 
 
 @dataclass(frozen=True)
@@ -416,12 +417,18 @@ def _validate_rows(rows: Any, ids: list[Any]) -> dict[int, JsonObject]:
         raise ValueError("judge rubric IDs are invalid")
     result: dict[int, JsonObject] = {}
     for row in rows:
-        if set(row) != {"id", "score", "reason"} or row["score"] not in {-1, 1}:
+        if set(row) != {"id", "score", "reason"} or row["score"] not in PROCESS_SCORES:
             raise ValueError("judge output schema is invalid")
         if not isinstance(row["reason"], str) or not row["reason"]:
             raise ValueError("judge reason is empty")
-        result[row["id"]] = {"score": row["score"], "reason": row["reason"]}
+        result[row["id"]] = {"score": signed_process_score(row["score"]), "reason": row["reason"]}
     return result
+
+
+def signed_process_score(score: float) -> float:
+    """Map a PAPO process score in {0, 0.5, 1} onto the signed rubric scale."""
+
+    return 2.0 * float(score) - 1.0
 
 
 def _invalid(ids: list[Any], effort: str, request_hash: str, error: str) -> JudgeResult:

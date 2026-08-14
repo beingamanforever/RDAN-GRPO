@@ -76,7 +76,7 @@ _JUDGE_SCHEMA = {
                 "required": ["id", "score", "reason"],
                 "properties": {
                     "id": {"type": "integer", "minimum": 1},
-                    "score": {"type": "integer", "enum": [-1, 1]},
+                    "score": {"type": "number", "enum": [0, 0.5, 1]},
                     "reason": {"type": "string", "minLength": 1},
                 },
             },
@@ -631,7 +631,7 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
         judge["prompt"]
         == {
             "path": "rubric_prompt.txt",
-            "sha256": "4ba60be95b42c143ddfa750220d35c0f93a547fcc33e078c73c30cee69512552",
+            "sha256": "59eb67df2073c99daabc8d735cd6f34e75deecbf0e944bfc3fc65e209ad4aa94",
         },
         "judge prompt pin is invalid",
     )

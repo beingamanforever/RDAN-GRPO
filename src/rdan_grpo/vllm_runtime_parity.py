@@ -233,10 +233,9 @@ def _assess(observation: ParityObservation, responses: int) -> dict[str, Any]:
         and torch.equal(observation.response_mask, observation.actor_response_mask)
     ):
         raise VLLMParityError("vLLM and actor token boundaries differ")
-    shape = observation.response_mask.shape
-    if observation.infer_logprobs.shape != shape or observation.actor_logprobs.shape != shape:
+    mask = observation.response_mask[:, 1:].bool()
+    if observation.infer_logprobs.shape != mask.shape or observation.actor_logprobs.shape != mask.shape:
         raise VLLMParityError("vLLM and actor logprobs have different token boundaries")
-    mask = observation.response_mask.bool()
     if not bool(mask.any()) or not bool(torch.isfinite(observation.infer_logprobs[mask]).all()):
         raise VLLMParityError("vLLM sampled logprobs are empty or non-finite")
     if not bool(torch.isfinite(observation.actor_logprobs[mask]).all()):
