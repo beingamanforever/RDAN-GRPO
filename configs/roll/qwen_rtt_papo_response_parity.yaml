@@ -19,4 +19,9 @@ actor_train:
 
 actor_infer:
   worker_cls: rdan_grpo.roll_same_backend_live.ReceiptedSynchronousHFInferWorker
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config:
+      transformer_impl: huggingface
+  max_concurrency: 1
   infer_batch_size: 1

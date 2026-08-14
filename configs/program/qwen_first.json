@@ -429,7 +429,7 @@
   "same_backend_configs": {
     "diagnostic": {
       "path": "configs/roll/qwen_rtt_papo_response_parity.yaml",
-      "sha256": "debdef5089dba32317610a0248a2b491e3ce596ccdc7da76d90c32cddbf6ed3e"
+      "sha256": "2baecc3aac1d6b5b03c7ad28940ba3aa2f9c14a10d705ec0227253a77ac7d30c"
     },
     "production": {
       "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
