@@ -263,6 +263,7 @@ def freeze_control_data(
     _require_raw_path(evidence_path)
     config, config_hash = _load_config(Path(config_path), Path(hir_manifest_path))
     repo_root = _repo_root(Path(config_path))
+    judge_contract = _load_validated_judge_contract(repo_root)
     rows, source_identity = _load_source(source_path, config["source"])
     teacher_identity = _read_identity(teacher_path)
     candidate_identity = _read_identity(candidate_path)
@@ -281,7 +282,7 @@ def freeze_control_data(
     if len(expected) != len(selected) * 9:
         raise ControlDataError("teacher and candidate outputs contain an identical pair")
     evidence, evidence_manifest, dev_split = _load_evidence_manifest(
-        evidence_path, expected, selected, config, repo_root
+        evidence_path, expected, selected, config, repo_root, judge_contract
     )
 
     sft_rows: list[dict[str, Any]] = []
@@ -889,6 +890,7 @@ def _load_evidence_manifest(
     rows: list[_SourceRow],
     config: Mapping[str, Any],
     repo_root: Path,
+    judge_contract: dict[str, Any],
 ) -> tuple[dict[tuple[int, str], dict[str, Any]], dict[str, Any], dict[str, Any]]:
     try:
         manifest_bytes = path.read_bytes()
@@ -914,7 +916,7 @@ def _load_evidence_manifest(
         "leakage_detector",
     }:
         raise ControlDataError("evidence certificate linkage is incomplete")
-    _validate_evidence_certificates(certificates, config, repo_root)
+    _validate_evidence_certificates(certificates, config, repo_root, judge_contract)
     dev_split = _validate_dev_split(manifest["dev_split"], repo_root)
     if set(selected_ids) & set(dev_split["row_ids"]):
         raise ControlDataError("selected control rows leak into the frozen dev split")
@@ -969,7 +971,10 @@ def _load_evidence_manifest(
 
 
 def _validate_evidence_certificates(
-    certificates: Mapping[str, Any], config: Mapping[str, Any], repo_root: Path
+    certificates: Mapping[str, Any],
+    config: Mapping[str, Any],
+    repo_root: Path,
+    judge_contract: dict[str, Any],
 ) -> None:
     for name in ("authoritative_evaluator", "evaluator_implementation"):
         if certificates[name] != config["evidence"][name]:
@@ -992,6 +997,7 @@ def _validate_evidence_certificates(
             judge_artifact,
             {"artifact_id": judge["id"], "sha256": judge["sha256"]},
             repo_root,
+            judge_contract,
         )
     except program_contract.ProgramContractError as error:
         raise ControlDataError(f"judge calibration certificate is invalid: {error}") from error
@@ -1005,6 +1011,21 @@ def _validate_evidence_certificates(
         or _path_identity(_under(repo_root, leakage["path"], "leakage detector"))["sha256"] != leakage["sha256"]
     ):
         raise ControlDataError("leakage detector certificate linkage is forged")
+
+
+def _load_validated_judge_contract(repo_root: Path) -> dict[str, Any]:
+    judge_path = _under(repo_root, "configs/judges/openrouter_luna.json", "judge config")
+    try:
+        judge = program_contract._load_json(judge_path)
+        prompt_reference = judge.get("prompt")
+        if not isinstance(prompt_reference, Mapping) or not isinstance(prompt_reference.get("path"), str):
+            raise program_contract.ProgramContractError("judge prompt reference is invalid")
+        prompt_path = _under(judge_path.parent, prompt_reference["path"], "judge prompt")
+        prompt = prompt_path.read_text(encoding="utf-8")
+        program_contract._validate_judge(judge, prompt)
+    except (OSError, program_contract.ProgramContractError) as error:
+        raise ControlDataError(f"judge contract is invalid: {error}") from error
+    return judge
 
 
 def _validate_dev_split(value: Any, repo_root: Path) -> dict[str, Any]:

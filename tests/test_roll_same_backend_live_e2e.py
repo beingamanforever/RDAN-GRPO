@@ -310,6 +310,130 @@ def test_receipt_seals_before_generation_and_preserves_zero_state(
         blocked.collect_parity(32, {"num_return_sequences": 8})
 
 
+def test_parity_collects_hf_full_surface_before_offload_and_actor_forward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_live(monkeypatch)
+    pipeline = module.SameBackendParityPipeline.__new__(module.SameBackendParityPipeline)
+    pipeline._receipt_passed = True
+    pipeline._generation_started = False
+    pipeline._optimizer_updates = 0
+    pipeline._pipeline_steps = 0
+    pipeline.state = SimpleNamespace(step=0)
+    pipeline.pipeline_config = SimpleNamespace(prompt_length=4)
+    pipeline.dataset = [object()]
+    pipeline.tokenizer = object()
+    events: list[str] = []
+    generated = FakeData(
+        {
+            "input_ids": torch.ones((8, 6), dtype=torch.long),
+            "attention_mask": torch.ones((8, 6), dtype=torch.long),
+            "response_mask": torch.tensor([[0, 0, 1, 1, 1, 1]]).repeat(8, 1),
+            "infer_logprobs": torch.zeros((8, 5)),
+        },
+        {
+            "infer_logprobs_source": "observed_hf_generation",
+            "optimizer_updates": 0,
+            "pipeline_steps": 0,
+        },
+    )
+    infer_full = FakeData({"log_probs": torch.full((8, 5), -0.25)})
+    actor = FakeData(
+        {
+            "log_probs": torch.full((8, 5), -0.5),
+            "actor_input_ids": generated.batch["input_ids"].clone(),
+            "actor_attention_mask": generated.batch["attention_mask"].clone(),
+            "actor_response_mask": generated.batch["response_mask"].clone(),
+        },
+        {"actor_boundary_observed": True},
+    )
+
+    def compute_full(*, data: FakeData, blocking: bool) -> FakeData:
+        assert blocking is True
+        assert data.meta_info["optimizer_updates"] == 0
+        assert torch.equal(data.batch["input_ids"], generated.batch["input_ids"])
+        events.append("infer_full")
+        return infer_full
+
+    pipeline.actor_infer = SimpleNamespace(
+        load_states=lambda **kwargs: events.append("infer_load"),
+        generate=lambda **kwargs: events.append("generate") or generated,
+        compute_full_log_probs=compute_full,
+        offload_states=lambda **kwargs: events.append("infer_offload"),
+    )
+    pipeline.actor_train = SimpleNamespace(
+        offload_states=lambda **kwargs: events.append("actor_offload"),
+        compute_log_probs=lambda *args, **kwargs: events.append("actor_full") or actor,
+    )
+    monkeypatch.setattr(module, "_prompt_batch", lambda *args: FakeData({"input_ids": torch.ones((1, 4))}))
+
+    observation = pipeline.collect_parity(8, {"num_return_sequences": 8})
+
+    assert events == ["actor_offload", "infer_load", "generate", "infer_full", "infer_offload", "actor_full"]
+    assert torch.equal(observation.infer_full_logprobs, infer_full.batch["log_probs"])
+    assert torch.equal(observation.infer_logprobs, generated.batch["infer_logprobs"])
+    assert torch.equal(observation.actor_logprobs, actor.batch["log_probs"])
+    assert observation.optimizer_updates == 0
+
+
+def test_full_surface_computation_failure_is_diagnostic_only_and_offloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_live(monkeypatch)
+    pipeline = module.SameBackendParityPipeline.__new__(module.SameBackendParityPipeline)
+    pipeline._receipt_passed = True
+    pipeline._generation_started = False
+    pipeline._optimizer_updates = 0
+    pipeline._pipeline_steps = 0
+    pipeline.state = SimpleNamespace(step=0)
+    pipeline.pipeline_config = SimpleNamespace(prompt_length=4)
+    pipeline.dataset = [object()]
+    pipeline.tokenizer = object()
+    events: list[str] = []
+    generated = FakeData(
+        {
+            "input_ids": torch.ones((8, 6), dtype=torch.long),
+            "attention_mask": torch.ones((8, 6), dtype=torch.long),
+            "response_mask": torch.tensor([[0, 0, 1, 1, 1, 1]]).repeat(8, 1),
+            "infer_logprobs": torch.zeros((8, 5)),
+        },
+        {"infer_logprobs_source": "observed_hf_generation", "optimizer_updates": 0, "pipeline_steps": 0},
+    )
+    actor = FakeData(
+        {
+            "log_probs": torch.zeros((8, 5)),
+            "actor_input_ids": generated.batch["input_ids"].clone(),
+            "actor_attention_mask": generated.batch["attention_mask"].clone(),
+            "actor_response_mask": generated.batch["response_mask"].clone(),
+        },
+        {"actor_boundary_observed": True},
+    )
+
+    def fail_full(*args: Any, **kwargs: Any) -> FakeData:
+        del args, kwargs
+        events.append("infer_full")
+        raise RuntimeError("private auxiliary failure")
+
+    pipeline.actor_infer = SimpleNamespace(
+        load_states=lambda **kwargs: events.append("infer_load"),
+        generate=lambda **kwargs: events.append("generate") or generated,
+        compute_full_log_probs=fail_full,
+        offload_states=lambda **kwargs: events.append("infer_offload"),
+    )
+    pipeline.actor_train = SimpleNamespace(
+        offload_states=lambda **kwargs: events.append("actor_offload"),
+        compute_log_probs=lambda *args, **kwargs: events.append("actor_full") or actor,
+    )
+    monkeypatch.setattr(module, "_prompt_batch", lambda *args: FakeData({"input_ids": torch.ones((1, 4))}))
+
+    observation = pipeline.collect_parity(8, {"num_return_sequences": 8})
+
+    assert events == ["actor_offload", "infer_load", "generate", "infer_full", "infer_offload", "actor_full"]
+    assert observation.infer_full_logprobs is None
+    assert observation.infer_full_unavailable_reason == "computation_failed"
+    assert torch.equal(observation.infer_logprobs, observation.actor_logprobs)
+
+
 def test_receipt_failure_persists_only_allowlisted_nested_cause_classification(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

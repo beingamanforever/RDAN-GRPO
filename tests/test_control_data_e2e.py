@@ -198,6 +198,8 @@ def _test_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
         "configs/data/hir.json",
         "configs/artifacts/hir_evaluator_certificate.json",
         "configs/artifacts/hir_route_implementation.json",
+        "configs/judges/openrouter_luna.json",
+        "configs/judges/rubric_prompt.txt",
         "src/rdan_grpo/control_data.py",
     ]
     for relative in paths:
@@ -317,17 +319,24 @@ def test_control_data_pipeline_is_resumable_fail_closed_and_byte_frozen(
     repo, config_path, hir_manifest_path = _test_repo(tmp_path)
     judge_validations = []
 
-    def validate_judge(artifact: dict[str, Any], reference: dict[str, Any], _root: Path) -> None:
+    def validate_judge(
+        artifact: dict[str, Any],
+        reference: dict[str, Any],
+        _root: Path,
+        judge_contract: dict[str, Any],
+    ) -> None:
         expected = {
             "schema_version": 1,
             "id": "qwen_judge_calibration_v1",
             "status": "calibrated",
         }
-        if artifact != expected or reference["artifact_id"] != artifact.get("id"):
+        if (
+            artifact != expected
+            or reference["artifact_id"] != artifact.get("id")
+            or judge_contract["generation_metadata_poll"] != {"attempts": 31, "interval_seconds": 1}
+        ):
             raise control_data.program_contract.ProgramContractError("invalid test judge certificate")
         judge_validations.append(reference["sha256"])
-
-    monkeypatch.setattr(control_data.program_contract, "_validate_judge_calibration", validate_judge)
 
     def select_fixture_rows(
         rows: list[control_data._SourceRow],
@@ -724,6 +733,7 @@ def test_control_data_pipeline_is_resumable_fail_closed_and_byte_frozen(
             command=["freeze-test"],
         )
     judge_path.write_bytes(valid_judge_bytes)
+    monkeypatch.setattr(control_data.program_contract, "_validate_judge_calibration", validate_judge)
     missing = tmp_path / "missing-manifest.json"
     missing_value = json.loads(evidence.read_text(encoding="utf-8"))
     missing_value["source"]["row_ids"] = missing_value["source"]["row_ids"][:-1]

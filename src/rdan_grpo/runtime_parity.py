@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import math
 import os
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ MEAN_ABS_ERROR = 1e-4
 MIN_RESPONSES = 32
 MAX_WORST_TOKEN_EVIDENCE = 16
 FAILURE_CODES = {"alignment_failed", "receipt_failed", "receipt_linkage_failed", "threshold_exceeded"}
+FULL_SURFACE_UNAVAILABLE_REASONS = {"computation_failed", "malformed", "missing", "non_finite", "shape_mismatch"}
 TRANSFORMERS_VERSION = "4.57.0"
 GENERATION_SOURCE_SHA256 = {
     "generation_get_logits_processor_sha256": "9f4d47d0e175dccb2c5b463435e39d738f4c8c69b47f8cfd5891c3d8b20b85b5",
@@ -99,6 +101,8 @@ class ParityObservation:
     actor_boundary_observed: bool
     optimizer_updates: int
     worker_ids: tuple[str, ...] | None = None
+    infer_full_logprobs: torch.Tensor | None = None
+    infer_full_unavailable_reason: str | None = None
 
 
 class ParityBoundary(Protocol):
@@ -442,6 +446,10 @@ def _failure_artifact(
     }
     if "worker_aggregates" in diagnostics:
         comparison["worker_aggregates"] = diagnostics["worker_aggregates"]
+    if "surface_comparisons" in diagnostics:
+        comparison["surface_comparisons"] = diagnostics["surface_comparisons"]
+    if "surface_diagnostic" in diagnostics:
+        comparison["surface_diagnostic"] = diagnostics["surface_diagnostic"]
     return {
         "schema_version": 2,
         "id": f"{artifact_id}_failure",
@@ -525,7 +533,7 @@ def _failure_diagnostics(
         "64-255": (positions >= 64) & (positions <= 255),
         "256+": positions >= 256,
     }
-    return {
+    diagnostics = {
         "absolute_error_fractions": {
             "<=1e-3": float((absolute_errors <= 1e-3).double().mean().item()),
             "<=1e-2": float((absolute_errors <= 1e-2).double().mean().item()),
@@ -559,6 +567,63 @@ def _failure_diagnostics(
         },
         "worst_token_evidence": _worst_token_evidence(observation, inferred, actor, mask),
         **_worker_aggregates(observation, absolute_errors, mask),
+    }
+    diagnostics.update(_full_surface_diagnostics(observation, inferred, actor, mask))
+    return diagnostics
+
+
+def _full_surface_diagnostics(
+    observation: ParityObservation,
+    generation: torch.Tensor,
+    actor: torch.Tensor,
+    mask: torch.Tensor,
+) -> dict[str, Any]:
+    if observation.infer_logprobs_source != FSDP2_HF_PROFILE.infer_logprobs_source:
+        return {}
+    infer_full = observation.infer_full_logprobs
+    if not isinstance(infer_full, torch.Tensor):
+        reason = observation.infer_full_unavailable_reason
+        if reason not in FULL_SURFACE_UNAVAILABLE_REASONS:
+            reason = "missing"
+        return _unavailable_surface_diagnostic(reason)
+    try:
+        infer_full = infer_full.detach().float().cpu()
+        if infer_full.shape != mask.shape:
+            return _unavailable_surface_diagnostic("shape_mismatch")
+        if not bool(torch.isfinite(infer_full[mask]).all()):
+            return _unavailable_surface_diagnostic("non_finite")
+        comparisons = {
+            "generation_vs_infer_full": _aggregate_surface_comparison(generation, infer_full, mask),
+            "infer_full_vs_actor_full": _aggregate_surface_comparison(infer_full, actor, mask),
+        }
+        if not all(math.isfinite(value) for comparison in comparisons.values() for value in comparison.values()):
+            return _unavailable_surface_diagnostic("non_finite")
+    except Exception:
+        return _unavailable_surface_diagnostic("malformed")
+    return {"surface_diagnostic": {"status": "available"}, "surface_comparisons": comparisons}
+
+
+def _unavailable_surface_diagnostic(reason: str) -> dict[str, dict[str, str]]:
+    return {"surface_diagnostic": {"status": "diagnostic_unavailable", "reason": reason}}
+
+
+def _aggregate_surface_comparison(
+    source: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor,
+) -> dict[str, int | float]:
+    source_values = source[mask].double()
+    target_values = target[mask].double()
+    signed_errors = source_values - target_values
+    absolute_errors = signed_errors.abs()
+    return {
+        "compared_tokens": int(absolute_errors.numel()),
+        "source_mean_logprob": float(source_values.mean().item()),
+        "target_mean_logprob": float(target_values.mean().item()),
+        "signed_mean_difference": float(signed_errors.mean().item()),
+        "rmse": float(signed_errors.square().mean().sqrt().item()),
+        "max_abs_error": float(absolute_errors.max().item()),
+        "mean_abs_error": float(absolute_errors.mean().item()),
     }
 
 

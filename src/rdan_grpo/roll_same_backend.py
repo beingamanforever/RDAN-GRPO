@@ -110,6 +110,37 @@ class SynchronousHFInferWorker(Worker):
             if data.meta_info.get("is_offload_states", True):
                 self.offload_states()
 
+    @register(dispatch_mode=Dispatch.DP_MP_COMPUTE)
+    def compute_full_log_probs(self, data: DataProto) -> DataProto:
+        """Compute full-sequence HF log-probabilities without changing state."""
+
+        _require_zero_update_markers(data, "HF inference observation")
+        _require_sync_hf_worker(self)
+        data = self.strategy.get_data_input(data)
+        data = data.to(current_platform.device_type)
+        data.meta_info["micro_batch_size"] = self.worker_config.infer_batch_size
+        try:
+            with torch.no_grad():
+                results = self.strategy.forward_step(batch=data, forward_func=self._forward_func_full_log_probs)
+            log_probs = None if results is None else results.get("log_probs")
+            if not isinstance(log_probs, torch.Tensor):
+                raise RuntimeError("HF inference observation is missing full-sequence log-probabilities")
+            return DataProto.from_dict(tensors={"log_probs": log_probs}).to("cpu")
+        finally:
+            data.to("cpu")
+
+    def _forward_func_full_log_probs(
+        self,
+        data: DataProto,
+        output_tensor: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        log_probs = self.strategy.op_compute_log_probs(
+            logits=output_tensor,
+            input_ids=data.batch["input_ids"],
+            attention_mask=data.batch["response_mask"],
+        )
+        return log_probs, {"log_probs": log_probs.clone().detach()}
+
     def generate_request(self, data: DataProto) -> DataProto:
         """Reject the asynchronous request path."""
 
@@ -489,11 +520,15 @@ def _trim_logprobs(
 
 
 def _require_zero_update_state(worker: Any, data: DataProto) -> None:
+    _require_zero_update_markers(data, "actor observation")
+    _require_empty_optimizer(worker)
+
+
+def _require_zero_update_markers(data: DataProto, label: str) -> None:
     for name in ("optimizer_updates", "pipeline_steps"):
         value = data.meta_info.get(name)
         if isinstance(value, bool) or not isinstance(value, int) or value != 0:
-            raise RuntimeError(f"actor observation requires {name}=0")
-    _require_empty_optimizer(worker)
+            raise RuntimeError(f"{label} requires {name}=0")
 
 
 def _require_empty_optimizer(worker: Any) -> None:

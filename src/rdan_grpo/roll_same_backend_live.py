@@ -200,17 +200,23 @@ class SameBackendParityPipeline(BasePipeline):
         self._generation_started = True
         self.actor_train.offload_states(blocking=True)
         self.actor_infer.load_states(blocking=True)
+        infer_full_logprobs: torch.Tensor | None = None
+        infer_full_unavailable_reason: str | None = None
         try:
             generated = self.actor_infer.generate(data=data, blocking=True)
+            if len(generated) != responses:
+                raise RuntimeError(f"same-backend parity expected {responses} responses, received {len(generated)}")
+            if generated.meta_info.get("infer_logprobs_source") != "observed_hf_generation":
+                raise RuntimeError("same-backend generation did not expose observed HF logprobs")
+            required = {"input_ids", "attention_mask", "response_mask", "infer_logprobs"}
+            if generated.batch is None or set(generated.batch.keys()) < required:
+                raise RuntimeError("same-backend generation is missing exact postprocessed boundaries")
+            infer_full_logprobs, infer_full_unavailable_reason = _collect_full_inference_surface(
+                self.actor_infer,
+                generated,
+            )
         finally:
             self.actor_infer.offload_states(blocking=True)
-        if len(generated) != responses:
-            raise RuntimeError(f"same-backend parity expected {responses} responses, received {len(generated)}")
-        if generated.meta_info.get("infer_logprobs_source") != "observed_hf_generation":
-            raise RuntimeError("same-backend generation did not expose observed HF logprobs")
-        required = {"input_ids", "attention_mask", "response_mask", "infer_logprobs"}
-        if generated.batch is None or set(generated.batch.keys()) < required:
-            raise RuntimeError("same-backend generation is missing exact postprocessed boundaries")
         recomputed = self.actor_train.compute_log_probs(generated.clone(), blocking=True)
         actor_fields = {
             "log_probs",
@@ -237,7 +243,23 @@ class SameBackendParityPipeline(BasePipeline):
             actor_train_recomputed=True,
             actor_boundary_observed=True,
             optimizer_updates=0,
+            infer_full_logprobs=infer_full_logprobs,
+            infer_full_unavailable_reason=infer_full_unavailable_reason,
         )
+
+
+def _collect_full_inference_surface(actor_infer: Any, generated: DataProto) -> tuple[torch.Tensor | None, str | None]:
+    try:
+        observed = actor_infer.compute_full_log_probs(data=generated.clone(), blocking=True)
+    except Exception:
+        return None, "computation_failed"
+    try:
+        batch = getattr(observed, "batch", None)
+        if batch is None or "log_probs" not in batch or not isinstance(batch["log_probs"], torch.Tensor):
+            return None, "malformed"
+        return batch["log_probs"].clone(), None
+    except Exception:
+        return None, "malformed"
 
 
 def resolve_same_backend_workers(config: Any) -> None:

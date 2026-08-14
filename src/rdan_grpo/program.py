@@ -594,6 +594,7 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
             "catalog_snapshot",
             "seed_source",
             "request",
+            "generation_metadata_poll",
             "calibration",
             "load_plan",
             "routing",
@@ -672,6 +673,10 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
             "include_all_soft_rubrics": True,
         },
         "judge request contract is invalid",
+    )
+    _expect(
+        judge["generation_metadata_poll"] == {"attempts": 31, "interval_seconds": 1},
+        "judge generation metadata poll contract is invalid",
     )
     _expect(
         judge["calibration"]
@@ -2511,6 +2516,7 @@ def _validate_lifecycle_artifacts(bundle: ProgramBundle) -> None:
             bundle.lifecycle_artifacts["judge_calibration"],
             refs["judge_calibration"],
             bundle.repo_root,
+            bundle.judge,
         )
     if frozen["runtime_parity"]:
         _validate_runtime_parity(
@@ -2657,7 +2663,12 @@ def _validate_scalar_data(data: JsonObject, dev_value: Any, repo_root: Path) -> 
     )
 
 
-def _validate_judge_calibration(artifact: JsonObject, reference: JsonObject, repo_root: Path) -> None:
+def _validate_judge_calibration(
+    artifact: JsonObject,
+    reference: JsonObject,
+    repo_root: Path,
+    judge: JsonObject,
+) -> None:
     _exact_keys(
         artifact,
         {
@@ -2962,7 +2973,8 @@ def _validate_judge_calibration(artifact: JsonObject, reference: JsonObject, rep
         and canary["parameter_names"] == ["max_tokens", "reasoning_effort", "response_format", "seed"]
         and _sha256(canary["upstream_body_sha256"])
         and isinstance(canary["generation_metadata_polls"], int)
-        and 1 <= canary["generation_metadata_polls"] <= 5
+        and not isinstance(canary["generation_metadata_polls"], bool)
+        and 1 <= canary["generation_metadata_polls"] <= judge["generation_metadata_poll"]["attempts"]
         and _sha256(canary["request_sha256"])
         and canary["valid"] is True
         and outcomes["calls"] == len(valid_rows) == 200

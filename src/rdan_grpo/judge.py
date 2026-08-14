@@ -76,6 +76,7 @@ class OpenRouterJudge:
         self.prompt = prompt
         self.client = client
         self.sleep = sleep
+        self.poll_attempts, self.poll_interval_seconds = _generation_poll_contract(contract)
 
     def judge(
         self,
@@ -121,7 +122,13 @@ class OpenRouterJudge:
             first = chunks[0] if chunks else None
             body = _field(_field(first, "debug"), "echo_upstream_body")
             generation_id = _field(first, "id")
-            generation, metadata_polls = _generation_data(self.client, generation_id, self.sleep)
+            generation, metadata_polls = _generation_data(
+                self.client,
+                generation_id,
+                self.sleep,
+                self.poll_attempts,
+                self.poll_interval_seconds,
+            )
             parameter_names = sorted(set(body or {}) & set(self.contract["required_parameters"]))
             expected_names = sorted(self.contract["required_parameters"])
             direct_models = {
@@ -185,7 +192,13 @@ class OpenRouterJudge:
         selected = _selected_endpoint(metadata)
         usage = _field(completion, "usage")
         try:
-            generation, metadata_polls = _generation_data(self.client, generation_id, self.sleep)
+            generation, metadata_polls = _generation_data(
+                self.client,
+                generation_id,
+                self.sleep,
+                self.poll_attempts,
+                self.poll_interval_seconds,
+            )
             generation_error = None
         except Exception as exc:
             generation = {}
@@ -325,16 +338,35 @@ def select_reasoning_effort(
     }
 
 
-def _generation_data(client: Any, generation_id: Any, sleep: Callable[[float], None]) -> tuple[Mapping[str, Any], int]:
+def _generation_poll_contract(contract: Mapping[str, Any]) -> tuple[int, float]:
+    poll = contract.get("generation_metadata_poll")
+    if not isinstance(poll, Mapping) or set(poll) != {"attempts", "interval_seconds"}:
+        raise ValueError("generation metadata poll keys are invalid")
+    attempts = poll["attempts"]
+    interval = poll["interval_seconds"]
+    if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts <= 0:
+        raise ValueError("generation metadata poll attempts are invalid")
+    if not isinstance(interval, (int, float)) or isinstance(interval, bool) or interval <= 0:
+        raise ValueError("generation metadata poll interval is invalid")
+    return attempts, float(interval)
+
+
+def _generation_data(
+    client: Any,
+    generation_id: Any,
+    sleep: Callable[[float], None],
+    attempts: int,
+    interval_seconds: float,
+) -> tuple[Mapping[str, Any], int]:
     if not isinstance(generation_id, str) or not generation_id:
         raise ValueError("generation ID is absent")
-    for attempt, delay in enumerate((0.0, 0.25, 0.5, 1.0, 2.0), start=1):
-        if delay:
-            sleep(delay)
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            sleep(interval_seconds)
         try:
             payload = client.get("/generation", cast_to=dict, options={"params": {"id": generation_id}})
         except Exception as exc:
-            if getattr(exc, "status_code", None) == 404 and attempt < 5:
+            if getattr(exc, "status_code", None) == 404 and attempt < attempts:
                 continue
             setattr(exc, "metadata_polls", attempt)
             raise

@@ -60,6 +60,12 @@ class FakeClient:
         return {"data": self.generation}
 
 
+class HttpError(RuntimeError):
+    def __init__(self, status_code: int) -> None:
+        super().__init__(str(status_code))
+        self.status_code = status_code
+
+
 def _response(content: str | None = None) -> SimpleNamespace:
     return SimpleNamespace(
         id="gen-1",
@@ -179,38 +185,60 @@ def test_redacted_debug_canary_uses_first_stream_chunk_and_retains_only_hashes()
     assert request["extra_body"]["debug"] == {"echo_upstream_body": True}
 
 
-def test_generation_metadata_polls_only_404_without_repeating_completion() -> None:
-    class HttpError(RuntimeError):
-        def __init__(self, status_code: int) -> None:
-            super().__init__(str(status_code))
-            self.status_code = status_code
-
+def test_generation_metadata_poll_succeeds_after_delayed_404s_without_repeating_completion() -> None:
     contract, prompt = _contract()
     delays: list[float] = []
-    client = FakeClient(_response(), [HttpError(404), HttpError(404), _generation()])
+    client = FakeClient(_response(), [HttpError(404) for _ in range(5)] + [_generation()])
     result = OpenRouterJudge(contract, prompt, "redacted", client=client, sleep=delays.append).judge(
         "instruction", "response", [{"id": 1, "text": "quality"}], 240520, "none"
     )
-    assert result.valid and result.evidence["generation_metadata_polls"] == 3
+    assert result.valid and result.evidence["generation_metadata_polls"] == 6
     assert len(client.completions.calls) == 1
-    assert len(client.get_calls) == 3
-    assert delays == [0.25, 0.5]
+    assert len(client.get_calls) == 6
+    assert delays == [1.0] * 5
 
-    unauthorized = FakeClient(_response(), [HttpError(401), _generation()])
-    result = OpenRouterJudge(contract, prompt, "redacted", client=unauthorized, sleep=delays.append).judge(
+
+def test_generation_metadata_poll_fails_closed_on_non_404_without_retry() -> None:
+    contract, prompt = _contract()
+    client = FakeClient(_response(), [HttpError(401), _generation()])
+    result = OpenRouterJudge(contract, prompt, "redacted", client=client).judge(
         "instruction", "response", [{"id": 1, "text": "quality"}], 240520, "none"
     )
     assert not result.valid and result.evidence["generation_metadata_polls"] == 1
-    assert len(unauthorized.completions.calls) == len(unauthorized.get_calls) == 1
+    assert len(client.completions.calls) == len(client.get_calls) == 1
 
-    missing = FakeClient(_response(), [HttpError(404) for _ in range(5)])
-    bounded_delays: list[float] = []
-    result = OpenRouterJudge(contract, prompt, "redacted", client=missing, sleep=bounded_delays.append).judge(
+
+def test_generation_metadata_poll_fails_closed_after_configured_attempts() -> None:
+    contract, prompt = _contract()
+    client = FakeClient(_response(), [HttpError(404) for _ in range(31)])
+    delays: list[float] = []
+    result = OpenRouterJudge(contract, prompt, "redacted", client=client, sleep=delays.append).judge(
         "instruction", "response", [{"id": 1, "text": "quality"}], 240520, "none"
     )
-    assert not result.valid and result.evidence["generation_metadata_polls"] == 5
-    assert len(missing.completions.calls) == 1 and len(missing.get_calls) == 5
-    assert bounded_delays == [0.25, 0.5, 1.0, 2.0]
+    assert not result.valid and result.evidence["generation_metadata_polls"] == 31
+    assert len(client.completions.calls) == 1 and len(client.get_calls) == 31
+    assert delays == [1.0] * 30
+
+
+@pytest.mark.parametrize(
+    ("poll_contract", "match"),
+    [
+        ({"attempts": 0, "interval_seconds": 1}, "attempts"),
+        ({"attempts": True, "interval_seconds": 1}, "attempts"),
+        ({"attempts": 31, "interval_seconds": 0}, "interval"),
+        ({"attempts": 31, "interval_seconds": True}, "interval"),
+        ({"attempts": 31, "interval_seconds": 1, "extra": 1}, "keys"),
+    ],
+)
+def test_generation_metadata_poll_rejects_invalid_contract(
+    poll_contract: dict[str, Any],
+    match: str,
+) -> None:
+    contract, prompt = _contract()
+    contract["generation_metadata_poll"] = poll_contract
+
+    with pytest.raises(ValueError, match=match):
+        OpenRouterJudge(contract, prompt, "redacted", client=FakeClient())
 
 
 def test_client_constructor_disables_retries_and_enables_router_metadata(monkeypatch: pytest.MonkeyPatch) -> None:

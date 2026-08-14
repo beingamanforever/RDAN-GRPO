@@ -48,6 +48,10 @@
     "one_call_per_response": true,
     "include_all_soft_rubrics": true
   },
+  "generation_metadata_poll": {
+    "attempts": 31,
+    "interval_seconds": 1
+  },
   "calibration": {
     "reasoning_effort_candidates": [
       "none",

@@ -623,6 +623,25 @@ def test_program_rejects_hydra_parent_recipe_drift(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "poll_contract",
+    [
+        {"attempts": 30, "interval_seconds": 1},
+        {"attempts": 31, "interval_seconds": 2},
+        {"attempts": True, "interval_seconds": 1},
+    ],
+)
+def test_program_rejects_generation_metadata_poll_drift(tmp_path: Path, poll_contract: dict[str, Any]) -> None:
+    program_path = _contract_copy(tmp_path)
+    judge_path = program_path.parent.parent / "judges/openrouter_luna.json"
+    judge = _read(judge_path)
+    judge["generation_metadata_poll"] = poll_contract
+    _write(judge_path, judge)
+
+    with pytest.raises(ProgramContractError, match="generation metadata poll"):
+        check_program(program_path)
+
+
+@pytest.mark.parametrize(
     ("keys", "value"),
     [
         (("host", "minimum_ram_gib"), 191),
@@ -813,6 +832,16 @@ def test_frozen_judge_calibration_and_runtime_parity_are_byte_checked(tmp_path: 
 
     parity_path.write_text(parity_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
     with pytest.raises(ProgramContractError, match="runtime_parity hash mismatch"):
+        check_program(program_path)
+
+
+def test_judge_calibration_canary_poll_count_is_bound_to_judge_contract(tmp_path: Path) -> None:
+    program_path = _contract_copy(tmp_path)
+    artifact = _calibration_artifact(program_path.parent.parent)
+    artifact["debug_canary"]["generation_metadata_polls"] = 32
+    _freeze_lifecycle(program_path, "judge_calibration", artifact)
+
+    with pytest.raises(ProgramContractError, match="calibration artifact is invalid"):
         check_program(program_path)
 
 

@@ -13,7 +13,7 @@ from typing import Any, Mapping
 import pytest
 import torch
 
-from rdan_grpo import program
+from rdan_grpo import program, runtime_parity
 from rdan_grpo.runtime_parity import (
     FSDP2_HF_PROFILE,
     GENERATION_SOURCE_SHA256,
@@ -231,7 +231,11 @@ def test_same_backend_profile_is_explicit_and_old_profile_is_unchanged(
         tokenizer_files_sha256="2" * 64,
         chat_template_sha256="3" * 64,
     )
-    observation = replace(_observation(), infer_logprobs_source="observed_hf_generation")
+    observation = replace(
+        _observation(),
+        infer_logprobs_source="observed_hf_generation",
+        infer_full_logprobs=_observation().actor_logprobs.clone(),
+    )
     boundary = _FaithfulRollBoundary(observation)
     parity_config_sha256 = hashlib.sha256(
         (ROOT / "configs/roll/qwen_scalar_same_backend_parity.yaml").read_bytes()
@@ -419,6 +423,96 @@ def test_threshold_failure_emits_aggregate_alignment_diagnostics() -> None:
     assert all(
         field not in message for field in ("input_ids", "token_ids", "prompt", "infer_logprobs", "actor_logprobs")
     )
+
+
+def test_same_backend_threshold_selects_generation_vs_actor_and_reports_full_surface() -> None:
+    observation = _observation()
+    mask = observation.response_mask[:, 1:].bool()
+    infer_full = torch.full_like(observation.actor_logprobs, -7.0)
+    passing = replace(
+        observation,
+        infer_logprobs_source="observed_hf_generation",
+        infer_full_logprobs=infer_full,
+    )
+
+    evidence = runtime_parity._assess(passing, FSDP2_HF_PROFILE)
+
+    assert evidence["max_abs_error"] == pytest.approx(5e-5)
+    assert evidence["mean_abs_error"] == pytest.approx(5e-5)
+
+    failing_actor = observation.actor_logprobs.clone()
+    failing_actor[mask] = 1.0
+    failing = replace(
+        passing,
+        actor_logprobs=failing_actor,
+        infer_full_logprobs=failing_actor.clone(),
+    )
+    with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
+        runtime_parity._assess(failing, FSDP2_HF_PROFILE)
+
+    diagnostics = raised.value.diagnostics
+    assert diagnostics is not None
+    surfaces = diagnostics["surface_comparisons"]
+    assert surfaces["generation_vs_infer_full"]["mean_abs_error"] == pytest.approx(1.0)
+    assert surfaces["infer_full_vs_actor_full"]["mean_abs_error"] == 0.0
+    assert diagnostics["mean_abs_error"] == pytest.approx(1.0)
+    assert diagnostics["thresholds"] == {
+        "max_abs_error_at_most": MAX_ABS_ERROR,
+        "mean_abs_error_at_most": MEAN_ABS_ERROR,
+    }
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        (None, "missing"),
+        (torch.zeros((32, 6)), "shape_mismatch"),
+        (torch.full((32, 7), float("nan")), "non_finite"),
+    ],
+)
+def test_same_backend_full_surface_is_diagnostic_only_when_unavailable(
+    value: torch.Tensor | None,
+    reason: str,
+) -> None:
+    observation = replace(
+        _observation(),
+        infer_logprobs_source="observed_hf_generation",
+        infer_full_logprobs=value,
+    )
+
+    evidence = runtime_parity._assess(observation, FSDP2_HF_PROFILE)
+
+    assert evidence["max_abs_error"] == pytest.approx(5e-5)
+    failing_actor = observation.actor_logprobs.clone()
+    failing_actor[observation.response_mask[:, 1:].bool()] = 1.0
+    with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
+        runtime_parity._assess(replace(observation, actor_logprobs=failing_actor), FSDP2_HF_PROFILE)
+
+    assert raised.value.diagnostics is not None
+    assert raised.value.diagnostics["surface_diagnostic"] == {
+        "status": "diagnostic_unavailable",
+        "reason": reason,
+    }
+    assert "surface_comparisons" not in raised.value.diagnostics
+
+
+def test_same_backend_computation_failure_reason_is_allowlisted() -> None:
+    observation = replace(
+        _observation(),
+        infer_logprobs_source="observed_hf_generation",
+        infer_full_unavailable_reason="computation_failed",
+    )
+    failing_actor = observation.actor_logprobs.clone()
+    failing_actor[observation.response_mask[:, 1:].bool()] = 1.0
+
+    with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
+        runtime_parity._assess(replace(observation, actor_logprobs=failing_actor), FSDP2_HF_PROFILE)
+
+    assert raised.value.diagnostics is not None
+    assert raised.value.diagnostics["surface_diagnostic"] == {
+        "status": "diagnostic_unavailable",
+        "reason": "computation_failed",
+    }
 
 
 def test_failure_artifact_is_atomic_bounded_and_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -327,6 +327,53 @@ def test_standard_hf_state_moves_without_importing_trl_and_is_inherited(
     assert "trl" not in sys.modules
 
 
+def test_hf_full_logprob_observation_uses_exact_zero_update_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module(monkeypatch)
+    model = FakeModel(torch.ones(2, 4, dtype=torch.long), [])
+    worker = _infer_worker(module, model)
+    observed: dict[str, Any] = {}
+
+    def compute(
+        logits: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        observed.update(logits=logits, input_ids=input_ids, attention_mask=attention_mask)
+        return torch.full((input_ids.shape[0], input_ids.shape[1] - 1), -0.75)
+
+    def forward(batch: FakeData, forward_func: Any) -> dict[str, torch.Tensor]:
+        _, results = forward_func(batch, torch.ones((2, 4, 32)))
+        return results
+
+    worker.strategy = SimpleNamespace(
+        model=model,
+        get_data_input=lambda data: data,
+        forward_step=forward,
+        op_compute_log_probs=compute,
+    )
+    data = FakeData(
+        {
+            "input_ids": torch.tensor([[11, 12, 31, 2], [21, 22, 41, 2]]),
+            "attention_mask": torch.ones((2, 4), dtype=torch.long),
+            "response_mask": torch.tensor([[0, 0, 1, 1], [0, 0, 1, 1]]),
+        },
+        {"optimizer_updates": 0, "pipeline_steps": 0},
+    )
+
+    output = worker.compute_full_log_probs(data)
+
+    assert torch.equal(observed["input_ids"], data.batch["input_ids"])
+    assert torch.equal(observed["attention_mask"], data.batch["response_mask"])
+    assert torch.equal(output.batch["log_probs"], torch.full((2, 3), -0.75))
+    assert data.moves == ["cuda", "cpu"]
+    assert data.meta_info["micro_batch_size"] == 2
+    data.meta_info["optimizer_updates"] = 1
+    with pytest.raises(RuntimeError, match="optimizer_updates=0"):
+        worker.compute_full_log_probs(data)
+
+
 def test_standard_hf_state_moves_follow_exact_device_map(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_module(monkeypatch)
 
