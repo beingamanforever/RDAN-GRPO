@@ -65,6 +65,8 @@ def _load_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     providers.default_actor_model_provider = object()
     actor = types.ModuleType("roll.pipeline.rlvr.actor_worker")
     actor.ActorWorker = FakeActorWorker
+    base_worker = types.ModuleType("roll.pipeline.base_worker")
+    base_worker.InferWorker = FakeWorker
     platform = types.ModuleType("roll.platforms")
     platform.current_platform = SimpleNamespace(device_type="cuda", init=lambda: None, empty_cache=lambda: None)
 
@@ -99,6 +101,7 @@ def _load_module(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
         "roll.models": types.ModuleType("roll.models"),
         "roll.models.model_providers": providers,
         "roll.pipeline": types.ModuleType("roll.pipeline"),
+        "roll.pipeline.base_worker": base_worker,
         "roll.pipeline.rlvr": types.ModuleType("roll.pipeline.rlvr"),
         "roll.pipeline.rlvr.actor_worker": actor,
         "roll.platforms": platform,

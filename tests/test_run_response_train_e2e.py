@@ -49,6 +49,8 @@ def test_cli_exposes_separate_one_step_and_fresh_resume_modes(monkeypatch: pytes
         "program.json",
         "--runtime-parity",
         "parity.json",
+        "--vllm-runtime-parity",
+        "vllm-parity.json",
         "--readiness-receipt",
         "readiness.json",
         "--readiness-bootstrap",
@@ -98,6 +100,7 @@ def test_cli_requires_response_readiness_receipt(monkeypatch: pytest.MonkeyPatch
         "--evaluator-rows": "rows.jsonl",
         "--program": "program.json",
         "--runtime-parity": "parity.json",
+        "--vllm-runtime-parity": "vllm-parity.json",
         "--readiness-bootstrap": "bootstrap.json",
         "--checkpoint-root": "checkpoints",
         "--run-dir": "run",
@@ -151,7 +154,15 @@ def test_valid_response_readiness_passes_before_pipeline_construction(
     module = _module()
     paths = [
         tmp_path / name
-        for name in ("program.json", "readiness.json", "bootstrap.json", "judge.json", "parity.json", "no-update.json")
+        for name in (
+            "program.json",
+            "readiness.json",
+            "bootstrap.json",
+            "judge.json",
+            "parity.json",
+            "vllm-parity.json",
+            "no-update.json",
+        )
     ]
     for path in paths:
         path.write_text("{}\n", encoding="utf-8")
@@ -195,6 +206,55 @@ def test_runtime_parity_must_link_exact_production_config(tmp_path: Path) -> Non
     assert module._runtime_parity(path, "a" * 64, "c" * 64, "d" * 64, "e" * 64) == artifact
     with pytest.raises(ValueError, match="different composed launch configs"):
         module._runtime_parity(path, "a" * 64, "f" * 64, "d" * 64, "e" * 64)
+
+
+def test_vllm_runtime_parity_must_link_exact_production_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    program_path = tmp_path / "program.json"
+    artifact_path = tmp_path / "vllm-parity.json"
+    config_path = tmp_path / "vllm.yaml"
+    for path in (program_path, artifact_path, config_path):
+        path.write_text("{}\n", encoding="utf-8")
+    program = {
+        "lifecycle_artifacts": {"vllm_runtime_parity": {"artifact_id": "vllm-v1"}},
+        "same_backend_configs": {
+            "vllm_diagnostic": {"path": config_path.name, "sha256": "a" * 64},
+        },
+    }
+    bundle = types.SimpleNamespace(program=program, repo_root=tmp_path)
+    artifact = {
+        "runtime_backend": {
+            "parity_resolved_config_sha256": "b" * 64,
+            "production_resolved_config_sha256": "c" * 64,
+        }
+    }
+    observed: list[dict[str, object]] = []
+    monkeypatch.setattr(module, "check_program", lambda path: bundle)
+    monkeypatch.setattr(module, "_compose_config", lambda path: {"config": "vllm"})
+    monkeypatch.setattr(module, "canonical_resolved_config_sha256", lambda value: "b" * 64)
+    monkeypatch.setattr(
+        module,
+        "load_vllm_runtime_parity",
+        lambda path, **kwargs: observed.append(kwargs) or artifact,
+    )
+
+    assert module._vllm_runtime_parity(artifact_path, program_path, "d" * 64, "c" * 64) == artifact
+    assert observed == [
+        {
+            "artifact_id": "vllm-v1",
+            "model": module.MODEL_NAME,
+            "revision": module.MODEL_REVISION,
+            "rtt_revision": module.RTT_REVISION,
+            "parity_config_sha256": "a" * 64,
+            "production_config_sha256": "d" * 64,
+        }
+    ]
+
+    artifact["runtime_backend"]["production_resolved_config_sha256"] = "e" * 64
+    with pytest.raises(ValueError, match="different composed launch configs"):
+        module._vllm_runtime_parity(artifact_path, program_path, "d" * 64, "c" * 64)
 
 
 def test_refreshed_parent_pin_cannot_reuse_old_composed_evidence(

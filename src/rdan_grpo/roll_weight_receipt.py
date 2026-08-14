@@ -10,10 +10,17 @@ import vllm
 from roll.third_party.megatron import model_update as rtt_model_update
 from roll.third_party.vllm.worker import WorkerV1
 
+from rdan_grpo.fsdp_hf_receipt import FSDPHFReceiptError, FSDPHFStreamReceipt
 from rdan_grpo.weight_receipt import TensorStreamReceipt, WeightReceiptError
 
 _RECEIPT_ATTR = "_rdan_weight_receipt"
 _UPDATER_ATTR = "_rdan_receipt_updater"
+_FSDP_RECEIPT_ATTR = "_rdan_fsdp_hf_receipt"
+_TRANSPORT_DTYPES = {
+    "bf16": torch.bfloat16,
+    "fp16": torch.float16,
+    "fp32": torch.float32,
+}
 
 
 class ReceiptWorkerV1(WorkerV1):
@@ -53,6 +60,15 @@ class ReceiptWorkerV1(WorkerV1):
         if state["loaded"]:
             receipt.set_internal_after(self.model_runner.model.named_parameters())
         return receipt.snapshot()
+
+    def rdan_reset_weight_receipt(self) -> dict[str, Any]:
+        """Return and clear one successfully loaded vLLM transaction."""
+
+        snapshot = self.rdan_get_weight_receipt()
+        if snapshot.get("stream_complete") is not True or snapshot.get("loader", {}).get("loaded") is not True:
+            raise WeightReceiptError("only a completed vLLM loader receipt can be reset")
+        setattr(self, _RECEIPT_ATTR, None)
+        return snapshot
 
     def load_weights(self, weights: Iterable[tuple[str, Any]]) -> None:
         receipt = _required_receipt(self)
@@ -129,6 +145,46 @@ def run_receipted_actor_update(worker: Any, model_update_name: str, update: Call
         rtt_model_update.gather_all_hf_weights = original
 
 
+def run_receipted_fsdp_vllm_update(worker: Any, model_update_name: str, update: Callable[[], Any]) -> Any:
+    """Normalize and record the real FSDP2 stream consumed by paired vLLM loaders."""
+
+    from roll.third_party.fsdp2 import model_update as fsdp2_model_update
+
+    receipt = getattr(worker, _FSDP_RECEIPT_ATTR, None)
+    if not isinstance(receipt, FSDPHFStreamReceipt) or receipt.side != "actor":
+        raise FSDPHFReceiptError("actor receipt transaction was not begun")
+    updater = getattr(getattr(worker, "strategy", None), "weight_updaters", {}).get(model_update_name)
+    if updater is None or getattr(updater, "model_update_name", None) != model_update_name:
+        raise FSDPHFReceiptError("actor receipt is bound to a different model updater")
+    infer_config = getattr(updater, "infer_worker_config", None)
+    strategy_name = getattr(getattr(infer_config, "strategy_args", None), "strategy_name", None)
+    if (
+        getattr(updater, "is_lora", None) is not False
+        or getattr(updater, "is_colocated", None) is not True
+        or strategy_name != "vllm"
+        or getattr(infer_config, "num_gpus_per_worker", None) != 1
+    ):
+        raise FSDPHFReceiptError("FSDP2 to vLLM receipt requires colocated full-model TP1 inference")
+    actor_dtype = _configured_dtype(getattr(updater, "worker_config", None), "actor")
+    infer_dtype = _configured_dtype(infer_config, "infer")
+    if actor_dtype != infer_dtype:
+        raise FSDPHFReceiptError("actor and vLLM inference dtype contracts must match")
+    original = fsdp2_model_update.gather_fsdp2_weights
+    if getattr(original, "__rdan_receipt_owner__", None) is not None:
+        raise FSDPHFReceiptError("conflicting RTT FSDP2 weight generator wrapper")
+
+    def gather_fsdp2_weights(*args: Any, **kwargs: Any) -> Any:
+        receipt.open_actor_stream(_TRANSPORT_DTYPES[actor_dtype])
+        return receipt.wrap_actor_batches(original(*args, **kwargs))
+
+    gather_fsdp2_weights.__rdan_receipt_owner__ = "rdan-grpo"
+    fsdp2_model_update.gather_fsdp2_weights = gather_fsdp2_weights
+    try:
+        return update()
+    finally:
+        fsdp2_model_update.gather_fsdp2_weights = original
+
+
 async def begin_infer_weight_receipt(worker: Any, transaction_id: str, actor_rank: int) -> Any:
     return await _collective_rpc(
         worker,
@@ -139,6 +195,12 @@ async def begin_infer_weight_receipt(worker: Any, transaction_id: str, actor_ran
 
 async def get_infer_weight_receipt(worker: Any) -> Any:
     return await _collective_rpc(worker, "rdan_get_weight_receipt")
+
+
+async def reset_infer_weight_receipt(worker: Any) -> Any:
+    """Reset the completed TP1 vLLM loader receipt."""
+
+    return await _collective_rpc(worker, "rdan_reset_weight_receipt")
 
 
 async def _collective_rpc(worker: Any, method: str, args: tuple[Any, ...] = ()) -> Any:
@@ -161,3 +223,10 @@ def _named_weights(batch: Any) -> Iterable[tuple[str, Any]]:
     if isinstance(batch, Mapping):
         return batch.items()
     return batch
+
+
+def _configured_dtype(config: Any, side: str) -> str:
+    dtype = getattr(getattr(config, "model_args", None), "dtype", None)
+    if not isinstance(dtype, str) or dtype not in _TRANSPORT_DTYPES:
+        raise FSDPHFReceiptError(f"{side} model dtype contract is missing or unsupported")
+    return dtype

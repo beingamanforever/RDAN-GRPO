@@ -18,6 +18,8 @@ MAX_ABS_ERROR = 1e-3
 MEAN_ABS_ERROR = 1e-4
 MIN_RESPONSES = 32
 MAX_WORST_TOKEN_EVIDENCE = 16
+FSDP2_BLOCKING_SURFACE = "infer_full_vs_actor_full"
+FSDP2_DIAGNOSTIC_SURFACE = "generation_vs_infer_full"
 FAILURE_CODES = {"alignment_failed", "receipt_failed", "receipt_linkage_failed", "threshold_exceeded"}
 FULL_SURFACE_UNAVAILABLE_REASONS = {"computation_failed", "malformed", "missing", "non_finite", "shape_mismatch"}
 TRANSFORMERS_VERSION = "4.57.0"
@@ -369,8 +371,15 @@ def _assess(observation: ParityObservation, backend_profile: BackendProfile) -> 
     expected_shape = mask.shape
     if inferred.shape != expected_shape or recomputed.shape != expected_shape:
         raise ParityError("rollout and actor-train logprobs do not match response boundaries")
-    inferred_values = inferred.detach().float().cpu()[mask.cpu()]
-    recomputed_values = recomputed.detach().float().cpu()[mask.cpu()]
+    mask = mask.cpu()
+    inferred = inferred.detach().float().cpu()
+    recomputed = recomputed.detach().float().cpu()
+    surface_evidence: dict[str, Any] = {}
+    blocking = inferred
+    if backend_profile == FSDP2_HF_PROFILE:
+        blocking, surface_evidence = _require_full_surface(observation, inferred, recomputed, mask)
+    inferred_values = blocking[mask]
+    recomputed_values = recomputed[mask]
     if inferred_values.numel() == 0:
         raise ParityError("runtime parity has no response tokens to compare")
     if not bool(torch.isfinite(inferred_values).all()) or not bool(torch.isfinite(recomputed_values).all()):
@@ -379,16 +388,15 @@ def _assess(observation: ParityObservation, backend_profile: BackendProfile) -> 
     max_error = float(errors.max().item())
     mean_error = float(errors.mean().item())
     if max_error > MAX_ABS_ERROR or mean_error > MEAN_ABS_ERROR:
-        diagnostics = _failure_diagnostics(
-            observation, inferred.detach().float().cpu(), recomputed.detach().float().cpu(), mask.cpu()
-        )
+        diagnostics = _failure_diagnostics(observation, blocking, recomputed, mask)
+        diagnostics.update(surface_evidence)
         payload = json.dumps(diagnostics, sort_keys=True, separators=(",", ":"), allow_nan=False)
         raise ParityError(
             f"runtime parity exceeds thresholds: diagnostics={payload}",
             code="threshold_exceeded",
             diagnostics=diagnostics,
         )
-    return {
+    evidence = {
         "prompt_response_tokens_sha256": _prompt_response_hash(observation),
         "responses": int(observation.input_ids.shape[0]),
         "optimizer_updates": 0,
@@ -403,6 +411,8 @@ def _assess(observation: ParityObservation, backend_profile: BackendProfile) -> 
             "mean_abs_error_at_most": MEAN_ABS_ERROR,
         },
     }
+    evidence.update(surface_evidence)
+    return evidence
 
 
 def _failure_artifact(
@@ -446,10 +456,9 @@ def _failure_artifact(
     }
     if "worker_aggregates" in diagnostics:
         comparison["worker_aggregates"] = diagnostics["worker_aggregates"]
-    if "surface_comparisons" in diagnostics:
-        comparison["surface_comparisons"] = diagnostics["surface_comparisons"]
-    if "surface_diagnostic" in diagnostics:
-        comparison["surface_diagnostic"] = diagnostics["surface_diagnostic"]
+    for key in ("blocking_surface", "diagnostic_surface", "surface_comparisons", "surface_diagnostic"):
+        if key in diagnostics:
+            comparison[key] = diagnostics[key]
     return {
         "schema_version": 2,
         "id": f"{artifact_id}_failure",
@@ -584,7 +593,7 @@ def _full_surface_diagnostics(
     if not isinstance(infer_full, torch.Tensor):
         reason = observation.infer_full_unavailable_reason
         if reason not in FULL_SURFACE_UNAVAILABLE_REASONS:
-            reason = "missing"
+            reason = "missing" if infer_full is None else "malformed"
         return _unavailable_surface_diagnostic(reason)
     try:
         infer_full = infer_full.detach().float().cpu()
@@ -600,11 +609,47 @@ def _full_surface_diagnostics(
             return _unavailable_surface_diagnostic("non_finite")
     except Exception:
         return _unavailable_surface_diagnostic("malformed")
-    return {"surface_diagnostic": {"status": "available"}, "surface_comparisons": comparisons}
+    return {
+        "blocking_surface": FSDP2_BLOCKING_SURFACE,
+        "diagnostic_surface": FSDP2_DIAGNOSTIC_SURFACE,
+        "surface_diagnostic": {"status": "available"},
+        "surface_comparisons": comparisons,
+    }
 
 
-def _unavailable_surface_diagnostic(reason: str) -> dict[str, dict[str, str]]:
-    return {"surface_diagnostic": {"status": "diagnostic_unavailable", "reason": reason}}
+def _unavailable_surface_diagnostic(reason: str) -> dict[str, Any]:
+    return {
+        "blocking_surface": FSDP2_BLOCKING_SURFACE,
+        "diagnostic_surface": FSDP2_DIAGNOSTIC_SURFACE,
+        "surface_diagnostic": {"status": "blocking_surface_unavailable", "reason": reason},
+    }
+
+
+def _require_full_surface(
+    observation: ParityObservation,
+    generation: torch.Tensor,
+    actor: torch.Tensor,
+    mask: torch.Tensor,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    evidence = _full_surface_diagnostics(observation, generation, actor, mask)
+    diagnostic = evidence.get("surface_diagnostic")
+    if not isinstance(diagnostic, Mapping) or diagnostic.get("status") != "available":
+        reason = diagnostic.get("reason", "malformed") if isinstance(diagnostic, Mapping) else "malformed"
+        raise ParityError(
+            f"runtime parity blocking surface {FSDP2_BLOCKING_SURFACE} is unavailable: {reason}",
+            diagnostics=evidence,
+        )
+    infer_full = observation.infer_full_logprobs
+    if not isinstance(infer_full, torch.Tensor):
+        raise ParityError(
+            f"runtime parity blocking surface {FSDP2_BLOCKING_SURFACE} is unavailable: malformed",
+            diagnostics=_unavailable_surface_diagnostic("malformed"),
+        )
+    return infer_full.detach().float().cpu(), {
+        "blocking_surface": evidence["blocking_surface"],
+        "diagnostic_surface": evidence["diagnostic_surface"],
+        "surface_comparisons": evidence["surface_comparisons"],
+    }
 
 
 def _aggregate_surface_comparison(

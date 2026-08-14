@@ -67,15 +67,15 @@ def _payload(method: str = "rtt_papo_response") -> dict[str, Any]:
             "training_args": {
                 "learning_rate": 1e-6,
                 "weight_decay": 0,
-                "per_device_train_batch_size": 4,
-                "gradient_accumulation_steps": 32,
+                "per_device_train_batch_size": 1,
+                "gradient_accumulation_steps": 128,
                 "warmup_steps": 20,
                 "num_train_epochs": 50,
             },
         },
         "actor_infer": {
-            **_worker("ResponseInferWorker", "hf_infer"),
-            "max_concurrency": 1,
+            **_worker("ResponseVLLMInferWorker", "vllm"),
+            "max_concurrency": 32,
             "generating_args": {
                 "do_sample": True,
                 "max_new_tokens": 4096,
@@ -98,6 +98,18 @@ def _payload(method: str = "rtt_papo_response") -> dict[str, Any]:
 
 
 def _worker(name: str, strategy: str) -> dict[str, Any]:
+    strategy_config = (
+        {
+            "gpu_memory_utilization": 0.8,
+            "block_size": 16,
+            "max_model_len": 8000,
+            "load_format": "auto",
+            "sleep_level": 1,
+            "worker_extension_cls": "rdan_grpo.roll_weight_receipt.ReceiptWorkerV1",
+        }
+        if strategy == "vllm"
+        else {"transformer_impl": "huggingface", "max_model_len": 8000}
+    )
     return {
         "worker_cls": f"rdan_grpo.roll_response_workers.{name}",
         "device_mapping": [0, 1],
@@ -105,7 +117,7 @@ def _worker(name: str, strategy: str) -> dict[str, Any]:
         "num_gpus_per_worker": 1,
         "strategy_args": {
             "strategy_name": strategy,
-            "strategy_config": {"transformer_impl": "huggingface", "max_model_len": 8000},
+            "strategy_config": strategy_config,
         },
         "model_args": {"dtype": "bf16", "attn_implementation": "sdpa"},
     }
@@ -149,7 +161,7 @@ class FakeConfig:
         return self.payload
 
 
-def test_production_constructor_uses_only_minimal_hf_surrogate(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_production_constructor_preserves_native_vllm_topology(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _module(monkeypatch)
     payload = _payload()
     original = copy.deepcopy(payload)
@@ -168,7 +180,7 @@ def test_production_constructor_uses_only_minimal_hf_surrogate(monkeypatch: pyte
     assert payload == original
     assert config.actor_train.worker_cls == module.ACTOR_WORKER_PATH
     assert config.actor_infer.worker_cls == module.INFER_WORKER_PATH
-    assert config.actor_infer.strategy_args.strategy_name == "hf_infer"
+    assert config.actor_infer.strategy_args.strategy_name == "vllm"
     assert config.rewards == payload["rewards"]
     assert config.rdan_response == module.ResponseConfig("rtt_papo_response", 0.5, None, "f" * 64)
     assert "rdan_response" not in observed["surrogate"]
@@ -179,6 +191,11 @@ def test_preflight_constructor_restores_zero_update_hf_topology(monkeypatch: pyt
     payload = _payload()
     payload.update(max_steps=0, track_with="stdout")
     payload["actor_train"]["device_mapping"] = "[]"
+    payload["actor_infer"] = {
+        **_worker("ResponseInferWorker", "hf_infer"),
+        "max_concurrency": 1,
+        "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
+    }
     payload["validation"] = {
         "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
         "data_args": {"file_name": ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]},
@@ -216,6 +233,11 @@ def test_preflight_constructor_rejects_generation_drift(
     payload = _payload()
     payload.update(max_steps=0, track_with="stdout")
     payload["actor_train"]["device_mapping"] = "[]"
+    payload["actor_infer"] = {
+        **_worker("ResponseInferWorker", "hf_infer"),
+        "max_concurrency": 1,
+        "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
+    }
     payload["validation"] = {
         "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
         "data_args": {"file_name": ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]},
@@ -235,7 +257,7 @@ def test_preflight_constructor_rejects_generation_drift(
         lambda value: value["actor_train"].update(device_mapping=[0]),
         lambda value: value["actor_train"].update(world_size=1),
         lambda value: value["actor_infer"].update(num_gpus_per_worker=2),
-        lambda value: value["actor_infer"]["strategy_args"].update(strategy_name="vllm"),
+        lambda value: value["actor_infer"]["strategy_args"].update(strategy_name="hf_infer"),
         lambda value: value.update(enable_old_logprobs_recompute=False),
         lambda value: value.update(enable_reference=True),
         lambda value: value["actor_train"]["training_args"].update(learning_rate=2e-6),
@@ -296,16 +318,20 @@ def test_production_constructor_rejects_stock_or_weakened_profiles(
 def test_method_train_yaml_uses_exact_objective_sidecar(path: str, method: str, quality: float | None) -> None:
     payload = _compose_method_yaml(path)
     assert payload["actor_train"]["worker_cls"].endswith("ResponseActorWorker")
-    assert payload["actor_infer"]["worker_cls"].endswith("ResponseInferWorker")
+    assert payload["actor_infer"]["worker_cls"].endswith("ResponseVLLMInferWorker")
+    assert payload["actor_infer"]["strategy_args"]["strategy_name"] == "vllm"
+    assert payload["actor_infer"]["max_concurrency"] == 32
     assert payload["actor_train"]["data_args"]["file_name"] == ["data/qwen_hir_rubrichub_if_hybrid.jsonl"]
     assert payload["actor_train"]["training_args"] == {
         "learning_rate": 1e-6,
         "weight_decay": 0,
-        "per_device_train_batch_size": 4,
-        "gradient_accumulation_steps": 32,
+        "per_device_train_batch_size": 1,
+        "gradient_accumulation_steps": 128,
         "warmup_steps": 20,
         "num_train_epochs": 50,
     }
+    optimizer_batch = 1 * 128 * 2
+    assert payload["rollout_batch_size"] * payload["num_return_sequences_in_group"] == optimizer_batch * 2
     assert payload["rewards"]["llm_judge"]["worker_cls"].endswith("RTTCompatibleRubricRewardWorker")
     assert payload["rewards"]["llm_judge"]["judge_model_type"] == "api"
     assert payload["actor_infer"]["generating_args"]["temperature"] == 0.99
@@ -332,6 +358,9 @@ def test_method_preflight_yaml_is_zero_update_over_hybrid_data(path: str) -> Non
     assert payload["max_steps"] == 0
     assert payload["track_with"] == "stdout"
     assert payload["actor_train"]["device_mapping"] == "[]"
+    assert payload["actor_infer"]["worker_cls"].endswith("ResponseInferWorker")
+    assert payload["actor_infer"]["strategy_args"]["strategy_name"] == "hf_infer"
+    assert payload["actor_infer"]["max_concurrency"] == 1
     assert payload["validation"]["generating_args"]["num_return_sequences"] == 8
     assert payload["validation"]["generating_args"]["do_sample"] is True
     assert payload["validation"]["generating_args"]["max_new_tokens"] == "${response_length}"

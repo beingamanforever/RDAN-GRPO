@@ -33,12 +33,18 @@ def ready_inputs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str,
     artifact_root.mkdir()
     judge_path = artifact_root / "qwen_judge_calibration.json"
     parity_path = artifact_root / "qwen_runtime_parity.json"
+    vllm_parity_path = artifact_root / "qwen_vllm_runtime_parity.json"
     no_update_path = artifact_root / "qwen_no_update_certificate.json"
     artifacts = {
         "judge_calibration": {"id": "judge-v1", "status": "calibrated"},
         "runtime_parity": {"id": "parity-v1", "status": "parity_passed"},
+        "vllm_runtime_parity": {"id": "vllm-parity-v1", "status": "parity_passed"},
     }
-    for path, name in ((judge_path, "judge_calibration"), (parity_path, "runtime_parity")):
+    for path, name in (
+        (judge_path, "judge_calibration"),
+        (parity_path, "runtime_parity"),
+        (vllm_parity_path, "vllm_runtime_parity"),
+    ):
         path.write_text(json.dumps(artifacts[name], sort_keys=True) + "\n", encoding="utf-8")
     refs = {
         name: {
@@ -47,7 +53,11 @@ def ready_inputs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str,
             "artifact_id": artifacts[name]["id"],
             "sha256": _file_sha256(path),
         }
-        for name, path in (("judge_calibration", judge_path), ("runtime_parity", parity_path))
+        for name, path in (
+            ("judge_calibration", judge_path),
+            ("runtime_parity", parity_path),
+            ("vllm_runtime_parity", vllm_parity_path),
+        )
     }
     artifacts["no_update"] = {
         "certificate_id": "no-update-v1",
@@ -94,7 +104,7 @@ def ready_inputs(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str,
         yield {
             "program": program_path,
             "bootstrap": bootstrap_path,
-            "evidence": (judge_path, parity_path, no_update_path),
+            "evidence": (judge_path, parity_path, vllm_parity_path, no_update_path),
         }
     finally:
         readiness_module.check_program = original_check
@@ -126,7 +136,7 @@ def test_cli_issues_canonical_receipt_and_check_is_nonmutating(
 
 def test_missing_evidence_fails_closed(ready_inputs: dict[str, Any], tmp_path: Path) -> None:
     missing = tmp_path / "missing.json"
-    evidence = (*ready_inputs["evidence"][:2], missing)
+    evidence = (*ready_inputs["evidence"][:3], missing)
     with pytest.raises(ResponseReadinessError, match="regular non-symlink"):
         issue_response_readiness(
             ready_inputs["program"],
@@ -202,12 +212,12 @@ def test_compute_contract_drift_invalidates_bootstrap_evidence(
 
 
 def test_reordered_evidence_fails_closed(ready_inputs: dict[str, Any], tmp_path: Path) -> None:
-    judge, parity, no_update = ready_inputs["evidence"]
-    with pytest.raises(ResponseReadinessError, match="judge calibration, runtime parity, no-update order"):
+    judge, parity, vllm_parity, no_update = ready_inputs["evidence"]
+    with pytest.raises(ResponseReadinessError, match="judge calibration, HF parity, vLLM parity, no-update order"):
         issue_response_readiness(
             ready_inputs["program"],
             ready_inputs["bootstrap"],
-            (parity, judge, no_update),
+            (parity, judge, vllm_parity, no_update),
             tmp_path / "receipt.json",
             rdan_revision=REVISION,
         )

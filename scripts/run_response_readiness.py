@@ -54,7 +54,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=Path,
         action="append",
         required=True,
-        help="repeat in judge calibration, runtime parity, no-update order",
+        help="repeat in judge calibration, HF parity, vLLM parity, no-update order",
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--rdan-revision", help="exact clean checkout revision, defaults to program repository HEAD")

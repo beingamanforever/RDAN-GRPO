@@ -20,6 +20,7 @@ from rdan_grpo.judge import select_reasoning_effort
 from rdan_grpo.response_identity import ResponseIdentityError, response_data_identity
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY
 from rdan_grpo.scalar_data import ScalarDataError, inspect_scalar_gate
+from rdan_grpo.vllm_runtime_parity import VLLMParityError, validate_vllm_runtime_parity
 
 JsonObject = dict[str, Any]
 
@@ -420,7 +421,14 @@ def require_launch_gate(
     """Validate every launch prerequisite before any RTT or ROLL import."""
     bundle = check_program(program_path)
     refs = _object(bundle.program["lifecycle_artifacts"], "program.lifecycle_artifacts")
-    required = {"scalar_data", "response_data", "judge_calibration", "runtime_parity", "no_update"}
+    required = {
+        "scalar_data",
+        "response_data",
+        "judge_calibration",
+        "runtime_parity",
+        "vllm_runtime_parity",
+        "no_update",
+    }
     missing = sorted(name for name in required if refs[name]["status"] != "frozen")
     _expect(not missing, f"training launch is blocked by pending lifecycle artifacts: {missing}")
     _expect(bundle.program["readiness"]["scalar_training"] == "ready", "hard evaluator certification is not ready")
@@ -1611,7 +1619,7 @@ def _validate_launch_configs(program: JsonObject, repo_root: Path) -> None:
         "program launch Hydra parent config pin is invalid",
     )
     same_backend = _object(program["same_backend_configs"], "program.same_backend_configs")
-    _exact_keys(same_backend, {"diagnostic", "production"}, "program.same_backend_configs")
+    _exact_keys(same_backend, {"diagnostic", "vllm_diagnostic", "production"}, "program.same_backend_configs")
     diagnostic = _object(same_backend["diagnostic"], "program.same_backend_configs.diagnostic")
     _exact_keys(diagnostic, {"path", "sha256"}, "same-backend diagnostic config")
     _expect(
@@ -1621,6 +1629,16 @@ def _validate_launch_configs(program: JsonObject, repo_root: Path) -> None:
             "sha256": _file_sha256(repo_root / "configs/roll/qwen_rtt_papo_response_parity.yaml"),
         },
         "same-backend diagnostic config pin is invalid",
+    )
+    vllm_diagnostic = _object(same_backend["vllm_diagnostic"], "program.same_backend_configs.vllm_diagnostic")
+    _exact_keys(vllm_diagnostic, {"path", "sha256"}, "vLLM diagnostic config")
+    _expect(
+        vllm_diagnostic
+        == {
+            "path": "configs/roll/qwen_rtt_papo_response_vllm_parity.yaml",
+            "sha256": _file_sha256(repo_root / "configs/roll/qwen_rtt_papo_response_vllm_parity.yaml"),
+        },
+        "vLLM diagnostic config pin is invalid",
     )
     production = _object(same_backend["production"], "program.same_backend_configs.production")
     frozen_production = (
@@ -2474,6 +2492,7 @@ def _validate_lifecycle_artifacts(bundle: ProgramBundle) -> None:
         "response_data": "configs/artifacts/qwen_merged_rl_data_manifest.json",
         "judge_calibration": "configs/artifacts/qwen_judge_calibration.json",
         "runtime_parity": "configs/artifacts/qwen_runtime_parity.json",
+        "vllm_runtime_parity": "configs/artifacts/qwen_vllm_runtime_parity.json",
         "no_update": "configs/artifacts/qwen_no_update_certificate.json",
         "token_labels": "configs/artifacts/qwen_token_labels.json",
         "discriminator_checkpoint": "configs/artifacts/qwen_discriminator_checkpoint.json",
@@ -2524,6 +2543,12 @@ def _validate_lifecycle_artifacts(bundle: ProgramBundle) -> None:
             refs["runtime_parity"],
             _object(bundle.program["same_backend_configs"], "program.same_backend_configs"),
         )
+    if frozen["vllm_runtime_parity"]:
+        _validate_vllm_runtime_parity(
+            bundle.lifecycle_artifacts["vllm_runtime_parity"],
+            refs["vllm_runtime_parity"],
+            _object(bundle.program["same_backend_configs"], "program.same_backend_configs"),
+        )
     if frozen["no_update"]:
         _validate_no_update_artifact(bundle.lifecycle_artifacts["no_update"], refs["no_update"], bundle)
     if frozen["token_labels"]:
@@ -2545,6 +2570,7 @@ def _validate_lifecycle_artifacts(bundle: ProgramBundle) -> None:
         and frozen["response_data"]
         and frozen["judge_calibration"]
         and frozen["runtime_parity"]
+        and frozen["vllm_runtime_parity"]
         and frozen["no_update"]
         and readiness["scalar_training"] == "ready"
     )
@@ -3042,6 +3068,23 @@ def _validate_runtime_parity(artifact: JsonObject, reference: JsonObject, config
     _expect(valid, "model, tokenizer, template, or logprob parity artifact is invalid")
 
 
+def _validate_vllm_runtime_parity(artifact: JsonObject, reference: JsonObject, configs: JsonObject) -> None:
+    diagnostic = _object(configs["vllm_diagnostic"], "vLLM diagnostic config")
+    production = _object(configs["production"], "same-backend production config")
+    try:
+        validate_vllm_runtime_parity(
+            artifact,
+            artifact_id=_string(reference["artifact_id"], "vLLM parity artifact id"),
+            model=MODEL_NAME,
+            revision=MODEL_REVISION,
+            rtt_revision=RTT_REVISION,
+            parity_config_sha256=_string(diagnostic["sha256"], "vLLM diagnostic config hash"),
+            production_config_sha256=_string(production["sha256"], "production config hash"),
+        )
+    except VLLMParityError as error:
+        raise ProgramContractError(str(error)) from error
+
+
 def _validate_runtime_parity_keys(artifact: JsonObject) -> None:
     keys = {
         "schema_version",
@@ -3084,22 +3127,21 @@ def _validate_runtime_parity_nested_keys(
         {"transaction_id", "artifact_sha256", "resolved_config_sha256"},
         "runtime parity weight receipt",
     )
-    _exact_keys(
-        evidence,
-        {
-            "prompt_response_tokens_sha256",
-            "responses",
-            "optimizer_updates",
-            "infer_logprobs_source",
-            "actor_train_recomputed",
-            "actor_boundary_observed",
-            "compared_tokens",
-            "max_abs_error",
-            "mean_abs_error",
-            "thresholds",
-        },
-        "runtime parity rollout logprob evidence",
-    )
+    evidence_keys = {
+        "prompt_response_tokens_sha256",
+        "responses",
+        "optimizer_updates",
+        "infer_logprobs_source",
+        "actor_train_recomputed",
+        "actor_boundary_observed",
+        "compared_tokens",
+        "max_abs_error",
+        "mean_abs_error",
+        "thresholds",
+    }
+    if backend.get("actor_infer_strategy") == "hf_infer":
+        evidence_keys.update({"blocking_surface", "diagnostic_surface", "surface_comparisons"})
+    _exact_keys(evidence, evidence_keys, "runtime parity rollout logprob evidence")
     thresholds = _object(evidence["thresholds"], "runtime parity thresholds")
     _exact_keys(thresholds, {"max_abs_error_at_most", "mean_abs_error_at_most"}, "runtime parity thresholds")
     return thresholds
@@ -3164,6 +3206,43 @@ def _runtime_parity_evidence_valid(
     receipt: JsonObject,
     backend: JsonObject,
 ) -> bool:
+    surfaces = evidence.get("surface_comparisons")
+    blocking = surfaces.get("infer_full_vs_actor_full") if isinstance(surfaces, dict) else None
+    diagnostic = surfaces.get("generation_vs_infer_full") if isinstance(surfaces, dict) else None
+    surface_keys = {
+        "compared_tokens",
+        "source_mean_logprob",
+        "target_mean_logprob",
+        "signed_mean_difference",
+        "rmse",
+        "max_abs_error",
+        "mean_abs_error",
+    }
+    surface_values = [blocking, diagnostic]
+    valid_surfaces = bool(
+        evidence.get("blocking_surface") == "infer_full_vs_actor_full"
+        and evidence.get("diagnostic_surface") == "generation_vs_infer_full"
+        and isinstance(surfaces, dict)
+        and set(surfaces) == {"infer_full_vs_actor_full", "generation_vs_infer_full"}
+        and all(isinstance(surface, dict) and set(surface) == surface_keys for surface in surface_values)
+        and all(
+            isinstance(surface["compared_tokens"], int)
+            and not isinstance(surface["compared_tokens"], bool)
+            and surface["compared_tokens"] > 0
+            and all(
+                isinstance(surface[key], (int, float))
+                and not isinstance(surface[key], bool)
+                and math.isfinite(surface[key])
+                for key in surface_keys - {"compared_tokens"}
+            )
+            for surface in surface_values
+            if isinstance(surface, dict)
+        )
+        and isinstance(blocking, dict)
+        and evidence.get("compared_tokens") == blocking.get("compared_tokens")
+        and evidence.get("max_abs_error") == blocking.get("max_abs_error")
+        and evidence.get("mean_abs_error") == blocking.get("mean_abs_error")
+    )
     return bool(
         receipt.get("resolved_config_sha256") == backend["resolved_config_sha256"]
         and isinstance(receipt.get("transaction_id"), str)
@@ -3187,6 +3266,7 @@ def _runtime_parity_evidence_valid(
         and math.isfinite(evidence["mean_abs_error"])
         and evidence["max_abs_error"] <= thresholds["max_abs_error_at_most"]
         and evidence["mean_abs_error"] <= thresholds["mean_abs_error_at_most"]
+        and valid_surfaces
     )
 
 

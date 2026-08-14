@@ -29,6 +29,7 @@ def main() -> None:
         "launch_train": ROOT / "configs/roll/qwen_rtt_papo_response_train.yaml",
         "preflight": ROOT / "configs/roll/qwen_rtt_papo_response_preflight.yaml",
         "same_backend_diagnostic": ROOT / "configs/roll/qwen_rtt_papo_response_parity.yaml",
+        "vllm_diagnostic": ROOT / "configs/roll/qwen_rtt_papo_response_vllm_parity.yaml",
         "response_data": ROOT / "configs/artifacts/qwen_merged_rl_data_manifest.json",
         "certified": ROOT / "configs/artifacts/hir_scalar_certified_manifest.json",
         "scalar": ROOT / "configs/artifacts/qwen_scalar_data_manifest.json",
@@ -97,11 +98,24 @@ def main() -> None:
     program["launch_train_config"]["sha256"] = launch_sha
     program["launch_train_config"]["preflight_sha256"] = _sha256(paths["preflight"])
     program["same_backend_configs"]["diagnostic"]["sha256"] = _sha256(paths["same_backend_diagnostic"])
+    program["same_backend_configs"]["vllm_diagnostic"] = {
+        "path": "configs/roll/qwen_rtt_papo_response_vllm_parity.yaml",
+        "sha256": _sha256(paths["vllm_diagnostic"]),
+    }
     program["same_backend_configs"]["production"] = {
         "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
         "sha256": launch_sha,
         "status": "frozen",
     }
+    program["lifecycle_artifacts"].setdefault(
+        "vllm_runtime_parity",
+        {
+            "status": "pending",
+            "path": "configs/artifacts/qwen_vllm_runtime_parity.json",
+            "artifact_id": "pending",
+            "sha256": "pending",
+        },
+    )
     program["readiness"]["scalar_training"] = "ready"
     outputs[paths["program"]] = _encode(program)
     if args.check:

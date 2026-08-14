@@ -268,8 +268,14 @@ def test_builder_preserves_json_canonical_worker_paths(monkeypatch: pytest.Monke
         "actor_infer": {"worker_cls": module.INFER_WORKER_PATH},
     }
     config = SimpleNamespace(
-        actor_train=SimpleNamespace(worker_cls=module.ACTOR_WORKER_PATH),
-        actor_infer=SimpleNamespace(worker_cls=module.INFER_WORKER_PATH),
+        actor_train=SimpleNamespace(
+            worker_cls=module.ACTOR_WORKER_PATH,
+            strategy_args=SimpleNamespace(strategy_name="fsdp2_train"),
+        ),
+        actor_infer=SimpleNamespace(
+            worker_cls=module.INFER_WORKER_PATH,
+            strategy_args=SimpleNamespace(strategy_name="vllm"),
+        ),
         to_dict=lambda: payload,
     )
     before = module._canonical_json(config.to_dict())

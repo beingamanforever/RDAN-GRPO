@@ -53,18 +53,30 @@ def _write_lifecycle_inputs(tmp_path: Path) -> tuple[object, Path]:
     program = fixtures._read(program_path)
     parity = fixtures._parity_artifact(tmp_path, program["same_backend_configs"]["production"]["sha256"])
     fixtures._write(config_root / "artifacts/qwen_runtime_parity.json", parity)
+    vllm = fixtures._vllm_parity_artifact(tmp_path, program["same_backend_configs"]["production"]["sha256"])
+    fixtures._write(config_root / "artifacts/qwen_vllm_runtime_parity.json", vllm)
     return fixtures, program_path
 
 
-@pytest.mark.parametrize("order", [("judge", "parity"), ("parity", "judge")])
-def test_freezes_judge_and_parity_in_either_order_with_exact_pins(tmp_path: Path, order: tuple[str, str]) -> None:
+@pytest.mark.parametrize(
+    "order",
+    [
+        ("judge", "parity", "vllm-parity"),
+        ("vllm-parity", "parity", "judge"),
+    ],
+)
+def test_freezes_launch_parity_gates_in_any_order_with_exact_pins(tmp_path: Path, order: tuple[str, ...]) -> None:
     _, program_path = _write_lifecycle_inputs(tmp_path)
     freezer = _freezer()
 
     for stage in order:
         reference = freezer.freeze_stage(program_path, stage)
         artifact = program_path.parent.parent / Path(reference["path"]).relative_to("configs")
-        key = "judge_calibration" if stage == "judge" else "runtime_parity"
+        key = {
+            "judge": "judge_calibration",
+            "parity": "runtime_parity",
+            "vllm-parity": "vllm_runtime_parity",
+        }[stage]
         body = json.loads(artifact.read_text(encoding="utf-8"))
         program = json.loads(program_path.read_text(encoding="utf-8"))
         assert reference == program["lifecycle_artifacts"][key]
@@ -74,10 +86,10 @@ def test_freezes_judge_and_parity_in_either_order_with_exact_pins(tmp_path: Path
 
     bundle = check_program(program_path)
     assert bundle.program["readiness"]["judge"] == "ready"
-    assert set(bundle.lifecycle_artifacts) >= {"judge_calibration", "runtime_parity"}
+    assert set(bundle.lifecycle_artifacts) >= {"judge_calibration", "runtime_parity", "vllm_runtime_parity"}
 
 
-def test_no_update_requires_both_gates_and_alone_unlocks_launch(tmp_path: Path) -> None:
+def test_no_update_requires_all_launch_gates_and_alone_unlocks_launch(tmp_path: Path) -> None:
     fixtures, program_path = _write_lifecycle_inputs(tmp_path)
     freezer = _freezer()
     original = program_path.read_bytes()
@@ -90,6 +102,9 @@ def test_no_update_requires_both_gates_and_alone_unlocks_launch(tmp_path: Path) 
 
     freezer.freeze_stage(program_path, "parity")
     freezer.freeze_stage(program_path, "judge")
+    with pytest.raises(freezer.LifecycleFreezeError, match="vllm_runtime_parity"):
+        freezer.freeze_stage(program_path, "no-update")
+    freezer.freeze_stage(program_path, "vllm-parity")
     artifact, _ = fixtures._no_update_artifact(check_program(program_path))
     fixtures._write(no_update_path, artifact)
 

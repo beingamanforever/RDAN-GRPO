@@ -35,6 +35,7 @@ RUNTIME_KEYS = {
 }
 COUNTER_KEYS = {"rank", "optimizer_steps", "scheduler_steps", "finite_steps", "skipped_optimizer_steps"}
 ITEM_KEYS = {"index", "name", "shape", "dtype", "nbytes", "sha256"}
+LOADER_KEYS = {"calls", "successes", "failed", "segments_started", "segments_completed", "loaded"}
 
 
 class ResponseReceiptError(ValueError):
@@ -98,13 +99,11 @@ def _receipt(value: Mapping[str, Any], side: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ResponseReceiptError("response receipt worker evidence is invalid")
     receipt = dict(value)
-    transaction = receipt.get("transaction")
     items = receipt.get("items")
     if (
         receipt.get("side") != side
         or receipt.get("stream_started") is not True
         or receipt.get("stream_complete") is not True
-        or transaction != {"calls": 1, "complete": True}
         or not isinstance(items, list)
         or not items
     ):
@@ -127,14 +126,47 @@ def _receipt(value: Mapping[str, Any], side: str) -> dict[str, Any]:
             raise ResponseReceiptError("response receipt tensor manifest is invalid")
     try:
         if side == "actor":
+            if receipt.get("transaction") != {"calls": 1, "complete": True}:
+                raise ResponseReceiptError("response receipt actor transaction is incomplete")
             validate_actor_transport(receipt.get("transport"), [item["dtype"] for item in items])
-        elif receipt.get("transport") is not None:
-            raise FSDPHFReceiptError("inference receipt must not declare actor transport provenance")
+        else:
+            backend = receipt.get("backend", "hf_infer")
+            if backend == "hf_infer":
+                if receipt.get("transaction") != {"calls": 1, "complete": True} or "loader" in receipt:
+                    raise ResponseReceiptError("response receipt HF inference transaction is incomplete")
+                if receipt.get("transport") is not None:
+                    raise FSDPHFReceiptError("inference receipt must not declare actor transport provenance")
+            elif backend == "vllm":
+                if "transaction" in receipt or "transport" in receipt:
+                    raise ResponseReceiptError("response receipt vLLM evidence contains synthetic transaction fields")
+                _validate_vllm_loader(receipt.get("loader"))
+            else:
+                raise ResponseReceiptError("response receipt inference backend is invalid")
     except FSDPHFReceiptError as error:
         raise ResponseReceiptError("response receipt transport provenance is invalid") from error
     if any(receipt.get(key) != value for key, value in manifest_summary(items).items()):
         raise ResponseReceiptError("response receipt tensor summary is invalid")
     return receipt
+
+
+def _validate_vllm_loader(value: Any) -> None:
+    if not isinstance(value, Mapping) or set(value) != LOADER_KEYS:
+        raise ResponseReceiptError("response receipt vLLM loader evidence is invalid")
+    calls = value.get("calls")
+    successes = value.get("successes")
+    started = value.get("segments_started")
+    completed = value.get("segments_completed")
+    if (
+        isinstance(calls, bool)
+        or not isinstance(calls, int)
+        or calls < 1
+        or successes != calls
+        or started != calls
+        or completed != calls
+        or value.get("failed") is not False
+        or value.get("loaded") is not True
+    ):
+        raise ResponseReceiptError("response receipt vLLM loader transaction is incomplete")
 
 
 def _validate_pairs(actors: list[dict[str, Any]], infers: list[dict[str, Any]]) -> str:

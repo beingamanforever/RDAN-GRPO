@@ -55,6 +55,22 @@ def _receipt(side: str, rank: int) -> dict[str, Any]:
     return receipt.snapshot()
 
 
+def _vllm_receipt(rank: int, calls: int = 2) -> dict[str, Any]:
+    receipt = _receipt("infer", rank)
+    receipt.pop("transaction")
+    receipt.pop("transport", None)
+    receipt["backend"] = "vllm"
+    receipt["loader"] = {
+        "calls": calls,
+        "successes": calls,
+        "failed": False,
+        "segments_started": calls,
+        "segments_completed": calls,
+        "loaded": True,
+    }
+    return receipt
+
+
 def _counters(steps: int) -> list[dict[str, int]]:
     return [
         {
@@ -125,6 +141,33 @@ def test_production_response_receipt_preserves_exact_dp2_evidence(
     assert artifact["actor_counters"] == _counters(steps)
     assert artifact["actor_receipts"][0]["items"] == artifact["infer_receipts"][0]["items"]
     assert artifact["actor_receipts"][0]["transport"]["transport_dtype"] == "torch.bfloat16"
+
+
+def test_production_response_receipt_accepts_observed_vllm_loader_transactions() -> None:
+    artifact = _build(infers=[_vllm_receipt(0), _vllm_receipt(1)])
+
+    assert artifact["infer_receipts"][0]["backend"] == "vllm"
+    assert artifact["infer_receipts"][0]["loader"]["calls"] == 2
+    assert "transaction" not in artifact["infer_receipts"][0]
+    assert "transport" not in artifact["infer_receipts"][0]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda receipt: receipt["loader"].update(successes=1),
+        lambda receipt: receipt["loader"].update(segments_completed=1),
+        lambda receipt: receipt["loader"].update(loaded=False),
+        lambda receipt: receipt.update(transaction={"calls": 1, "complete": True}),
+        lambda receipt: receipt.update(transport=None),
+    ],
+)
+def test_response_receipt_rejects_incomplete_or_synthetic_vllm_evidence(change: object) -> None:
+    infers = [_vllm_receipt(0), _vllm_receipt(1)]
+    change(infers[0])  # type: ignore[operator]
+
+    with pytest.raises(ResponseReceiptError, match="vLLM"):
+        _build(infers=infers)
 
 
 @pytest.mark.parametrize("field", ["sha256", "name", "dtype", "shape", "nbytes"])

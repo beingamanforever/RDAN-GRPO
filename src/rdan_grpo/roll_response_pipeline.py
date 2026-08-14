@@ -541,6 +541,10 @@ def build_response_training_pipeline(config: Any, **kwargs: Any) -> ResponseTrai
     for worker, path, name in expected:
         if worker.worker_cls != path:
             raise ValueError(f"response training requires {name}.worker_cls={path}")
+    if config.actor_train.strategy_args.strategy_name != "fsdp2_train":
+        raise ValueError("response training requires actor_train strategy fsdp2_train")
+    if config.actor_infer.strategy_args.strategy_name != "vllm":
+        raise ValueError("response training requires actor_infer strategy vllm")
     return ResponseTrainingPipeline(config, **kwargs)
 
 

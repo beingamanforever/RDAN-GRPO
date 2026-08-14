@@ -23,7 +23,6 @@ REWARD_METADATA = ("prompt", "rubrics", "source", "ground_truth", "rdan_prompt_k
 TOKEN_FIELDS = (
     "old_log_probs",
     "ref_log_probs",
-    "infer_logprobs",
     "advantages",
     "returns",
     "final_response_mask",
@@ -101,7 +100,9 @@ def run_response_train_step(
 def _initial_receipt(
     receipt: Mapping[str, Any], state: Mapping[int, Mapping[str, Any]]
 ) -> tuple[str, int, tuple[Mapping[str, Any], ...]]:
-    return _validate_receipt(receipt, _shared_counter(state, "optimizer_step"))
+    validated = _validate_receipt(receipt, _shared_counter(state, "optimizer_step"))
+    _require_fp32_initial_actor_receipt(receipt)
+    return validated
 
 
 def _execute_actor_update(
@@ -190,7 +191,7 @@ def _validate_post_receipt(
 def _validate_topology(config: Any, actor_train: Any, actor_infer: Any) -> int:
     expected = (
         (getattr(config, "actor_train", None), actor_train, "fsdp2_train", "actor_train"),
-        (getattr(config, "actor_infer", None), actor_infer, "hf_infer", "actor_infer"),
+        (getattr(config, "actor_infer", None), actor_infer, "vllm", "actor_infer"),
     )
     for worker_config, cluster, strategy_name, name in expected:
         strategy = getattr(getattr(worker_config, "strategy_args", None), "strategy_name", None)
@@ -209,8 +210,8 @@ def _validate_topology(config: Any, actor_train: Any, actor_infer: Any) -> int:
         or getattr(config, "generate_opt_level", None) != 0
     ):
         raise RuntimeError("response training requires synchronous generate_opt_level=0")
-    if getattr(config.actor_infer, "max_concurrency", None) != 1:
-        raise RuntimeError("response training requires actor_infer.max_concurrency=1")
+    if getattr(config.actor_infer, "max_concurrency", 0) <= 1:
+        raise RuntimeError("response training requires concurrent vLLM inference")
     if getattr(config, "enable_reference", None) is not False:
         raise RuntimeError("response training requires the reference model to be disabled")
     if getattr(config, "enable_old_logprobs_recompute", None) is not True:
@@ -246,7 +247,6 @@ def _validate_rewarded_batch(data: DataProto, returns: int) -> int:
         "input_ids",
         "attention_mask",
         "response_mask",
-        "infer_logprobs",
         "rdan_scores",
         "rdan_rubric_mask",
         "rdan_eval_mask",
@@ -299,9 +299,6 @@ def _validate_rewarded_batch(data: DataProto, returns: int) -> int:
         or not bool(response_mask.to(torch.bool).any(dim=-1).all())
     ):
         raise RuntimeError("scheduler reward batch has invalid full-sequence token boundaries")
-    _require_token_tensor(data.batch["infer_logprobs"], len(data), response_mask.shape[1] - 1, "infer_logprobs")
-    if data.meta_info.get("infer_logprobs_source") != "observed_hf_generation":
-        raise RuntimeError("scheduler reward batch did not preserve observed HF inference log-probabilities")
     return len(data) // returns
 
 
@@ -527,8 +524,19 @@ def _validate_parameter_update(initial: Sequence[Mapping[str, Any]], post: Seque
     post_metadata = [(item["name"], item["shape"], item["dtype"], item["nbytes"]) for item in post]
     if initial_metadata != post_metadata:
         raise RuntimeError("post-update trainable parameter inventory differs from the initial receipt")
+    # A 1e-6 optimizer update can round away in bf16, so byte mutation is sound only after fp32 master proof.
     if not any(before["sha256"] != after["sha256"] for before, after in zip(initial, post, strict=True)):
         raise RuntimeError("optimizer updates did not change any trainable parameter bytes")
+
+
+def _require_fp32_initial_actor_receipt(receipt: Mapping[str, Any]) -> None:
+    actors = receipt.get("actor_receipts")
+    if not isinstance(actors, Sequence) or isinstance(actors, (str, bytes)) or len(actors) != 2:
+        raise RuntimeError("initial actor receipt does not prove fp32 master parameters")
+    for actor in actors:
+        transport = actor.get("transport") if isinstance(actor, Mapping) else None
+        if not isinstance(transport, Mapping) or transport.get("source_dtypes") != ["torch.float32"]:
+            raise RuntimeError("initial actor receipt does not prove fp32 master parameters")
 
 
 def _receipt_side(values: Any, side: str, transaction_id: str) -> dict[int, Mapping[str, Any]]:
@@ -539,7 +547,6 @@ def _receipt_side(values: Any, side: str, transaction_id: str) -> dict[int, Mapp
         if not isinstance(value, Mapping):
             raise RuntimeError(f"paired {side} receipt is invalid")
         rank = value.get("rank")
-        transaction = value.get("transaction")
         items = value.get("items")
         if (
             value.get("side") != side
@@ -554,19 +561,47 @@ def _receipt_side(values: Any, side: str, transaction_id: str) -> dict[int, Mapp
             or "A100" not in str(value.get("accelerator_name"))
             or value.get("stream_started") is not True
             or value.get("stream_complete") is not True
-            or not isinstance(transaction, Mapping)
-            or transaction.get("calls") != 1
-            or transaction.get("complete") is not True
             or not isinstance(items, list)
             or not items
         ):
             raise RuntimeError(f"paired {side} receipt is incomplete")
+        _validate_receipt_backend(value, side)
         _validate_manifest_items(items)
         summary = manifest_summary(items)
         if any(value.get(name) != expected for name, expected in summary.items()):
             raise RuntimeError(f"paired {side} receipt manifest summary is invalid")
         result[rank] = value
     return result
+
+
+def _validate_receipt_backend(value: Mapping[str, Any], side: str) -> None:
+    if side == "actor":
+        if value.get("transaction") != {"calls": 1, "complete": True}:
+            raise RuntimeError("paired actor receipt transaction is incomplete")
+        return
+    backend = value.get("backend", "hf_infer")
+    if backend == "hf_infer":
+        if value.get("transaction") != {"calls": 1, "complete": True} or "loader" in value:
+            raise RuntimeError("paired HF inference receipt transaction is incomplete")
+        return
+    if backend != "vllm" or "transaction" in value or "transport" in value:
+        raise RuntimeError("paired vLLM inference receipt provenance is invalid")
+    loader = value.get("loader")
+    keys = {"calls", "successes", "failed", "segments_started", "segments_completed", "loaded"}
+    if not isinstance(loader, Mapping) or set(loader) != keys:
+        raise RuntimeError("paired vLLM inference receipt loader evidence is invalid")
+    calls = loader.get("calls")
+    if (
+        isinstance(calls, bool)
+        or not isinstance(calls, int)
+        or calls < 1
+        or loader.get("successes") != calls
+        or loader.get("segments_started") != calls
+        or loader.get("segments_completed") != calls
+        or loader.get("failed") is not False
+        or loader.get("loaded") is not True
+    ):
+        raise RuntimeError("paired vLLM inference receipt loader transaction is incomplete")
 
 
 def _validate_manifest_items(items: Sequence[Any]) -> None:

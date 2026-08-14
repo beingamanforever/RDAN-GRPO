@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import importlib.machinery
 import importlib.util
+import inspect
 import logging
 import math
 import subprocess
@@ -22,12 +23,53 @@ RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
 RTT_BASE_CONFIG_SHA256 = "0653c7f1f8ac513de45825ddd5aa3de4b33ca38291d5cc8d990d48430ab44b44"
 RTT_UTILS_SHA256 = "f59ce31235822735b01c78f02b6b7fd85fe66c16e18043abb7c8ecbb465eebeb"
 RTT_MEGATRON_SHA256 = "99d9a0791674e4d3191b27fca5d13677c45cb4a5e05ccecb0fe478bcf4f1c5e6"
+RTT_VLLM_SAMPLING_PARAMS_SHA256 = "89259408223eaafad21ad1bebdff9504f6be31c19fe001bcd086736090f47d35"
 
 _PATCHER_MODULE = "mcore_adapter.patcher"
 _PATCHER_OWNER = "rdan-grpo:rtt-b1ab2fb"
 _MASK_PATCH_OWNER = "rdan-grpo:local-qwen3-mask"
 _ACTOR_WORKER = "rdan_grpo.roll_same_backend_live.ReceiptedFSDP2ActorWorker"
 _INFER_WORKER = "rdan_grpo.roll_same_backend_live.ReceiptedSynchronousHFInferWorker"
+_VLLM_SEED_PATCH_OWNER = "rdan-grpo:vllm-sampling-seed"
+
+
+def install_vllm_sampling_seed_compat() -> None:
+    """Add the request seed omitted by the pinned ROLL vLLM adapter."""
+
+    from roll.distributed.strategy import vllm_strategy
+
+    original = vllm_strategy.create_sampling_params_for_vllm
+    if getattr(original, "__rdan_compat_owner__", None) == _VLLM_SEED_PATCH_OWNER:
+        return
+    digest = hashlib.sha256(inspect.getsource(original).encode()).hexdigest()
+    if digest != RTT_VLLM_SAMPLING_PARAMS_SHA256:
+        raise RuntimeError(f"unexpected RTT vLLM SamplingParams helper digest: {digest}")
+
+    def create_sampling_params_for_vllm(gen_kwargs: Mapping[str, Any]) -> Any:
+        seed = gen_kwargs.get("seed")
+        if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+            raise RuntimeError("vLLM generation requires a nonnegative deterministic seed")
+        output_kind = gen_kwargs.get("output_kind", vllm_strategy.RequestOutputKind.FINAL_ONLY)
+        if output_kind != vllm_strategy.RequestOutputKind.FINAL_ONLY:
+            if gen_kwargs["num_return_sequences"] != 1:
+                raise RuntimeError("partial vLLM output requires one return sequence")
+        return vllm_strategy.SamplingParams(
+            max_tokens=gen_kwargs["max_new_tokens"],
+            temperature=gen_kwargs["temperature"],
+            top_p=gen_kwargs["top_p"],
+            top_k=gen_kwargs["top_k"],
+            stop_token_ids=gen_kwargs["eos_token_id"],
+            repetition_penalty=gen_kwargs["repetition_penalty"],
+            n=gen_kwargs["num_return_sequences"],
+            stop=gen_kwargs["stop_strings"],
+            logprobs=gen_kwargs.get("logprobs", 0),
+            output_kind=output_kind,
+            include_stop_str_in_output=gen_kwargs.get("include_stop_str_in_output", True),
+            seed=seed,
+        )
+
+    create_sampling_params_for_vllm.__rdan_compat_owner__ = _VLLM_SEED_PATCH_OWNER
+    vllm_strategy.create_sampling_params_for_vllm = create_sampling_params_for_vllm
 
 
 def load_sync_hf_rlvr_config(rtt_root: str | Path, config_cls: type, payload: Mapping[str, Any]) -> Any:

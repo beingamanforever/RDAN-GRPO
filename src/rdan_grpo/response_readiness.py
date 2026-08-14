@@ -15,7 +15,7 @@ from typing import Any
 from rdan_grpo.program import MODEL_NAME, MODEL_REVISION, RTT_REVISION, ProgramBundle, check_program
 
 READINESS_ID = "qwen_response_readiness_v1"
-EVIDENCE_ORDER = ("judge_calibration", "runtime_parity", "no_update")
+EVIDENCE_ORDER = ("judge_calibration", "runtime_parity", "vllm_runtime_parity", "no_update")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPUTE_CONTRACT = REPO_ROOT / "configs/compute/qwen_a100_2x.json"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -90,7 +90,7 @@ def _validate_evidence_files(
     expected_paths = tuple(_lifecycle_path(bundle, name) for name in EVIDENCE_ORDER)
     if evidence_files != expected_paths:
         raise ResponseReadinessError(
-            "lifecycle evidence must be supplied in judge calibration, runtime parity, no-update order"
+            "lifecycle evidence must be supplied in judge calibration, HF parity, vLLM parity, no-update order"
         )
     for name, path in zip(EVIDENCE_ORDER, evidence_files, strict=True):
         payload = _load_json_bytes(snapshots[path], name)
@@ -201,7 +201,9 @@ def validate_response_readiness(
 def _validate_program_state(bundle: ProgramBundle) -> None:
     refs = bundle.program["lifecycle_artifacts"]
     if tuple(name for name in EVIDENCE_ORDER if refs[name].get("status") != "frozen"):
-        raise ResponseReadinessError("judge calibration, runtime parity, and no-update evidence must be frozen")
+        raise ResponseReadinessError(
+            "judge calibration, HF parity, vLLM parity, and no-update evidence must be frozen"
+        )
     if bundle.program["readiness"].get("launch") != "ready":
         raise ResponseReadinessError("validated program launch readiness is not ready")
     if bundle.program["readiness"].get("scalar_training") != "ready":

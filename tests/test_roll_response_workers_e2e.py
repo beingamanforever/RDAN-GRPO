@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import copy
 import importlib.util
 import sys
 import types
@@ -34,6 +36,14 @@ class FakeData:
 
     def __getitem__(self, item: slice) -> FakeData:
         return FakeData(self.values[item], dict(self.meta_info))
+
+    def clone(self) -> FakeData:
+        return FakeData(
+            self.values.clone(),
+            copy.deepcopy(self.meta_info),
+            {name: value.copy() for name, value in self.non_tensor_batch.items()},
+            {name: value.clone() for name, value in self.batch.items()},
+        )
 
     @staticmethod
     def concat(values: list[FakeData]) -> FakeData:
@@ -72,12 +82,22 @@ class FakeInferWorker:
         return FakeData(data.values.repeat_interleave(2), {"source": "hf"})
 
 
+class FakeVLLMInferWorker:
+    requests: list[FakeData]
+
+    async def generate(self, data: FakeData) -> FakeData:
+        self.requests.append(data)
+        return FakeData(data.values.repeat_interleave(2), dict(data.meta_info))
+
+
 def _load_workers(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     decorator = types.ModuleType("roll.distributed.scheduler.decorator")
     decorator.Dispatch = SimpleNamespace(ONE_TO_ALL=1, DP_MP_DISPATCH_FIRST=2, DP_MP_COMPUTE=3)
     decorator.register = lambda **_kwargs: lambda function: function
     protocol = types.ModuleType("roll.distributed.scheduler.protocol")
     protocol.DataProto = FakeData
+    base_worker = types.ModuleType("roll.pipeline.base_worker")
+    base_worker.InferWorker = FakeVLLMInferWorker
     actor = types.ModuleType("roll.pipeline.rlvr.actor_worker")
     actor.ActorWorker = FakeActorWorker
     receipt = types.ModuleType("rdan_grpo.roll_fsdp_hf_receipt")
@@ -93,6 +113,8 @@ def _load_workers(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
         setattr(receipt, name, lambda *args, _name=name, **kwargs: events.append((_name, args)) or {"name": _name})
     same = types.ModuleType("rdan_grpo.roll_same_backend")
     same.SynchronousHFInferWorker = FakeInferWorker
+    compat = types.ModuleType("rdan_grpo.roll_compat")
+    compat.install_vllm_sampling_seed_compat = lambda: None
     for name, module in {
         "roll": types.ModuleType("roll"),
         "roll.distributed": types.ModuleType("roll.distributed"),
@@ -100,10 +122,12 @@ def _load_workers(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
         "roll.distributed.scheduler.decorator": decorator,
         "roll.distributed.scheduler.protocol": protocol,
         "roll.pipeline": types.ModuleType("roll.pipeline"),
+        "roll.pipeline.base_worker": base_worker,
         "roll.pipeline.rlvr": types.ModuleType("roll.pipeline.rlvr"),
         "roll.pipeline.rlvr.actor_worker": actor,
         "rdan_grpo.roll_fsdp_hf_receipt": receipt,
         "rdan_grpo.roll_same_backend": same,
+        "rdan_grpo.roll_compat": compat,
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
     path = ROOT / "src/rdan_grpo/roll_response_workers.py"
@@ -156,6 +180,11 @@ def _actor(module: types.ModuleType, rank: int = 0) -> Any:
         scheduler=Stepper(),
         model=SimpleNamespace(parameters=lambda: [parameter]),
         op_compute_log_probs=lambda **kwargs: kwargs["logits"].reshape(1, -1).float(),
+        weight_updaters={
+            "actor-to-infer": SimpleNamespace(
+                infer_worker_config=SimpleNamespace(strategy_args=SimpleNamespace(strategy_name="hf_infer"))
+            )
+        },
     )
     worker.pipeline_config = SimpleNamespace(
         importance_sampling="token",
@@ -361,6 +390,76 @@ def test_scheduler_concatenation_preserves_inference_generation_id_alignment(
         "gen-000001-r1-000000000002",
         "gen-000001-r1-000000000003",
     ]
+
+
+def test_vllm_generation_seeds_each_same_step_call_and_resumes_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_workers(monkeypatch)
+    worker = module.ResponseVLLMInferWorker()
+    worker.worker_config = SimpleNamespace(strategy_args=SimpleNamespace(strategy_name="vllm"))
+    worker.pipeline_config = SimpleNamespace(seed=240520)
+    worker.rank_info = SimpleNamespace(dp_rank=1)
+    worker.requests = []
+    data = FakeData(torch.tensor([1, 2]), {"global_step": 1, "generation_config": {"temperature": 0.7}})
+
+    first = asyncio.run(worker.generate(data))
+    second = asyncio.run(worker.generate(data))
+    state = worker.rdan_save_rng()
+
+    assert data.meta_info["generation_config"] == {"temperature": 0.7}
+    assert [request.meta_info["generation_config"]["seed"] for request in worker.requests] == [
+        module._generation_seed(240520, 1, 0, 1),
+        module._generation_seed(240520, 1, 1, 1),
+    ]
+    assert first.non_tensor_batch["generation_id"].tolist() == [
+        "gen-000001-r1-c0000-000000000000",
+        "gen-000001-r1-c0000-000000000001",
+        "gen-000001-r1-c0000-000000000002",
+        "gen-000001-r1-c0000-000000000003",
+    ]
+    assert second.non_tensor_batch["generation_id"][0] == "gen-000001-r1-c0001-000000000000"
+    assert state["last_generation_ordinal"] == 1
+
+    resumed = module.ResponseVLLMInferWorker()
+    resumed.worker_config = worker.worker_config
+    resumed.pipeline_config = worker.pipeline_config
+    resumed.rank_info = worker.rank_info
+    resumed.requests = []
+    resumed.rdan_load_rng(state)
+    third = asyncio.run(resumed.generate(data))
+    next_step = asyncio.run(resumed.generate(FakeData(torch.tensor([3]), {"global_step": 2, "generation_config": {}})))
+
+    assert resumed.requests[0].meta_info["generation_config"]["seed"] == module._generation_seed(240520, 1, 2, 1)
+    assert resumed.requests[1].meta_info["generation_config"]["seed"] == module._generation_seed(240520, 2, 0, 1)
+    assert third.non_tensor_batch["generation_id"][0] == "gen-000001-r1-c0002-000000000000"
+    assert next_step.non_tensor_batch["generation_id"][0] == "gen-000002-r1-c0000-000000000000"
+
+    with pytest.raises(RuntimeError, match="not contiguous"):
+        asyncio.run(resumed.generate(FakeData(torch.tensor([4]), {"global_step": 4, "generation_config": {}})))
+
+
+def test_vllm_response_receipt_preserves_observed_loader_calls_without_synthetic_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_workers(monkeypatch)
+    base = FSDPHFStreamReceipt(FSDPHFTransaction("tx", 0, 0), "infer", "NVIDIA A100-SXM4-80GB")
+    base.finish_infer([("weight", torch.ones(2, dtype=torch.bfloat16))])
+    snapshot = base.snapshot() | {
+        "loader": {
+            "calls": 2,
+            "successes": 2,
+            "failed": False,
+            "segments_started": 2,
+            "segments_completed": 2,
+            "loaded": True,
+        }
+    }
+
+    receipt = module._vllm_response_receipt([snapshot])
+
+    assert receipt["backend"] == "vllm"
+    assert receipt["loader"]["calls"] == 2
+    assert "transaction" not in receipt
+    assert "transport" not in receipt
 
 
 def test_actor_dcp_round_trip_restores_exact_counters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

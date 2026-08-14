@@ -181,6 +181,9 @@ def test_runtime_parity_caller_boundary_and_lifecycle_contract(tmp_path: Path) -
     assert evidence["infer_logprobs_source"] == "observed_rollout_engine"
     assert evidence["actor_train_recomputed"] is True
     assert evidence["actor_boundary_observed"] is True
+    assert "blocking_surface" not in evidence
+    assert "diagnostic_surface" not in evidence
+    assert "surface_comparisons" not in evidence
     assert artifact["runtime_backend"] == {
         "train_config_sha256": TRAIN_CONFIG_SHA256,
         "resolved_config_sha256": RESOLVED_CONFIG_SHA256,
@@ -282,7 +285,14 @@ def test_same_backend_profile_is_explicit_and_old_profile_is_unchanged(
         "rtt_revision": program.RTT_REVISION,
         **source_identity,
     }
-    assert artifact["rollout_logprob_evidence"]["infer_logprobs_source"] == "observed_hf_generation"
+    evidence = artifact["rollout_logprob_evidence"]
+    assert evidence["infer_logprobs_source"] == "observed_hf_generation"
+    assert evidence["blocking_surface"] == "infer_full_vs_actor_full"
+    assert evidence["diagnostic_surface"] == "generation_vs_infer_full"
+    assert set(evidence["surface_comparisons"]) == {
+        "generation_vs_infer_full",
+        "infer_full_vs_actor_full",
+    }
     configs = {
         "diagnostic": {"sha256": parity_config_sha256},
         "production": {"status": "frozen", "sha256": "d" * 64},
@@ -425,37 +435,42 @@ def test_threshold_failure_emits_aggregate_alignment_diagnostics() -> None:
     )
 
 
-def test_same_backend_threshold_selects_generation_vs_actor_and_reports_full_surface() -> None:
+def test_same_backend_threshold_selects_full_forward_and_reports_generation_diagnostic() -> None:
     observation = _observation()
     mask = observation.response_mask[:, 1:].bool()
-    infer_full = torch.full_like(observation.actor_logprobs, -7.0)
+    generation = observation.infer_logprobs.clone()
+    generation[mask] = 1.0
+    infer_full = observation.actor_logprobs.clone()
     passing = replace(
         observation,
+        infer_logprobs=generation,
         infer_logprobs_source="observed_hf_generation",
         infer_full_logprobs=infer_full,
     )
 
     evidence = runtime_parity._assess(passing, FSDP2_HF_PROFILE)
 
-    assert evidence["max_abs_error"] == pytest.approx(5e-5)
-    assert evidence["mean_abs_error"] == pytest.approx(5e-5)
+    assert evidence["blocking_surface"] == "infer_full_vs_actor_full"
+    assert evidence["diagnostic_surface"] == "generation_vs_infer_full"
+    assert evidence["max_abs_error"] == 0.0
+    assert evidence["mean_abs_error"] == 0.0
+    assert evidence["surface_comparisons"]["generation_vs_infer_full"]["mean_abs_error"] == pytest.approx(0.99995)
+    assert evidence["surface_comparisons"]["infer_full_vs_actor_full"]["mean_abs_error"] == 0.0
 
-    failing_actor = observation.actor_logprobs.clone()
-    failing_actor[mask] = 1.0
-    failing = replace(
-        passing,
-        actor_logprobs=failing_actor,
-        infer_full_logprobs=failing_actor.clone(),
-    )
+    failing_full = infer_full.clone()
+    failing_full[mask] = 1.0
+    failing = replace(passing, infer_full_logprobs=failing_full)
     with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
         runtime_parity._assess(failing, FSDP2_HF_PROFILE)
 
     diagnostics = raised.value.diagnostics
     assert diagnostics is not None
+    assert diagnostics["blocking_surface"] == "infer_full_vs_actor_full"
+    assert diagnostics["diagnostic_surface"] == "generation_vs_infer_full"
     surfaces = diagnostics["surface_comparisons"]
-    assert surfaces["generation_vs_infer_full"]["mean_abs_error"] == pytest.approx(1.0)
-    assert surfaces["infer_full_vs_actor_full"]["mean_abs_error"] == 0.0
-    assert diagnostics["mean_abs_error"] == pytest.approx(1.0)
+    assert surfaces["generation_vs_infer_full"]["mean_abs_error"] == 0.0
+    assert surfaces["infer_full_vs_actor_full"]["mean_abs_error"] == pytest.approx(0.99995)
+    assert diagnostics["mean_abs_error"] == pytest.approx(0.99995)
     assert diagnostics["thresholds"] == {
         "max_abs_error_at_most": MAX_ABS_ERROR,
         "mean_abs_error_at_most": MEAN_ABS_ERROR,
@@ -466,12 +481,13 @@ def test_same_backend_threshold_selects_generation_vs_actor_and_reports_full_sur
     ("value", "reason"),
     [
         (None, "missing"),
+        ("invalid", "malformed"),
         (torch.zeros((32, 6)), "shape_mismatch"),
         (torch.full((32, 7), float("nan")), "non_finite"),
     ],
 )
-def test_same_backend_full_surface_is_diagnostic_only_when_unavailable(
-    value: torch.Tensor | None,
+def test_same_backend_full_surface_fails_closed_when_unavailable(
+    value: object,
     reason: str,
 ) -> None:
     observation = replace(
@@ -480,17 +496,14 @@ def test_same_backend_full_surface_is_diagnostic_only_when_unavailable(
         infer_full_logprobs=value,
     )
 
-    evidence = runtime_parity._assess(observation, FSDP2_HF_PROFILE)
-
-    assert evidence["max_abs_error"] == pytest.approx(5e-5)
-    failing_actor = observation.actor_logprobs.clone()
-    failing_actor[observation.response_mask[:, 1:].bool()] = 1.0
-    with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
-        runtime_parity._assess(replace(observation, actor_logprobs=failing_actor), FSDP2_HF_PROFILE)
+    with pytest.raises(ParityError, match="blocking surface infer_full_vs_actor_full is unavailable") as raised:
+        runtime_parity._assess(observation, FSDP2_HF_PROFILE)
 
     assert raised.value.diagnostics is not None
+    assert raised.value.diagnostics["blocking_surface"] == "infer_full_vs_actor_full"
+    assert raised.value.diagnostics["diagnostic_surface"] == "generation_vs_infer_full"
     assert raised.value.diagnostics["surface_diagnostic"] == {
-        "status": "diagnostic_unavailable",
+        "status": "blocking_surface_unavailable",
         "reason": reason,
     }
     assert "surface_comparisons" not in raised.value.diagnostics
@@ -502,15 +515,12 @@ def test_same_backend_computation_failure_reason_is_allowlisted() -> None:
         infer_logprobs_source="observed_hf_generation",
         infer_full_unavailable_reason="computation_failed",
     )
-    failing_actor = observation.actor_logprobs.clone()
-    failing_actor[observation.response_mask[:, 1:].bool()] = 1.0
-
-    with pytest.raises(ParityError, match="runtime parity exceeds thresholds") as raised:
-        runtime_parity._assess(replace(observation, actor_logprobs=failing_actor), FSDP2_HF_PROFILE)
+    with pytest.raises(ParityError, match="blocking surface infer_full_vs_actor_full is unavailable") as raised:
+        runtime_parity._assess(observation, FSDP2_HF_PROFILE)
 
     assert raised.value.diagnostics is not None
     assert raised.value.diagnostics["surface_diagnostic"] == {
-        "status": "diagnostic_unavailable",
+        "status": "blocking_surface_unavailable",
         "reason": "computation_failed",
     }
 

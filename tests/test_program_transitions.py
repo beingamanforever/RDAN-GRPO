@@ -495,6 +495,74 @@ def _parity_artifact(root: Path = ROOT, production_sha256: str = "c" * 64) -> di
             "max_abs_error": 0.0005,
             "mean_abs_error": 0.00005,
             "thresholds": {"max_abs_error_at_most": 0.001, "mean_abs_error_at_most": 0.0001},
+            "blocking_surface": "infer_full_vs_actor_full",
+            "diagnostic_surface": "generation_vs_infer_full",
+            "surface_comparisons": {
+                name: {
+                    "compared_tokens": 512,
+                    "source_mean_logprob": -0.5,
+                    "target_mean_logprob": -0.50005,
+                    "signed_mean_difference": 0.00005,
+                    "rmse": 0.00005,
+                    "max_abs_error": 0.0005,
+                    "mean_abs_error": 0.00005,
+                }
+                for name in ("infer_full_vs_actor_full", "generation_vs_infer_full")
+            },
+        },
+    }
+
+
+def _vllm_parity_artifact(root: Path = ROOT, production_sha256: str = "c" * 64) -> dict:
+    return {
+        "schema_version": 1,
+        "id": "qwen_vllm_runtime_parity_v1",
+        "status": "parity_passed",
+        "comparison_policy": "diagnostic_only_actor_recompute_authoritative",
+        "model": {
+            "model": program_contract.MODEL_NAME,
+            "revision": program_contract.MODEL_REVISION,
+            "snapshot_sha256": "6" * 64,
+        },
+        "tokenizer": {
+            "model": program_contract.MODEL_NAME,
+            "revision": program_contract.MODEL_REVISION,
+            "files_sha256": "7" * 64,
+        },
+        "chat_template": {"source": "pinned_tokenizer", "enable_thinking": False, "sha256": "8" * 64},
+        "runtime_backend": {
+            "parity_config_sha256": hashlib.sha256(
+                (root / "configs/roll/qwen_rtt_papo_response_vllm_parity.yaml").read_bytes()
+            ).hexdigest(),
+            "parity_resolved_config_sha256": "a" * 64,
+            "production_config_sha256": production_sha256,
+            "production_resolved_config_sha256": "d" * 64,
+            "actor_train_strategy": "fsdp2_train",
+            "actor_infer_strategy": "vllm",
+            "transformer_impl": "huggingface",
+            "rtt_revision": program_contract.RTT_REVISION,
+        },
+        "weight_receipt": {
+            "transaction_id": "vllm-program-test-transaction",
+            "artifact_sha256": "b" * 64,
+            "resolved_config_sha256": "a" * 64,
+        },
+        "diagnostic": {
+            "prompt_response_tokens_sha256": "9" * 64,
+            "responses": 32,
+            "optimizer_updates": 0,
+            "infer_logprobs_source": "observed_vllm_generation",
+            "actor_train_recomputed": True,
+            "actor_boundary_observed": True,
+            "exact_token_boundaries": True,
+            "sampled_logprobs_finite": True,
+            "compared_tokens": 512,
+            "source_mean_logprob": -0.5,
+            "target_mean_logprob": -0.51,
+            "signed_mean_difference": 0.01,
+            "rmse": 0.01,
+            "max_abs_error": 0.1,
+            "mean_abs_error": 0.01,
         },
     }
 
@@ -855,6 +923,42 @@ def test_same_backend_runtime_parity_freezes_and_passes_program_check(tmp_path: 
 
     assert bundle.lifecycle_artifacts["runtime_parity"] == parity
     assert bundle.program["readiness"]["launch"] == "blocked_until_all_launch_artifacts_frozen"
+
+
+def test_vllm_runtime_parity_is_launch_bound_but_drift_is_diagnostic(tmp_path: Path) -> None:
+    program_path = _contract_copy(tmp_path)
+    production_sha256 = _freeze_same_backend_production(program_path)
+    artifact = _vllm_parity_artifact(tmp_path, production_sha256)
+    _freeze_lifecycle(program_path, "vllm_runtime_parity", artifact)
+
+    bundle = check_program(program_path)
+
+    assert bundle.lifecycle_artifacts["vllm_runtime_parity"] == artifact
+    assert "threshold" not in json.dumps(artifact)
+    assert bundle.program["readiness"]["launch"] == "blocked_until_all_launch_artifacts_frozen"
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value["diagnostic"].update(optimizer_updates=1),
+        lambda value: value["diagnostic"].update(actor_train_recomputed=False),
+        lambda value: value["diagnostic"].update(exact_token_boundaries=False),
+        lambda value: value["diagnostic"].update(mean_abs_error=float("nan")),
+        lambda value: value["weight_receipt"].update(transaction_id=""),
+        lambda value: value.update(comparison_policy="thresholded"),
+        lambda value: value["diagnostic"].update(thresholds={}),
+    ],
+)
+def test_vllm_runtime_parity_rejects_launch_evidence_tampering(tmp_path: Path, mutate: object) -> None:
+    program_path = _contract_copy(tmp_path)
+    production_sha256 = _freeze_same_backend_production(program_path)
+    artifact = _vllm_parity_artifact(tmp_path, production_sha256)
+    mutate(artifact)  # type: ignore[operator]
+    _freeze_lifecycle(program_path, "vllm_runtime_parity", artifact)
+
+    with pytest.raises(ProgramContractError, match="vLLM runtime parity artifact is invalid"):
+        check_program(program_path)
 
 
 @pytest.mark.parametrize(

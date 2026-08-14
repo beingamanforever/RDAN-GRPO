@@ -80,11 +80,11 @@ def _config() -> Any:
             training_args=SimpleNamespace(per_device_train_batch_size=4, gradient_accumulation_steps=2),
         ),
         actor_infer=SimpleNamespace(
-            strategy_args=SimpleNamespace(strategy_name="hf_infer"),
+            strategy_args=SimpleNamespace(strategy_name="vllm"),
             device_mapping=[0, 1],
             num_gpus_per_worker=1,
             world_size=2,
-            max_concurrency=1,
+            max_concurrency=32,
             generating_args=SimpleNamespace(num_return_sequences=RETURNS),
         ),
         async_pipeline=False,
@@ -145,7 +145,7 @@ class FakeActor:
         ]
 
 
-def _scheduler_rewarded_batch(*, bad_infer_shape: bool = False) -> FakeData:
+def _scheduler_rewarded_batch() -> FakeData:
     prompt_ids = torch.tensor([0, 1, 2, 3])
     prompt_keys = np.asarray(["p0", "p1", "p2", "p3"], dtype=object)
     rubrics = np.empty(4, dtype=object)
@@ -164,13 +164,11 @@ def _scheduler_rewarded_batch(*, bad_infer_shape: bool = False) -> FakeData:
     rows = len(repeated_ids)
     sequence_length = 6
     response_mask = torch.tensor([[0, 0, 1, 1, 0, 0]]).repeat(rows, 1)
-    infer_tokens = sequence_length - (2 if bad_infer_shape else 1)
     batch = {
         "origin_prompt_id": repeated_ids,
         "input_ids": torch.ones(rows, sequence_length, dtype=torch.long),
         "attention_mask": torch.ones(rows, sequence_length, dtype=torch.long),
         "response_mask": response_mask,
-        "infer_logprobs": torch.full((rows, infer_tokens), -0.25),
     }
     row = torch.arange(rows) % RETURNS
     passed = row < RETURNS // 2
@@ -186,7 +184,7 @@ def _scheduler_rewarded_batch(*, bad_infer_shape: bool = False) -> FakeData:
             "rdan_judge_failed": torch.zeros(rows, dtype=torch.bool),
         }
     )
-    return FakeData(batch, repeated_metadata, {"infer_logprobs_source": "observed_hf_generation"})
+    return FakeData(batch, repeated_metadata)
 
 
 def _certificate(method: str, quality_weight: float | None, mix_weight: float | None) -> PreflightCertificate:
@@ -280,7 +278,7 @@ def _receipt(
 
 
 def _rank_receipt(transaction_id: str, side: str, rank: int, items: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
+    receipt = {
         "transaction_id": transaction_id,
         "side": side,
         "rank": rank,
@@ -288,21 +286,33 @@ def _rank_receipt(transaction_id: str, side: str, rank: int, items: list[dict[st
         "accelerator_name": "NVIDIA A100-SXM4-80GB",
         "stream_started": True,
         "stream_complete": True,
-        "transport": (
-            {
-                "source_dtypes": ["torch.float32"],
-                "transport_dtype": "torch.float32",
-                "normalization": "cast_to_configured_dtype_before_rtt_serialization",
-            }
-            if side == "actor"
-            else None
-        ),
         "items": items,
         "tensor_count": len(items),
         "total_bytes": sum(item["nbytes"] for item in items),
         "manifest_sha256": _canonical_sha256(items),
-        "transaction": {"calls": 1, "complete": True},
     }
+    if side == "actor":
+        receipt.update(
+            transport={
+                "source_dtypes": ["torch.float32"],
+                "transport_dtype": "torch.float32",
+                "normalization": "cast_to_configured_dtype_before_rtt_serialization",
+            },
+            transaction={"calls": 1, "complete": True},
+        )
+    else:
+        receipt.update(
+            backend="vllm",
+            loader={
+                "calls": 2,
+                "successes": 2,
+                "failed": False,
+                "segments_started": 2,
+                "segments_completed": 2,
+                "loaded": True,
+            },
+        )
+    return receipt
 
 
 def _run(
@@ -398,6 +408,26 @@ def test_optimizer_counters_without_parameter_mutation_fail(monkeypatch: pytest.
     module = _load_module(monkeypatch)
     with pytest.raises(RuntimeError, match="did not change any trainable parameter bytes"):
         _run(module, "rdan_scalar", post=_receipt(2, "post", unchanged=True))
+
+
+@pytest.mark.parametrize(
+    "source_dtypes",
+    [None, ["torch.bfloat16"], ["torch.bfloat16", "torch.float32"]],
+)
+def test_parameter_mutation_requires_fp32_initial_actor_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    source_dtypes: list[str] | None,
+) -> None:
+    module = _load_module(monkeypatch)
+    initial = copy.deepcopy(_receipt(0, "initial"))
+    for actor in initial["actor_receipts"]:
+        actor["transport"]["source_dtypes"] = source_dtypes
+    initial["receipt_manifest_sha256"] = _canonical_sha256(
+        {"actor_receipts": initial["actor_receipts"], "infer_receipts": initial["infer_receipts"]}
+    )
+
+    with pytest.raises(RuntimeError, match="does not prove fp32 master parameters"):
+        _run(module, "rdan_scalar", initial=initial)
 
 
 def test_receipt_pipeline_transactions_and_optimizer_updates_use_distinct_units(
@@ -540,10 +570,11 @@ def test_memory_is_observed_after_transfer_and_blocks_unsafe_promotion(monkeypat
     assert actor.optimizer_step == [2, 2]
 
 
-def test_invalid_inference_logprob_boundary_fails_before_actor_work(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inference_logprobs_are_not_part_of_the_training_batch_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_module(monkeypatch)
     actor = FakeActor()
 
-    with pytest.raises(RuntimeError, match="infer_logprobs"):
-        _run(module, "rl_aon", actor=actor, batch=_scheduler_rewarded_batch(bad_infer_shape=True))
-    assert actor.compute_calls == actor.train_calls == 0
+    _, actor, batch, _ = _run(module, "rl_aon", actor=actor)
+
+    assert "infer_logprobs" not in batch.batch
+    assert actor.compute_calls == actor.train_calls == 1

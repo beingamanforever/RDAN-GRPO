@@ -20,7 +20,7 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from rdan_grpo.program import MODEL_NAME, MODEL_REVISION, require_launch_gate
+from rdan_grpo.program import MODEL_NAME, MODEL_REVISION, check_program, require_launch_gate
 from rdan_grpo.response_identity import (
     canonical_resolved_config_sha256,
     response_data_identity,
@@ -38,6 +38,7 @@ from rdan_grpo.roll_compat import RTT_REVISION, install_rtt_compat
 from rdan_grpo.roll_response_checkpoint import ArtifactIdentity, CheckpointIdentity, load_checkpoint
 from rdan_grpo.roll_response_config import ResponseConfig, load_response_rlvr_config
 from rdan_grpo.runtime_parity import GENERATION_SOURCE_IDENTITY, build_runtime_identity
+from rdan_grpo.vllm_runtime_parity import load_vllm_runtime_parity
 from rdan_grpo.wandb_tracking import (
     WANDB_ENTITY,
     WANDB_PROJECT,
@@ -58,6 +59,7 @@ CURRENT_LAUNCH_METHOD = "rtt_papo_response"
 class _LaunchPaths(NamedTuple):
     config: Path
     runtime: Path
+    vllm_runtime: Path
     certificate: Path
     preflight: Path
     evaluator_rows: Path
@@ -76,6 +78,7 @@ class _LaunchEvidence(NamedTuple):
     certificate: Mapping[str, Any]
     data_identity: Mapping[str, Any]
     parity: Mapping[str, Any]
+    vllm_parity: Mapping[str, Any]
 
 
 def main() -> int:
@@ -118,6 +121,7 @@ def _launch_paths(args: argparse.Namespace) -> _LaunchPaths:
     return _LaunchPaths(
         config=_regular_file(args.config, "config"),
         runtime=_regular_file(args.runtime_parity, "runtime parity artifact"),
+        vllm_runtime=_regular_file(args.vllm_runtime_parity, "vLLM runtime parity artifact"),
         certificate=_regular_file(args.certificate, "preflight certificate"),
         preflight=_regular_file(args.preflight_config, "preflight config"),
         evaluator_rows=_regular_file(args.evaluator_rows, "evaluator rows"),
@@ -149,6 +153,14 @@ def _launch_evidence(args: argparse.Namespace, paths: _LaunchPaths) -> _LaunchEv
         preflight_hash,
         preflight_resolved_hash,
     )
+    vllm_parity = _vllm_runtime_parity(
+        paths.vllm_runtime,
+        paths.program,
+        production_hash,
+        production_resolved_hash,
+    )
+    if _model_identity(vllm_parity) != _model_identity(parity):
+        raise ValueError("HF and vLLM parity artifacts have different model identities")
     source_hashes = _response_source_identity(
         paths,
         production_resolved_hash,
@@ -163,7 +175,15 @@ def _launch_evidence(args: argparse.Namespace, paths: _LaunchPaths) -> _LaunchEv
         mix_weight=args.mix_weight,
     )
     _require_secrets()
-    return _LaunchEvidence(code_revision, production_payload, production_hash, certificate, data_identity, parity)
+    return _LaunchEvidence(
+        code_revision,
+        production_payload,
+        production_hash,
+        certificate,
+        data_identity,
+        parity,
+        vllm_parity,
+    )
 
 
 def _response_source_identity(
@@ -182,6 +202,9 @@ def _response_source_identity(
     )
     if _file_sha256(paths.runtime) != hashes["runtime_parity"]:
         raise ValueError("runtime parity artifact differs from the frozen experiment program")
+    program = check_program(paths.program)
+    if _file_sha256(paths.vllm_runtime) != program.program["lifecycle_artifacts"]["vllm_runtime_parity"]["sha256"]:
+        raise ValueError("vLLM runtime parity artifact differs from the frozen experiment program")
     return hashes
 
 
@@ -374,6 +397,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--evaluator-rows", type=Path, required=True)
     parser.add_argument("--program", type=Path, required=True)
     parser.add_argument("--runtime-parity", type=Path, required=True)
+    parser.add_argument("--vllm-runtime-parity", type=Path, required=True)
     parser.add_argument("--readiness-receipt", type=Path, required=True)
     parser.add_argument("--readiness-bootstrap", type=Path, required=True)
     parser.add_argument(
@@ -381,7 +405,7 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         action="append",
         required=True,
-        help="repeat in judge calibration, runtime parity, no-update order",
+        help="repeat in judge calibration, HF parity, vLLM parity, no-update order",
     )
     parser.add_argument("--checkpoint-root", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path, required=True)
@@ -666,6 +690,35 @@ def _runtime_parity(
     }
     if any(backend.get(key) != value for key, value in required.items()):
         raise ValueError("runtime parity artifact backend differs from production")
+    return artifact
+
+
+def _vllm_runtime_parity(
+    path: Path,
+    program_path: Path,
+    production_hash: str,
+    production_resolved_hash: str,
+) -> Mapping[str, Any]:
+    bundle = check_program(program_path)
+    reference = bundle.program["lifecycle_artifacts"]["vllm_runtime_parity"]
+    config = bundle.program["same_backend_configs"]["vllm_diagnostic"]
+    artifact = load_vllm_runtime_parity(
+        path,
+        artifact_id=reference["artifact_id"],
+        model=MODEL_NAME,
+        revision=MODEL_REVISION,
+        rtt_revision=RTT_REVISION,
+        parity_config_sha256=config["sha256"],
+        production_config_sha256=production_hash,
+    )
+    backend = artifact["runtime_backend"]
+    vllm_config = bundle.repo_root / config["path"]
+    expected = {
+        "parity_resolved_config_sha256": canonical_resolved_config_sha256(_compose_config(vllm_config)),
+        "production_resolved_config_sha256": production_resolved_hash,
+    }
+    if any(backend.get(key) != value for key, value in expected.items()):
+        raise ValueError("vLLM runtime parity artifact is linked to different composed launch configs")
     return artifact
 
 

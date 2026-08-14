@@ -21,6 +21,7 @@ from rdan_grpo.program import ProgramContractError, check_program  # noqa: E402
 STAGES = {
     "judge": ("judge_calibration", "configs/artifacts/qwen_judge_calibration.json", "id"),
     "parity": ("runtime_parity", "configs/artifacts/qwen_runtime_parity.json", "id"),
+    "vllm-parity": ("vllm_runtime_parity", "configs/artifacts/qwen_vllm_runtime_parity.json", "id"),
     "no-update": ("no_update", "configs/artifacts/qwen_no_update_certificate.json", "certificate_id"),
 }
 
@@ -49,7 +50,11 @@ def freeze_stage(program_path: Path, stage: str) -> dict[str, Any]:
     }:
         raise LifecycleFreezeError(f"{stage} lifecycle reference is not pending")
     if stage == "no-update":
-        pending = [name for name in ("judge_calibration", "runtime_parity") if refs[name]["status"] != "frozen"]
+        pending = [
+            name
+            for name in ("judge_calibration", "runtime_parity", "vllm_runtime_parity")
+            if refs[name]["status"] != "frozen"
+        ]
         if pending:
             raise LifecycleFreezeError(f"no-update requires frozen lifecycle evidence: {', '.join(pending)}")
 
@@ -92,7 +97,14 @@ def _set_readiness(program: dict[str, Any]) -> None:
     readiness["judge"] = (
         "ready" if refs["judge_calibration"]["status"] == "frozen" else "blocked_until_frozen_calibration"
     )
-    required = ("scalar_data", "response_data", "judge_calibration", "runtime_parity", "no_update")
+    required = (
+        "scalar_data",
+        "response_data",
+        "judge_calibration",
+        "runtime_parity",
+        "vllm_runtime_parity",
+        "no_update",
+    )
     launch_ready = readiness["scalar_training"] == "ready" and all(
         refs[name]["status"] == "frozen" for name in required
     )

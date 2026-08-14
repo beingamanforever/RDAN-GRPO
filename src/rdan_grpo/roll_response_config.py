@@ -13,7 +13,9 @@ from rdan_grpo.roll_compat import RTT_BASE_CONFIG_SHA256, RTT_REVISION
 from rdan_grpo.wandb_tracking import canonical_config_sha256
 
 ACTOR_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseActorWorker"
-INFER_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseInferWorker"
+INFER_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseVLLMInferWorker"
+HF_INFER_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseInferWorker"
+VLLM_RECEIPT_WORKER_PATH = "rdan_grpo.roll_weight_receipt.ReceiptWorkerV1"
 HYBRID_REWARD_WORKER_PATH = "rdan_grpo.roll_reward.RTTCompatibleRubricRewardWorker"
 SCALAR_REWARD_WORKER_PATH = "rdan_grpo.roll_reward.ScalarRubricRewardWorker"
 HYBRID_DATA_PATH = "data/qwen_hir_rubrichub_if_hybrid.jsonl"
@@ -42,8 +44,8 @@ FROZEN_PROFILE = {
 TRAINING_ARGS = {
     "learning_rate": 1.0e-6,
     "weight_decay": 0,
-    "per_device_train_batch_size": 4,
-    "gradient_accumulation_steps": 32,
+    "per_device_train_batch_size": 1,
+    "gradient_accumulation_steps": 128,
     "warmup_steps": 20,
     "num_train_epochs": 50,
 }
@@ -55,6 +57,14 @@ GENERATION_ARGS = {
     "temperature": 0.99,
     "top_k": 100,
     "top_p": 0.99,
+}
+VLLM_STRATEGY_CONFIG = {
+    "gpu_memory_utilization": 0.8,
+    "block_size": 16,
+    "max_model_len": 8000,
+    "load_format": "auto",
+    "sleep_level": 1,
+    "worker_extension_cls": VLLM_RECEIPT_WORKER_PATH,
 }
 
 
@@ -83,13 +93,9 @@ def load_response_rlvr_config(rtt_root: str | Path, config_cls: type, payload: M
     _validate_payload(production, response)
     _verify_rtt(Path(rtt_root).resolve())
 
-    surrogate = deepcopy(production)
-    surrogate["actor_train"]["device_mapping"] = repr([0, 1])
-    surrogate["actor_infer"]["device_mapping"] = repr([0, 1])
-    surrogate["actor_infer"]["strategy_args"]["strategy_name"] = "vllm"
-    config = _construct(config_cls, surrogate)
-    config.actor_infer.strategy_args.strategy_name = "hf_infer"
-    config.actor_infer.max_concurrency = 1
+    production["actor_train"]["device_mapping"] = repr([0, 1])
+    production["actor_infer"]["device_mapping"] = repr([0, 1])
+    config = _construct(config_cls, production)
     response = replace(response, resolved_config_sha256=canonical_config_sha256(config.to_dict()))
     config.rdan_response = response
     _validate_config(config)
@@ -110,8 +116,10 @@ def load_response_preflight_config(rtt_root: str | Path, config_cls: type, paylo
     surrogate = deepcopy(preflight)
     surrogate["actor_infer"]["device_mapping"] = repr([0, 1])
     surrogate["actor_infer"]["strategy_args"]["strategy_name"] = "vllm"
+    surrogate["actor_infer"]["strategy_args"]["strategy_config"] = deepcopy(VLLM_STRATEGY_CONFIG)
     config = _construct(config_cls, surrogate)
     config.actor_infer.strategy_args.strategy_name = "hf_infer"
+    config.actor_infer.strategy_args.strategy_config = {"transformer_impl": "huggingface", "max_model_len": 8000}
     config.actor_infer.max_concurrency = 1
     response = replace(response, resolved_config_sha256=canonical_config_sha256(config.to_dict()))
     config.rdan_response = response
@@ -155,7 +163,7 @@ def _weight(value: Any, name: str, *, required: bool) -> None:
 
 def _validate_payload(payload: Mapping[str, Any], response: ResponseConfig) -> None:
     actor = _worker(payload, "actor_train", ACTOR_WORKER_PATH, "fsdp2_train")
-    infer = _worker(payload, "actor_infer", INFER_WORKER_PATH, "hf_infer")
+    infer = _worker(payload, "actor_infer", INFER_WORKER_PATH, "vllm")
     if actor.get("device_mapping") != [0, 1] or infer.get("device_mapping") != [0, 1]:
         raise ValueError("response config requires colocated device mappings [0, 1]")
     if any(worker.get("world_size") != 2 or worker.get("num_gpus_per_worker") != 1 for worker in (actor, infer)):
@@ -179,14 +187,14 @@ def _validate_payload(payload: Mapping[str, Any], response: ResponseConfig) -> N
     }
     if any(payload.get(name) != value for name, value in required.items()):
         raise ValueError("response config differs from the frozen synchronous 500-step profile")
-    if infer.get("max_concurrency") != 1:
-        raise ValueError("response config requires actor_infer.max_concurrency=1")
+    if infer.get("max_concurrency") != 32:
+        raise ValueError("response config requires actor_infer.max_concurrency=32")
     _validate_recipe(payload, actor, infer, max_steps=500)
 
 
 def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseConfig) -> None:
     actor = _worker(payload, "actor_train", ACTOR_WORKER_PATH, "fsdp2_train")
-    infer = _worker(payload, "actor_infer", INFER_WORKER_PATH, "hf_infer")
+    infer = _worker(payload, "actor_infer", HF_INFER_WORKER_PATH, "hf_infer")
     if actor.get("device_mapping") != "[]" or infer.get("device_mapping") != [0, 1]:
         raise ValueError("response preflight requires no actor devices and HF inference on [0, 1]")
     if infer.get("world_size") != 2 or infer.get("num_gpus_per_worker") != 1:
@@ -228,6 +236,8 @@ def _validate_recipe(
     strategy_config = strategy.get("strategy_config") if isinstance(strategy, Mapping) else None
     if not isinstance(strategy_config, Mapping) or strategy_config.get("max_model_len") != 8000:
         raise ValueError("response config differs from the frozen inference topology")
+    if strategy.get("strategy_name") == "vllm" and dict(strategy_config) != VLLM_STRATEGY_CONFIG:
+        raise ValueError("response config differs from the frozen vLLM topology")
     _validate_generation(infer.get("generating_args"), "response config")
     responses = payload["rollout_batch_size"] * payload["num_return_sequences_in_group"]
     optimizer_batch = TRAINING_ARGS["per_device_train_batch_size"] * TRAINING_ARGS["gradient_accumulation_steps"] * 2
@@ -260,8 +270,13 @@ def _worker(payload: Mapping[str, Any], name: str, worker_cls: str, strategy: st
     strategy_args = worker.get("strategy_args")
     if not isinstance(strategy_args, Mapping) or strategy_args.get("strategy_name") != strategy:
         raise ValueError(f"response config requires {name} strategy {strategy}")
-    if strategy_args.get("strategy_config", {}).get("transformer_impl") != "huggingface":
+    strategy_config = strategy_args.get("strategy_config")
+    if not isinstance(strategy_config, Mapping):
+        raise ValueError(f"response config requires {name}.strategy_args.strategy_config")
+    if strategy != "vllm" and strategy_config.get("transformer_impl") != "huggingface":
         raise ValueError(f"response config requires {name} Hugging Face implementation")
+    if strategy == "vllm" and strategy_config.get("transformer_impl") is not None:
+        raise ValueError(f"response config requires {name} native vLLM implementation")
     model_args = worker.get("model_args")
     if (
         not isinstance(model_args, Mapping)
@@ -305,7 +320,7 @@ def _verify_rtt(root: Path) -> None:
 def _validate_config(config: Any) -> None:
     for name, worker_cls, strategy in (
         ("actor_train", ACTOR_WORKER_PATH, "fsdp2_train"),
-        ("actor_infer", INFER_WORKER_PATH, "hf_infer"),
+        ("actor_infer", INFER_WORKER_PATH, "vllm"),
     ):
         worker = getattr(config, name)
         if (
@@ -331,7 +346,7 @@ def _validate_preflight_config(config: Any) -> None:
         config.actor_train.worker_cls != ACTOR_WORKER_PATH
         or config.actor_train.strategy_args.strategy_name != "fsdp2_train"
         or config.actor_train.device_mapping != []
-        or config.actor_infer.worker_cls != INFER_WORKER_PATH
+        or config.actor_infer.worker_cls != HF_INFER_WORKER_PATH
         or config.actor_infer.strategy_args.strategy_name != "hf_infer"
         or config.actor_infer.device_mapping != [0, 1]
         or config.actor_infer.world_size != 2

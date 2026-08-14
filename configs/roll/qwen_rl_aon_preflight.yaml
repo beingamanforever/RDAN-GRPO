@@ -12,6 +12,14 @@ generate_opt_level: 0
 force_disable_old_logprobs_recompute: true
 actor_train:
   device_mapping: "[]"
+actor_infer:
+  worker_cls: rdan_grpo.roll_response_workers.ResponseInferWorker
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config:
+      transformer_impl: huggingface
+      max_model_len: 8000
+  max_concurrency: 1
 validation:
   model_args:
     disable_gradient_checkpointing: true

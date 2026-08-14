@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import os
 from collections.abc import Mapping
@@ -12,6 +14,7 @@ import numpy as np
 import torch
 from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.protocol import DataProto
+from roll.pipeline.base_worker import InferWorker
 from roll.pipeline.rlvr.actor_worker import ActorWorker
 
 from rdan_grpo.fsdp_hf_receipt import FSDPHFReceiptError
@@ -30,6 +33,8 @@ _COUNTER_ATTR = "_rdan_response_counters"
 _CLIP_ATTR = "_rdan_response_clip_fractions"
 _TRAIN_STATE_ATTR = "_rdan_response_train_state"
 _GENERATION_COUNT_ATTR = "_rdan_generation_count"
+_VLLM_GENERATION_STEP_ATTR = "_rdan_vllm_generation_step"
+_VLLM_GENERATION_ORDINAL_ATTR = "_rdan_vllm_generation_ordinal"
 RESPONSE_CLIP_METRIC = "rdan/response_token_clipfrac"
 
 
@@ -145,8 +150,24 @@ class ResponseActorWorker(ActorWorker):
         return output
 
     def start_model_update(self, model_update_name: str) -> DataProto:
-        """Run a named FSDP-to-HF model update under receipt tracking."""
+        """Run a named FSDP model update under backend-specific receipt tracking."""
 
+        updater = getattr(getattr(self, "strategy", None), "weight_updaters", {}).get(model_update_name)
+        strategy_name = getattr(
+            getattr(getattr(updater, "infer_worker_config", None), "strategy_args", None),
+            "strategy_name",
+            None,
+        )
+        if strategy_name == "vllm":
+            from rdan_grpo.roll_weight_receipt import run_receipted_fsdp_vllm_update
+
+            return run_receipted_fsdp_vllm_update(
+                self,
+                model_update_name,
+                lambda: super(ResponseActorWorker, self).start_model_update(model_update_name),
+            )
+        if strategy_name != "hf_infer":
+            raise RuntimeError(f"response training does not support inference strategy {strategy_name}")
         return run_receipted_fsdp_hf_update(
             self,
             model_update_name,
@@ -230,6 +251,161 @@ class ResponseInferWorker(SynchronousHFInferWorker):
         )
         setattr(self, _GENERATION_COUNT_ATTR, start + len(output))
         return output
+
+
+class ResponseVLLMInferWorker(InferWorker):
+    """Generate continuously batched vLLM rollouts with deterministic resume state."""
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    async def rdan_begin_response_receipt(self, transaction_id: str) -> None:
+        """Begin one identity-paired receipt on the TP1 vLLM engine."""
+
+        from rdan_grpo.roll_weight_receipt import begin_infer_weight_receipt
+
+        await begin_infer_weight_receipt(self, transaction_id, _rank(self))
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    async def rdan_finish_response_receipt(self) -> dict[str, Any]:
+        """Finish and return the active TP1 vLLM loader receipt."""
+
+        from rdan_grpo.roll_weight_receipt import get_infer_weight_receipt
+
+        return _vllm_response_receipt(await get_infer_weight_receipt(self))
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    async def rdan_reset_response_receipt(self) -> dict[str, Any]:
+        """Validate and clear the completed TP1 vLLM loader receipt."""
+
+        from rdan_grpo.roll_weight_receipt import reset_infer_weight_receipt
+
+        return _vllm_response_receipt(await reset_infer_weight_receipt(self))
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_save_rng(self) -> dict[str, int]:
+        """Save deterministic vLLM generation progress for exact-step restart."""
+
+        step = getattr(self, _VLLM_GENERATION_STEP_ATTR, 0)
+        if isinstance(step, bool) or not isinstance(step, int) or step < 1:
+            raise RuntimeError("vLLM generation progress is unavailable")
+        return {
+            "schema_version": 1,
+            "rank": _rank(self),
+            "base_seed": _base_seed(self),
+            "last_generation_step": step,
+            "last_generation_ordinal": getattr(self, _VLLM_GENERATION_ORDINAL_ATTR, 0),
+        }
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_load_rng(self, state: Mapping[str, int]) -> None:
+        """Restore deterministic vLLM progress before the next pipeline step."""
+
+        if not isinstance(state, Mapping) or set(state) != {
+            "schema_version",
+            "rank",
+            "base_seed",
+            "last_generation_step",
+            "last_generation_ordinal",
+        }:
+            raise RuntimeError("vLLM generation progress is invalid")
+        expected = {"schema_version": 1, "rank": _rank(self), "base_seed": _base_seed(self)}
+        if any(state.get(name) != value for name, value in expected.items()):
+            raise RuntimeError("vLLM generation progress identity differs")
+        step = state.get("last_generation_step")
+        ordinal = state.get("last_generation_ordinal")
+        if (
+            isinstance(step, bool)
+            or not isinstance(step, int)
+            or step < 1
+            or isinstance(ordinal, bool)
+            or not isinstance(ordinal, int)
+            or ordinal < 0
+        ):
+            raise RuntimeError("vLLM generation progress step is invalid")
+        setattr(self, _VLLM_GENERATION_STEP_ATTR, step)
+        setattr(self, _VLLM_GENERATION_ORDINAL_ATTR, ordinal)
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_reset_cuda_peak(self) -> None:
+        """Reset rank-local CUDA peak memory statistics."""
+
+        torch.cuda.reset_peak_memory_stats()
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_cuda_memory(self) -> dict[str, int]:
+        """Return rank-local CUDA peak and capacity bytes."""
+
+        return _cuda_memory(self)
+
+    @register(dispatch_mode=Dispatch.DP_MP_COMPUTE)
+    async def generate(self, data: DataProto) -> DataProto:
+        """Generate one seeded pipeline step and attach stable rank-local IDs."""
+
+        if self.worker_config.strategy_args.strategy_name != "vllm":
+            raise RuntimeError("ResponseVLLMInferWorker requires the vLLM strategy")
+        step = data.meta_info.get("global_step")
+        previous_step = getattr(self, _VLLM_GENERATION_STEP_ATTR, 0)
+        previous_ordinal = getattr(self, _VLLM_GENERATION_ORDINAL_ATTR, -1)
+        if isinstance(step, bool) or not isinstance(step, int) or step not in {previous_step, previous_step + 1}:
+            raise RuntimeError("vLLM generation step is not contiguous with restored progress")
+        if step == 0 or (step == previous_step and previous_step == 0):
+            raise RuntimeError("vLLM generation requires a positive pipeline step")
+        ordinal = previous_ordinal + 1 if step == previous_step else 0
+        from rdan_grpo.roll_compat import install_vllm_sampling_seed_compat
+
+        install_vllm_sampling_seed_compat()
+        request = data.clone()
+        generation_config = copy.deepcopy(request.meta_info.get("generation_config"))
+        if not isinstance(generation_config, dict):
+            raise RuntimeError("vLLM generation config is unavailable")
+        generation_config["seed"] = _generation_seed(_base_seed(self), step, ordinal, _rank(self))
+        request.meta_info["generation_config"] = generation_config
+        output = await super().generate(request)
+        output.non_tensor_batch["generation_id"] = np.asarray(
+            [f"gen-{step:06d}-r{_rank(self)}-c{ordinal:04d}-{index:012d}" for index in range(len(output))],
+            dtype=object,
+        )
+        setattr(self, _VLLM_GENERATION_STEP_ATTR, step)
+        setattr(self, _VLLM_GENERATION_ORDINAL_ATTR, ordinal)
+        return output
+
+
+def _vllm_response_receipt(value: Any) -> dict[str, Any]:
+    values = value if isinstance(value, list) else [value]
+    if len(values) != 1 or not isinstance(values[0], Mapping):
+        raise RuntimeError("response receipt requires exactly one vLLM TP rank")
+    snapshot = values[0]
+    loader = snapshot.get("loader")
+    if not isinstance(loader, Mapping) or loader.get("loaded") is not True:
+        raise RuntimeError("response receipt requires a completed vLLM loader transaction")
+    return {
+        name: snapshot.get(name)
+        for name in (
+            "transaction_id",
+            "side",
+            "rank",
+            "paired_rank",
+            "accelerator_name",
+            "stream_started",
+            "stream_complete",
+            "items",
+            "tensor_count",
+            "total_bytes",
+            "manifest_sha256",
+            "loader",
+        )
+    } | {"backend": "vllm"}
+
+
+def _base_seed(worker: Any) -> int:
+    seed = getattr(getattr(worker, "pipeline_config", None), "seed", None)
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise RuntimeError("response training requires a nonnegative pipeline seed")
+    return seed
+
+
+def _generation_seed(base_seed: int, step: int, ordinal: int, rank: int) -> int:
+    value = f"{base_seed}:{step}:{ordinal}:{rank}".encode()
+    return int.from_bytes(hashlib.sha256(value).digest()[:8], "big")
 
 
 def _step_handlers(
