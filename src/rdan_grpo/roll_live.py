@@ -46,14 +46,6 @@ from torch.nn.utils.rnn import pad_sequence
 from rdan_grpo.response_sampling import balanced_preflight_indices
 from rdan_grpo.roll_bridge import assess_scalar_batch
 from rdan_grpo.roll_scalar import ScalarMethod
-from rdan_grpo.roll_weight_receipt import (
-    begin_actor_weight_receipt,
-    begin_infer_weight_receipt,
-    bind_actor_weight_updater,
-    get_actor_weight_receipt,
-    get_infer_weight_receipt,
-    run_receipted_actor_update,
-)
 from rdan_grpo.runtime_parity import ParityObservation
 from rdan_grpo.weight_receipt import (
     RECEIPT_WORKER_EXTENSION,
@@ -87,10 +79,14 @@ class ObservedLogprobInferWorker(InferWorker):
     async def rdan_begin_weight_receipt(self, transaction_id: str, actor_rank: int) -> Any:
         """Begin the paired transaction on this outer worker and its vLLM engine."""
 
+        from rdan_grpo.roll_weight_receipt import begin_infer_weight_receipt
+
         return await begin_infer_weight_receipt(self, transaction_id, actor_rank)
 
     async def rdan_get_weight_receipt(self) -> Any:
         """Fetch the loader receipt through the outer worker boundary."""
+
+        from rdan_grpo.roll_weight_receipt import get_infer_weight_receipt
 
         return await get_infer_weight_receipt(self)
 
@@ -182,16 +178,24 @@ class ObservedActorWorker(ActorWorker):
     """Parity-only actor that returns tensors observed by its forward callback."""
 
     def setup_model_update(self, infer_cluster: Any, model_update_name: str) -> None:
+        from rdan_grpo.roll_weight_receipt import bind_actor_weight_updater
+
         super().setup_model_update(infer_cluster=infer_cluster, model_update_name=model_update_name)
         bind_actor_weight_updater(self, model_update_name)
 
     def rdan_begin_weight_receipt(self, transaction_id: str, infer_rank: int) -> None:
+        from rdan_grpo.roll_weight_receipt import begin_actor_weight_receipt
+
         begin_actor_weight_receipt(self, transaction_id, infer_rank)
 
     def rdan_get_weight_receipt(self) -> dict[str, Any]:
+        from rdan_grpo.roll_weight_receipt import get_actor_weight_receipt
+
         return get_actor_weight_receipt(self)
 
     def start_model_update(self, model_update_name: str) -> DataProto:
+        from rdan_grpo.roll_weight_receipt import run_receipted_actor_update
+
         return run_receipted_actor_update(
             self,
             model_update_name,

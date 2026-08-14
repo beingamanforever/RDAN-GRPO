@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import importlib.machinery
+import importlib.util
 import logging
 import math
 import subprocess
@@ -178,8 +179,12 @@ def install_rtt_compat(rtt_root: str | Path) -> None:
     _verify_rtt(root)
     _preflight_roll_modules(root)
     _install_mcore_patcher(root)
-    utils, _ = _import_roll_modules(root)
-    _install_local_qwen_mask_patch()
+    megatron_available = _megatron_core_available()
+    modules = _import_roll_modules(root, include_megatron=megatron_available)
+    utils = modules[0]
+
+    if megatron_available:
+        _install_local_qwen_mask_patch()
 
     if not hasattr(utils, "dump_batch_to_reward_system"):
         utils.dump_batch_to_reward_system = dump_batch_to_reward_system
@@ -401,13 +406,23 @@ def _preflight_roll_modules(root: Path) -> None:
             raise RuntimeError(f"resolved {name} from an unexpected path: {spec_path}")
 
 
-def _import_roll_modules(root: Path) -> tuple[ModuleType, ModuleType]:
+def _import_roll_modules(root: Path, *, include_megatron: bool) -> tuple[ModuleType, ...]:
     modules = []
-    for name, path in _roll_modules(root):
+    module_specs = _roll_modules(root) if include_megatron else _roll_modules(root)[:1]
+    for name, path in module_specs:
         module = importlib.import_module(name)
         _require_module_path(name, module, path)
         modules.append(module)
-    return modules[0], modules[1]
+    return tuple(modules)
+
+
+def _megatron_core_available() -> bool:
+    if "megatron.core" in sys.modules:
+        return True
+    try:
+        return importlib.util.find_spec("megatron.core") is not None
+    except ModuleNotFoundError:
+        return False
 
 
 def _module_spec_path(name: str) -> Path:

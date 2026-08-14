@@ -4,6 +4,8 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -108,6 +110,98 @@ def _install_real_roll_compat() -> None:
     if not root:
         pytest.skip("RTT_ROOT is required for the pinned ROLL boundary tests")
     install_rtt_compat(Path(root))
+
+
+def test_roll_live_import_does_not_load_optional_receipt_backends() -> None:
+    script = """
+import importlib.abc
+import sys
+import types
+from contextlib import nullcontext
+from types import SimpleNamespace
+
+def add(name: str, **attrs: object) -> None:
+    module = types.ModuleType(name)
+    module.__path__ = []
+    module.__dict__.update(attrs)
+    sys.modules[name] = module
+
+class Stub:
+    pass
+
+def register(**kwargs: object) -> object:
+    return lambda target: target
+
+add("ray")
+add("ray.util")
+add("ray.util.scheduling_strategies", NodeAffinitySchedulingStrategy=Stub)
+add("roll")
+add("roll.datasets")
+add("roll.datasets.collator", DataCollatorWithPaddingForPaddedKeys=Stub)
+add("roll.datasets.dataset", get_dataset=lambda *args, **kwargs: None)
+add("roll.distributed")
+add("roll.distributed.executor")
+add("roll.distributed.executor.cluster", Cluster=Stub)
+add("roll.distributed.scheduler")
+add(
+    "roll.distributed.scheduler.decorator",
+    Dispatch=SimpleNamespace(DP_MP_COMPUTE=0, DP_MP_DISPATCH_FIRST=1),
+    register=register,
+)
+add("roll.distributed.scheduler.generate_scheduler", DynamicSamplingScheduler=Stub)
+add("roll.distributed.scheduler.protocol", DataProto=Stub)
+add("roll.models")
+add("roll.models.model_providers", default_tokenizer_provider=lambda *args, **kwargs: None)
+add("roll.pipeline")
+add("roll.pipeline.base_pipeline", BasePipeline=Stub)
+add("roll.pipeline.base_worker", InferWorker=Stub)
+add("roll.pipeline.rlvr")
+add("roll.pipeline.rlvr.actor_worker", ActorWorker=Stub)
+add("roll.pipeline.rlvr.rlvr_rollout_pipeline", RLVRRolloutPipeline=Stub)
+add(
+    "roll.pipeline.rlvr.rubircs_pipeline",
+    get_encode_function=lambda *args, **kwargs: None,
+    preprocess_dataset=lambda *args, **kwargs: None,
+    update_dataset_domain=lambda *args, **kwargs: None,
+)
+add("roll.platforms", current_platform=SimpleNamespace(device_type="cpu"))
+add("roll.utils")
+add("roll.utils.context_managers", state_offload_manger=lambda *args, **kwargs: nullcontext())
+add(
+    "roll.utils.functionals",
+    concatenate_input_and_output=lambda *args, **kwargs: None,
+    postprocess_generate=lambda *args, **kwargs: None,
+)
+add("roll.utils.offload_states", OffloadStateType=SimpleNamespace(model_params="model_params"))
+
+class BlockOptionalImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname: str, path: object = None, target: object = None) -> None:
+        if (
+            fullname == "rdan_grpo.roll_weight_receipt"
+            or fullname == "vllm"
+            or fullname.startswith("vllm.")
+            or fullname == "megatron"
+            or fullname.startswith("megatron.")
+            or fullname.startswith("roll.third_party.megatron")
+        ):
+            raise ModuleNotFoundError(f"blocked optional import: {fullname}")
+        return None
+
+sys.meta_path.insert(0, BlockOptionalImports())
+from rdan_grpo.roll_live import ScalarPreflightPipeline
+
+assert ScalarPreflightPipeline.__name__ == "ScalarPreflightPipeline"
+assert "rdan_grpo.roll_weight_receipt" not in sys.modules
+assert "vllm" not in sys.modules
+assert "megatron" not in sys.modules
+assert not any(name.startswith("roll.third_party.megatron") for name in sys.modules)
+"""
+    env = os.environ.copy()
+    env.pop("RTT_ROOT", None)
+    env["PYTHONPATH"] = os.pathsep.join((str(Path("src").resolve()), env.get("PYTHONPATH", "")))
+    result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_reward_boundary_preserves_hard_soft_provenance() -> None:

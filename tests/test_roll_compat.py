@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -90,6 +91,43 @@ assert MegatronInferStrategy.inner_forward_step.__rdan_compat_owner__ == "rdan-g
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": ""},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(not RTT.is_dir(), reason="pinned RTT checkout is unavailable")
+def test_pinned_install_rtt_compat_without_optional_megatron(tmp_path: Path) -> None:
+    try:
+        megatron_spec = importlib.util.find_spec("megatron.core")
+    except ModuleNotFoundError:
+        megatron_spec = None
+    if megatron_spec is not None:
+        pytest.skip("optional Megatron dependency is installed")
+    code = f"""
+import sys
+from pathlib import Path
+from types import ModuleType
+rtt = Path({str(RTT)!r})
+repo = Path({str(ROOT / "RDAN-GRPO")!r})
+sys.path[:0] = [str(repo / "src"), str(rtt), str(rtt / "mcore_adapter/src")]
+codetiming = ModuleType("codetiming")
+codetiming.Timer = type("Timer", (), {{}})
+protocol = ModuleType("roll.distributed.scheduler.protocol")
+protocol.DataProto = type("DataProto", (), {{}})
+sys.modules["codetiming"] = codetiming
+sys.modules["roll.distributed.scheduler.protocol"] = protocol
+from rdan_grpo.roll_compat import dump_batch_to_reward_system, install_rtt_compat
+install_rtt_compat(rtt)
+from roll.pipeline.rlvr import utils
+assert Path(utils.__file__).resolve() == (rtt / "roll/pipeline/rlvr/utils.py").resolve()
+assert utils.dump_batch_to_reward_system is dump_batch_to_reward_system
+assert "roll.distributed.strategy.megatron_strategy" not in sys.modules
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": "", "ROLL_LOG_DIR": str(tmp_path / "roll-logs")},
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
@@ -423,6 +461,25 @@ def test_installer_exposes_only_pinned_patcher_api(monkeypatch, tmp_path) -> Non
     install_rtt_compat(root)
 
 
+def test_installer_skips_optional_megatron_when_dependency_is_absent(monkeypatch, tmp_path) -> None:
+    root = _fake_rtt(monkeypatch, tmp_path)
+    utils = SimpleNamespace(__file__=str(root / "roll/pipeline/rlvr/utils.py"))
+    imported: list[str] = []
+
+    def import_module(name: str) -> object:
+        imported.append(name)
+        if name != "roll.pipeline.rlvr.utils":
+            pytest.fail(f"optional Megatron module was imported: {name}")
+        return utils
+
+    monkeypatch.setattr(compat, "_megatron_core_available", lambda: False)
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    install_rtt_compat(root)
+
+    assert imported == ["roll.pipeline.rlvr.utils"]
+    assert utils.dump_batch_to_reward_system is dump_batch_to_reward_system
+
+
 def test_installer_rejects_loaded_conflicting_patcher(monkeypatch, tmp_path) -> None:
     root = _fake_rtt(monkeypatch, tmp_path)
     _mock_roll_imports(monkeypatch, root=root)
@@ -633,6 +690,7 @@ def _fake_rtt(monkeypatch: pytest.MonkeyPatch, root: Path) -> Path:
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(compat, "RTT_UTILS_SHA256", hashlib.sha256(b"pinned").hexdigest())
     monkeypatch.setattr(compat, "RTT_MEGATRON_SHA256", hashlib.sha256(b"pinned strategy").hexdigest())
+    monkeypatch.setattr(compat, "_megatron_core_available", lambda: True)
     paths = {
         "roll.pipeline.rlvr.utils": root / "roll/pipeline/rlvr/utils.py",
         "roll.distributed.strategy.megatron_strategy": root / "roll/distributed/strategy/megatron_strategy.py",
