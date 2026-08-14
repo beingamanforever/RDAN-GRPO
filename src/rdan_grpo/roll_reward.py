@@ -22,7 +22,7 @@ from roll.pipeline.rlvr.rewards.rubrics_llm_judge_reward_worker import (
 )
 
 from rdan_grpo.evaluator_cert import verify_type4_certificate
-from rdan_grpo.judge import OpenRouterJudge
+from rdan_grpo.judge import SIGNED_PROCESS_SCORES, OpenRouterJudge
 from rdan_grpo.roll_bridge import attach_roll_reward_fields
 from rdan_grpo.rubrichub_rules import evaluate_rubrichub_rule, verify_rule_certificate
 from rdan_grpo.safe_rule import evaluate_rule
@@ -453,7 +453,7 @@ def _valid_judgments(judgments: Any, expected_ids: list[int]) -> bool:
     return all(
         isinstance(row, dict)
         and set(row) == {"score", "reason"}
-        and row["score"] in {-1, 1}
+        and row["score"] in SIGNED_PROCESS_SCORES
         and isinstance(row["reason"], str)
         and bool(row["reason"])
         for row in judgments.values()

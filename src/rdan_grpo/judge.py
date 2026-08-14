@@ -13,6 +13,7 @@ from typing import Any
 
 JsonObject = dict[str, Any]
 PROCESS_SCORES = (0, 0.5, 1)
+SIGNED_PROCESS_SCORES = (-1.0, 0.0, 1.0)
 
 
 @dataclass(frozen=True)

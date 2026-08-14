@@ -31,7 +31,7 @@ from rdan_grpo.roll_bridge import (
 )
 
 RTT_ROOT_ENV = "RTT_ROOT"
-LIVE_QUALITY_WEIGHT = 0.5
+LIVE_QUALITY_WEIGHT = 1.0
 
 
 def main() -> int:

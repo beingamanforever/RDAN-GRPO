@@ -425,6 +425,26 @@ def test_hybrid_worker_rejects_malformed_successful_judgment(monkeypatch: pytest
     assert evidence["judge_provenance"]["error"] == "malformed_judgments"
 
 
+@pytest.mark.parametrize("signed", [-1.0, 0.0, 1.0])
+def test_hybrid_worker_keeps_every_process_tier(monkeypatch: pytest.MonkeyPatch, signed: float) -> None:
+    module = _module(monkeypatch)
+    row = _hir_row(hard=False)
+    data, tokenizer = _reward_data(module, row)
+    worker = module.RTTCompatibleRubricRewardWorker.__new__(module.RTTCompatibleRubricRewardWorker)
+    worker.actor_tokenizer = tokenizer
+    worker._judge_batch = lambda *args: (
+        {1: {"score": signed, "reason": "useful"}},
+        {"generation_id": "gen-1"},
+        True,
+    )
+
+    output = worker._compute_rewards_impl(data, {})
+
+    assert output.batch["rubric_scores_list"][0, 0].item() == signed
+    assert output.batch["rdan_eval_mask"][0, 0].item() is True
+    assert output.batch["rdan_judge_failed"].tolist() == [False]
+
+
 def test_hybrid_worker_rejects_malformed_hir_metadata_before_judging(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _module(monkeypatch)
     row = {
