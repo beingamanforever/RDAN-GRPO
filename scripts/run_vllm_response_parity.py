@@ -79,6 +79,9 @@ def main() -> int:
     from dacite import from_dict
 
     config_payload = copy.deepcopy(payload)
+    if config_payload.get("rewards", object()) is not None:
+        raise VLLMParityError("vLLM parity config requires rewards=null")
+    config_payload["rewards"] = {}
     for worker in ("actor_train", "actor_infer"):
         config_payload[worker]["device_mapping"] = _device_mapping_literal(
             config_payload[worker].get("device_mapping")
