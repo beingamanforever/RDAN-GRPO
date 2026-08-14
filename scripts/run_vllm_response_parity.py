@@ -43,15 +43,16 @@ def main() -> int:
     clean_repository_revision(ROOT)
     sys.path.insert(0, str(rtt_root))
 
+    from rdan_grpo.roll_compat import install_rtt_compat
+
+    install_rtt_compat(rtt_root)
+
     from roll.datasets.chat_template import register_chat_template
     from roll.distributed.scheduler.initialize import init
     from roll.pipeline.rlvr.rubric_config import RLVRConfig
 
-    from rdan_grpo.roll_compat import install_rtt_compat
     from rdan_grpo.roll_response_config import ResponseConfig
     from rdan_grpo.roll_vllm_parity_live import build_receipt_link, build_vllm_parity_pipeline
-
-    install_rtt_compat(rtt_root)
 
     @register_chat_template("qwen3_nothinking")
     def qwen3_nothinking(
