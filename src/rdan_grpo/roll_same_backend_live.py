@@ -19,7 +19,6 @@ from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.protocol import DataProto
 from roll.models.model_providers import default_tokenizer_provider
 from roll.pipeline.base_pipeline import BasePipeline
-from roll.pipeline.rlvr.rubircs_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
 
 from rdan_grpo.fsdp_hf_receipt import (
     FSDPHFReceiptError,
@@ -373,6 +372,8 @@ def _validate_live_topology(actor_train: Any, actor_infer: Any) -> None:
 
 
 def _load_dataset(config: Any, tokenizer: Any) -> Any:
+    from roll.pipeline.rlvr.rubircs_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
+
     data_args = config.actor_train.data_args
     data = load_response_dataset(
         data_args.file_name,

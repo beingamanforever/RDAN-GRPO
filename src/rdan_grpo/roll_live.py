@@ -37,7 +37,6 @@ from roll.pipeline.base_worker import InferWorker
 from roll.pipeline.rlvr import rlvr_rollout_pipeline as rtt_rollout_pipeline
 from roll.pipeline.rlvr.actor_worker import ActorWorker
 from roll.pipeline.rlvr.rlvr_rollout_pipeline import RLVRRolloutPipeline
-from roll.pipeline.rlvr.rubircs_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
 from roll.platforms import current_platform
 from roll.utils.context_managers import state_offload_manger
 from roll.utils.functionals import concatenate_input_and_output, postprocess_generate
@@ -273,25 +272,7 @@ class RuntimeParityPipeline(BasePipeline):
         self._weight_receipt_required = strategy_config.get("worker_extension_cls") == RECEIPT_WORKER_EXTENSION
         self._weight_receipt_passed = False
         self.tokenizer = default_tokenizer_provider(model_args=pipeline_config.actor_train.model_args)
-        data_args = pipeline_config.actor_train.data_args
-        dataset = load_response_dataset(
-            data_args.file_name,
-            dataset_dir=getattr(data_args, "dataset_dir", "."),
-        )
-        template = pipeline_config.global_template or pipeline_config.actor_train.data_args.template
-        encode = get_encode_function(template, self.tokenizer, pipeline_config.actor_train.data_args)
-        dataset = preprocess_dataset(
-            dataset,
-            pipeline_config.prompt_length,
-            encode,
-            data_args=pipeline_config.actor_train.data_args,
-        )
-        dataset = dataset.map(
-            partial(update_dataset_domain, pipeline_config.tag_2_domain),
-            num_proc=pipeline_config.actor_train.data_args.preprocessing_num_workers,
-            desc="update_dataset_domain",
-            load_from_cache_file=False,
-        )
+        dataset = _load_runtime_parity_dataset(pipeline_config, self.tokenizer)
         if "domain" not in dataset.column_names:
             raise ValueError("runtime parity dataset must contain a domain field")
         domain_dataset = dataset.filter(
@@ -478,6 +459,29 @@ class RuntimeParityPipeline(BasePipeline):
             actor_boundary_observed=True,
             optimizer_updates=0,
         )
+
+
+def _load_runtime_parity_dataset(config: Any, tokenizer: Any) -> Any:
+    from roll.pipeline.rlvr.rubircs_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
+
+    data_args = config.actor_train.data_args
+    dataset = load_response_dataset(
+        data_args.file_name,
+        dataset_dir=getattr(data_args, "dataset_dir", "."),
+    )
+    template = config.global_template or data_args.template
+    dataset = preprocess_dataset(
+        dataset,
+        config.prompt_length,
+        get_encode_function(template, tokenizer, data_args),
+        data_args=data_args,
+    )
+    return dataset.map(
+        partial(update_dataset_domain, config.tag_2_domain),
+        num_proc=data_args.preprocessing_num_workers,
+        desc="update_dataset_domain",
+        load_from_cache_file=False,
+    )
 
 
 def _flatten_infer_receipts(results: list[Any]) -> list[Mapping[str, Any]]:

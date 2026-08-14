@@ -171,9 +171,9 @@ def _load_roll_live(
     monkeypatch.setitem(sys.modules, rollout_module.__name__, rollout_module)
     add(
         "roll.pipeline.rlvr.rubircs_pipeline",
-        get_encode_function=lambda *args, **kwargs: None,
-        preprocess_dataset=lambda *args, **kwargs: None,
-        update_dataset_domain=lambda *args, **kwargs: None,
+        get_encode_function=lambda *args, **kwargs: object(),
+        preprocess_dataset=lambda dataset, *args, **kwargs: dataset,
+        update_dataset_domain=lambda mapping, row: row,
     )
     add("roll.platforms", current_platform=SimpleNamespace(device_type="cpu"))
     add("roll.utils")
@@ -192,7 +192,7 @@ def _load_roll_live(
     return module, rollout_module
 
 
-def test_roll_live_import_does_not_load_optional_receipt_backends() -> None:
+def test_live_worker_modules_import_without_driver_only_rubric_pipeline() -> None:
     script = """
 import importlib.abc
 import sys
@@ -225,7 +225,7 @@ add("roll.distributed.executor.cluster", Cluster=Stub)
 add("roll.distributed.scheduler")
 add(
     "roll.distributed.scheduler.decorator",
-    Dispatch=SimpleNamespace(DP_MP_COMPUTE=0, DP_MP_DISPATCH_FIRST=1),
+    Dispatch=SimpleNamespace(DP_MP_COMPUTE=0, DP_MP_DISPATCH_FIRST=1, ONE_TO_ALL=2),
     register=register,
 )
 add("roll.distributed.scheduler.generate_scheduler", DynamicSamplingScheduler=Stub)
@@ -238,12 +238,6 @@ add("roll.pipeline.base_worker", InferWorker=Stub)
 add("roll.pipeline.rlvr")
 add("roll.pipeline.rlvr.actor_worker", ActorWorker=Stub)
 add("roll.pipeline.rlvr.rlvr_rollout_pipeline", RLVRRolloutPipeline=Stub)
-add(
-    "roll.pipeline.rlvr.rubircs_pipeline",
-    get_encode_function=lambda *args, **kwargs: None,
-    preprocess_dataset=lambda *args, **kwargs: None,
-    update_dataset_domain=lambda *args, **kwargs: None,
-)
 add("roll.platforms", current_platform=SimpleNamespace(device_type="cpu"))
 add("roll.utils")
 add("roll.utils.context_managers", state_offload_manger=lambda *args, **kwargs: nullcontext())
@@ -253,6 +247,19 @@ add(
     postprocess_generate=lambda *args, **kwargs: None,
 )
 add("roll.utils.offload_states", OffloadStateType=SimpleNamespace(model_params="model_params"))
+add(
+    "rdan_grpo.roll_fsdp_hf_receipt",
+    begin_fsdp_hf_receipt=lambda *args, **kwargs: None,
+    begin_hf_infer_receipt=lambda *args, **kwargs: None,
+    finish_hf_infer_receipt=lambda *args, **kwargs: None,
+    get_fsdp_actor_receipt=lambda *args, **kwargs: None,
+    run_receipted_fsdp_hf_update=lambda *args, **kwargs: None,
+)
+add(
+    "rdan_grpo.roll_same_backend",
+    ObservedFSDP2ActorWorker=Stub,
+    SynchronousHFInferWorker=Stub,
+)
 
 class BlockOptionalImports(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname: str, path: object = None, target: object = None) -> None:
@@ -263,15 +270,19 @@ class BlockOptionalImports(importlib.abc.MetaPathFinder):
             or fullname == "megatron"
             or fullname.startswith("megatron.")
             or fullname.startswith("roll.third_party.megatron")
+            or fullname == "roll.pipeline.rlvr.rubircs_pipeline"
         ):
             raise ModuleNotFoundError(f"blocked optional import: {fullname}")
         return None
 
 sys.meta_path.insert(0, BlockOptionalImports())
 from rdan_grpo.roll_live import ScalarPreflightPipeline
+from rdan_grpo.roll_same_backend_live import ReceiptedFSDP2ActorWorker
 
 assert ScalarPreflightPipeline.__name__ == "ScalarPreflightPipeline"
+assert ReceiptedFSDP2ActorWorker.__name__ == "ReceiptedFSDP2ActorWorker"
 assert "rdan_grpo.roll_weight_receipt" not in sys.modules
+assert "roll.pipeline.rlvr.rubircs_pipeline" not in sys.modules
 assert "vllm" not in sys.modules
 assert "megatron" not in sys.modules
 assert not any(name.startswith("roll.third_party.megatron") for name in sys.modules)
@@ -282,6 +293,48 @@ assert not any(name.startswith("roll.third_party.megatron") for name in sys.modu
     result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_runtime_parity_loads_canonical_dataset_after_lazy_rubric_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "response.jsonl"
+    row = {
+        "id": 1,
+        "prompt": "Prompt",
+        "rubrics": [{"id": 1, "description": "Be correct."}],
+        "source": "type1",
+        "ground_truth": {"constraint_pattern": ["language:response_language"]},
+    }
+    path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    module, _ = _load_roll_live(monkeypatch, lambda *args: None)
+    canonical_loader = module.load_response_dataset
+    calls: list[tuple[Any, str]] = []
+
+    def load_response_dataset(file_names: Any, *, dataset_dir: str) -> Any:
+        calls.append((file_names, dataset_dir))
+        return canonical_loader(file_names, dataset_dir=dataset_dir)
+
+    monkeypatch.setattr(module, "load_response_dataset", load_response_dataset)
+    data_args = SimpleNamespace(
+        file_name=[str(path)],
+        dataset_dir=".",
+        preprocessing_num_workers=1,
+        template="qwen3_nothinking",
+    )
+    config = SimpleNamespace(
+        actor_train=SimpleNamespace(data_args=data_args),
+        global_template="qwen3_nothinking",
+        prompt_length=128,
+        tag_2_domain={},
+    )
+
+    dataset = module._load_runtime_parity_dataset(config, object())
+
+    assert calls == [([str(path)], ".")]
+    assert dataset[0]["rubrics"] == json.dumps(row["rubrics"], sort_keys=True, separators=(",", ":"))
+    assert dataset[0]["ground_truth"] == json.dumps(row["ground_truth"], sort_keys=True, separators=(",", ":"))
 
 
 def test_scalar_preflight_inherited_init_gets_canonical_dataset_and_restores_alias(

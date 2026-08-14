@@ -564,6 +564,8 @@ def test_rewardless_parity_constructor_and_boundary(monkeypatch: pytest.MonkeyPa
     if not rtt_root:
         pytest.skip("RTT_ROOT is required for the pinned ROLL constructor test")
     install_rtt_compat(Path(rtt_root))
+    from roll.pipeline.rlvr import rubircs_pipeline
+
     from rdan_grpo import roll_live
 
     events: dict[str, list[Any]] = {"clusters": [], "downloads": [], "initializes": [], "scheduler": []}
@@ -627,8 +629,8 @@ def test_rewardless_parity_constructor_and_boundary(monkeypatch: pytest.MonkeyPa
         "load_response_dataset",
         lambda file_names, *, dataset_dir: Dataset(),
     )
-    monkeypatch.setattr(roll_live, "get_encode_function", lambda *args: object())
-    monkeypatch.setattr(roll_live, "preprocess_dataset", lambda dataset, *args, **kwargs: dataset)
+    monkeypatch.setattr(rubircs_pipeline, "get_encode_function", lambda *args: object())
+    monkeypatch.setattr(rubircs_pipeline, "preprocess_dataset", lambda dataset, *args, **kwargs: dataset)
     monkeypatch.setattr(roll_live.ray, "remote", lambda cls: RemoteScheduler())
     monkeypatch.setattr(roll_live.ray, "get", lambda value, **kwargs: value)
     monkeypatch.setattr(
