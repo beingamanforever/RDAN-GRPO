@@ -27,9 +27,10 @@ pyarrow==25.0.1
 PyYAML==6.0.2
 ray[cgraph,default]==2.48.0
 requests==2.32.5
-setuptools==80.9.0
+setuptools==79.0.1
 tensordict==0.10.0
 transformers==4.57.0
 uv==0.11.6
+vllm==0.11.0
 wandb==0.21.1
 wheel==0.45.1
