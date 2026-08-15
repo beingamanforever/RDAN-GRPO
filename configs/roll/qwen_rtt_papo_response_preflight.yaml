@@ -8,6 +8,9 @@ output_dir: ./output/qwen-rtt-papo-response-preflight-s240520
 track_with: stdout
 tracker_kwargs: {}
 max_steps: 0
+# The no-update rollout judges every response over a slow hf_infer generation, so one
+# RPC outlives the one hour default.
+rpc_timeout: 21600
 generate_opt_level: 0
 force_disable_old_logprobs_recompute: true
 actor_train:
