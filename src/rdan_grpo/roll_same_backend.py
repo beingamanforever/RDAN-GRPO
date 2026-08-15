@@ -91,9 +91,10 @@ class SynchronousHFInferWorker(Worker):
         self.load_states()
         try:
             sequences, logprobs = _generate_with_scores(self.strategy.model, data, config)
+            # RTT shifts the sequences in place, which inference-mode tensors forbid.
             result = postprocess_generate(
                 prompts=data,
-                output=sequences,
+                output=sequences.clone(),
                 num_return_sequences=config["num_return_sequences"],
                 sequence_length=self.pipeline_config.sequence_length,
                 eos_token_id=self.tokenizer.eos_token_id,
