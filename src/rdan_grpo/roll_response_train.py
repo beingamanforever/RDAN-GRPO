@@ -666,7 +666,11 @@ def _validate_post_transaction_memory(values: Sequence[Mapping[str, Any]]) -> fl
 
 
 def _rollout_metrics(batch: DataProto) -> dict[str, float]:
-    """Return the rollout engine metrics the vLLM worker attached to this batch."""
+    """Return the rollout engine metrics the vLLM worker attached to this batch.
+
+    Concat keeps only rank zero's meta_info, so these describe one engine and carry a
+    vllm/rank field naming which one.
+    """
 
     values = getattr(batch, "meta_info", {}).get("vllm_metrics")
     if not isinstance(values, Mapping):

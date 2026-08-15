@@ -19,6 +19,9 @@ EFFORT_CANDIDATES = ("high", "medium", "low")
 # OpenRouter forwards this model on OpenAI's Responses API, which renames the request
 # parameters. Seed is not forwarded upstream at all, so the canary cannot assert it.
 UPSTREAM_PARAMETERS = ("max_output_tokens", "reasoning.effort", "text.format")
+# A 500-step run issues about 256,000 judge calls, so even a rare transport failure is
+# certain to occur. Retries recover the transport only and never alter a returned score.
+TRANSPORT_RETRIES = 4
 
 
 @dataclass(frozen=True)
@@ -77,7 +80,7 @@ class OpenRouterJudge:
                 api_key=api_key,
                 base_url=base_url,
                 default_headers={"X-OpenRouter-Metadata": "enabled"},
-                max_retries=0,
+                max_retries=TRANSPORT_RETRIES,
             )
         self.contract = contract
         self.prompt = prompt

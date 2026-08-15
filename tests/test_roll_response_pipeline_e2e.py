@@ -34,7 +34,10 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
     pipeline.artifact_root = Path("artifacts")
     pipeline._lifecycle_predecessor = None
     pipeline._resume_path = None
-    pipeline.pipeline_config = SimpleNamespace(num_return_sequences_in_group=8)
+    pipeline.pipeline_config = SimpleNamespace(
+        num_return_sequences_in_group=8,
+        actor_infer=SimpleNamespace(generating_args=SimpleNamespace(max_new_tokens=4096)),
+    )
     pipeline.response_config = SimpleNamespace(method="rdan_scalar", quality_weight=0.5, mix_weight=None)
     pipeline.certificate = {"ready": True}
     pipeline.actor_train = SimpleNamespace(
@@ -50,7 +53,23 @@ def test_one_step_calls_exact_receipt_train_checkpoint_order(monkeypatch: pytest
     )
     pipeline.state = SimpleNamespace(step=0, log_history=[])
     pipeline._transfer = lambda phase, step: events.append(f"receipt:{phase}:{step}") or {"phase": phase}
-    pipeline._generate = lambda step: events.append(f"generate:{step}") or object()
+
+    class FakeRewardedBatch:
+        def __init__(self) -> None:
+            selected = torch.tensor([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+            quality = torch.tensor([0.5] * 8)
+            self.batch = {
+                "rdan_selected_reward": selected,
+                "rdan_response_advantage": selected,
+                "rdan_raw_quality": quality,
+                "rdan_quality_eligible": torch.ones(8, dtype=torch.bool),
+                "rdan_quality_advantage": quality,
+                "rdan_scalar_advantage": selected,
+                "rdan_response_valid": torch.ones(8, dtype=torch.bool),
+                "response_mask": torch.ones((8, 4), dtype=torch.bool),
+            }
+
+    pipeline._generate = lambda step: events.append(f"generate:{step}") or FakeRewardedBatch()
     pipeline._save_step = lambda *args: events.append("checkpoint") or Path("step-000001")
 
     def train(**kwargs: Any) -> SimpleNamespace:
@@ -346,6 +365,7 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
     pipeline.artifact_root = artifact_root.resolve()
     pipeline.pipeline_config = SimpleNamespace(num_return_sequences_in_group=2, save_steps=20)
     pipeline.stop_after_step = 1
+    pipeline._resume_path = None
     pipeline.response_config = SimpleNamespace(method="rdan_scalar")
 
     def decode(tokens: list[int], **kwargs: object) -> str:
@@ -454,7 +474,8 @@ def test_step_checkpoint_seals_redacted_rollout_and_logs_run_artifact(
     with pytest.raises(RuntimeError, match="interleaved"):
         module._group_diagnostics(interleaved, 2)
 
-    assert json.loads((artifact_root / "publication-state.json").read_text())["artifacts"][0]["published"] is True
+    marker = artifact_root / "publication-state-step-000001.json"
+    assert json.loads(marker.read_text())["artifacts"][0]["published"] is True
 
 
 def test_finish_failure_retries_publication_without_optimizer_work(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -362,9 +362,15 @@ class ResponseVLLMInferWorker(InferWorker):
         generation_config["seed"] = _generation_seed(_base_seed(self), step, ordinal, _rank(self))
         request.meta_info["generation_config"] = generation_config
         output = await super().generate(request)
-        output.meta_info["vllm_metrics"] = _vllm_engine_metrics(getattr(self, "strategy", None))
+        metrics = _vllm_engine_metrics(getattr(self, "strategy", None))
+        rank = _rank(self)
+        # Rank-tagged non_tensor columns cannot carry these: check_consistency requires every
+        # column to be dtype object and exactly batch length, and concat keeps only the keys
+        # every rank supplied. Concat likewise keeps rank zero's meta_info, so the curves
+        # describe engine zero and _rank identifies which engine reported them.
+        output.meta_info["vllm_metrics"] = {"vllm/rank": float(rank), **metrics}
         output.non_tensor_batch["generation_id"] = np.asarray(
-            [f"gen-{step:06d}-r{_rank(self)}-c{ordinal:04d}-{index:012d}" for index in range(len(output))],
+            [f"gen-{step:06d}-r{rank}-c{ordinal:04d}-{index:012d}" for index in range(len(output))],
             dtype=object,
         )
         setattr(self, _VLLM_GENERATION_STEP_ATTR, step)
@@ -372,21 +378,45 @@ class ResponseVLLMInferWorker(InferWorker):
         return output
 
 
+_VLLM_METRICS_STATUS_READER_MISSING = 0.0
+_VLLM_METRICS_STATUS_READER_RAISED = 1.0
+_VLLM_METRICS_STATUS_READER_EMPTY = 2.0
+_VLLM_METRICS_STATUS_POPULATED = 3.0
+
+
 def _vllm_engine_metrics(strategy: Any) -> dict[str, Any]:
     """Return the rollout engine metrics vLLM aggregated since the previous generation.
 
-    A reader failure is recorded by name rather than dropped, so a missing curve is never silent.
+    ``vllm/metrics_available`` reflects whether any metric was actually returned, so an
+    empty read never reports the same value as a populated one. ``vllm/metrics_status``
+    additionally distinguishes a missing reader, a reader that raised, an empty read, and
+    a populated read as four distinct failure modes, each with its own numeric code so a
+    reader failure is never collapsed into a healthy-looking flat curve.
     """
 
     reader = getattr(strategy, "get_metrics", None)
     if reader is None:
-        return {"vllm/metrics_available": False}
+        return {
+            "vllm/metrics_available": 0.0,
+            "vllm/metrics_status": _VLLM_METRICS_STATUS_READER_MISSING,
+            "vllm/metrics_count": 0.0,
+        }
     try:
         metrics = reader() or {}
     except Exception as error:
-        return {"vllm/metrics_available": False, "vllm/metrics_error": type(error).__name__}
+        return {
+            "vllm/metrics_available": 0.0,
+            "vllm/metrics_status": _VLLM_METRICS_STATUS_READER_RAISED,
+            "vllm/metrics_count": 0.0,
+            "vllm/metrics_error": type(error).__name__,
+        }
     values = {name: float(value) for name, value in metrics.items() if isinstance(value, (int, float))}
-    return {"vllm/metrics_available": True, **values}
+    return {
+        "vllm/metrics_available": float(bool(values)),
+        "vllm/metrics_status": _VLLM_METRICS_STATUS_POPULATED if values else _VLLM_METRICS_STATUS_READER_EMPTY,
+        "vllm/metrics_count": float(len(values)),
+        **values,
+    }
 
 
 def _vllm_response_receipt(value: Any) -> dict[str, Any]:
@@ -605,12 +635,18 @@ def _save_dcp(worker: Any, checkpoint_dir: str, pipeline_step: int) -> dict[str,
     path = _counter_path(root, _rank(worker))
     if path.exists() or path.is_symlink():
         raise FileExistsError(path)
-    worker.strategy.save_checkpoint(
-        save_dir=str(root),
-        global_step=max(pipeline_step - 1, 0),
-        ckpt_id=f"response-step-{pipeline_step:06d}",
-        is_last_step=True,
-    )
+    strategy = worker.strategy
+    manager = getattr(strategy, "checkpoint_manager", None)
+    strategy.checkpoint_manager = None
+    try:
+        strategy.save_checkpoint(
+            save_dir=str(root),
+            global_step=max(pipeline_step - 1, 0),
+            ckpt_id=f"response-step-{pipeline_step:06d}",
+            is_last_step=True,
+        )
+    finally:
+        strategy.checkpoint_manager = manager
     metadata = {"pipeline_step": pipeline_step, "counters": counters}
     with path.open("x", encoding="utf-8") as handle:
         json.dump(metadata, handle, sort_keys=True, separators=(",", ":"))
@@ -642,12 +678,55 @@ def _load_dcp(worker: Any, checkpoint_dir: str) -> dict[str, Any]:
     dcp_dir = strategy._get_dcp_checkpoint_dir(str(root))
     strategy.load_states()
     try:
+        _prime_optimizer_state(strategy)
         strategy._load_checkpoint_with_dcp(checkpoint_dir=dcp_dir)
     finally:
         strategy.offload_states()
+    _validate_restored_optimizer_state(strategy, counters["optimizer_steps"])
     setattr(worker, _COUNTER_ATTR, dict(counters))
     setattr(worker, _TRAIN_STATE_ATTR, {"grad_finite": True, "update_skipped": False})
     return {"checkpoint_dir": str(root), "pipeline_step": pipeline_step, "rank": _rank(worker)}
+
+
+def _prime_optimizer_state(strategy: Any) -> None:
+    """Populate optimizer.state before DCP load so it has FQNs to load moments into.
+
+    A freshly initialized optimizer has never called .step(), so optimizer.state_dict() ==
+    {'state': {}, 'param_groups': [...]}. dcp.load builds its read plan from that template,
+    so with an empty 'state' subtree it has no target key for the saved exp_avg/exp_avg_sq/
+    step and silently restores param_groups only, restarting Adam from zero moments.
+    get_optimizer_state_dict's _init_optim_state side effect (DTensor-safe under FSDP2)
+    populates optimizer.state with zeroed moments first, giving dcp.load somewhere to read
+    into. Only a genuine torch.optim.Optimizer exposes this machinery; anything else (never
+    produced outside tests) is left untouched rather than crashed on.
+    """
+
+    optimizer = getattr(strategy, "optimizer", None)
+    model = getattr(strategy, "model", None)
+    if model is None or not isinstance(optimizer, torch.optim.Optimizer):
+        return
+    from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
+    get_optimizer_state_dict(model, optimizer)
+
+
+def _validate_restored_optimizer_state(strategy: Any, expected_optimizer_steps: int) -> None:
+    """Raise a distinct message for each way a DCP resume can lose optimizer moments.
+
+    'No moment state at all' (DCP skipped the subtree) and 'moments present but the step
+    disagrees with the sidecar' (checkpoint/sidecar mismatch) are different failure modes
+    and must not share a message.
+    """
+
+    optimizer = getattr(strategy, "optimizer", None)
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        return
+    state = optimizer.state
+    if not state:
+        raise RuntimeError("response checkpoint restored no optimizer moment state")
+    for moment in state.values():
+        if int(moment["step"]) != expected_optimizer_steps:
+            raise RuntimeError("response checkpoint optimizer step disagrees with the counter sidecar")
 
 
 def _checkpoint_dir(value: str, *, create: bool) -> Path:

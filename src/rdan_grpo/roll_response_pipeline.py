@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
@@ -68,6 +69,11 @@ _RESPONSE_METADATA = (
     "generation_id",
 )
 _Observer = Callable[[], Sequence[Mapping[str, Any]] | Mapping[str, Any]]
+
+# Promoted checkpoints kept on disk after each successful save. Two is sufficient for
+# resume: the pilot-to-train handoff only reads json evidence, never checkpoint bytes,
+# and a resumed run only ever needs its own immediate predecessor checkpoint.
+CHECKPOINT_RETENTION_COUNT = 2
 
 
 class ResponseTrainingPipeline(BasePipeline):
@@ -306,16 +312,30 @@ class ResponseTrainingPipeline(BasePipeline):
         self.completed_step = step
         self.state.step = step
         diagnostics = _group_diagnostics(rewarded, self.pipeline_config.num_return_sequences_in_group)
+        response_length_cap = self.pipeline_config.actor_infer.generating_args.max_new_tokens
         metrics = {
             **_number_metrics(result.metrics),
             "reward/within_group_selected_variance_mean": diagnostics["selected_reward_variance_mean"],
             "reward/response_active_group_rate": diagnostics["response_active_group_rate"],
             "reward/quality_active_group_rate": diagnostics["quality_active_group_rate"],
+            **_reward_curve_metrics(rewarded, response_length_cap),
             "system/peak_memory_fraction": result.peak_memory_fraction,
             "system/step": step,
         }
         self.state.log_history.append(metrics)
-        self.tracker.log(values=metrics, step=step)
+        if self._resume_manifest is not None and step == self._start_step:
+            # Make the re-executed region attributable: steps _start_step..completed-before-crash
+            # legitimately re-run from the restored optimizer/scheduler/RNG state, so they appear
+            # twice on the system/step axis. Record the boundary rather than leaving it ambiguous.
+            self.tracker.log(values={"system/resumed_from_step": self._start_step - 1}, step=None)
+        # step=None keeps W&B's own log index monotonic across a resume (it would otherwise
+        # discard every re-logged point for steps _start_step..completed-before-crash, since
+        # W&B requires a strictly increasing step). metrics["system/step"] already carries the
+        # true pipeline step for the x-axis.
+        # TODO: wandb_tracking.py (owned by another change in this pass) should call
+        # run.define_metric("system/step") and run.define_metric("*", step_metric="system/step")
+        # at init so dashboards use it as the x-axis automatically instead of by manual configuration.
+        self.tracker.log(values=metrics, step=None)
 
     def _generate(self, step: int) -> DataProto:
         request = DataProto(
@@ -458,7 +478,9 @@ class ResponseTrainingPipeline(BasePipeline):
         counters = self.actor_train.rdan_train_counters(blocking=True)
         state = _checkpoint_state(step, counters, scheduler_state, metrics, diagnostics, clipping, observations)
         artifacts = [path.relative_to(stage).as_posix() for path in stage.rglob("*") if path.is_file()]
-        return promote_checkpoint(stage, identity=self.checkpoint_identity, state=state, artifacts=artifacts)
+        promoted = promote_checkpoint(stage, identity=self.checkpoint_identity, state=state, artifacts=artifacts)
+        _prune_checkpoints(self.checkpoint_root, self._resume_path)
+        return promoted
 
     def _write_checkpoint_payload(
         self,
@@ -528,6 +550,96 @@ def _checkpoint_state(
         clipping_fraction=clipping,
         receipt_links={"initial": "receipts/initial.json", "post_update": "receipts/post-update.json"},
     )
+
+
+def _reward_curve_metrics(rewarded: DataProto, response_length_cap: int) -> dict[str, float]:
+    """Surface reward, advantage, and response-length training curves already on the batch.
+
+    Every value here reshapes a tensor the reward/advantage adapter already computed
+    (roll_bridge.py / roll_scalar.py) into a scalar training curve; no reward math is
+    recomputed here. ORM (outcome) values come from rdan_selected_reward and its advantage
+    component (rdan_response_advantage); PRM (process) values come from rdan_raw_quality,
+    restricted to quality-eligible rows, and its advantage component (rdan_quality_advantage).
+    """
+
+    selected = rewarded.batch["rdan_selected_reward"].detach().float()
+    outcome_advantage = rewarded.batch["rdan_response_advantage"].detach().float()
+    quality = rewarded.batch["rdan_raw_quality"].detach().float()
+    quality_eligible = rewarded.batch["rdan_quality_eligible"].detach().bool()
+    quality_advantage = rewarded.batch["rdan_quality_advantage"].detach().float()
+    scalar_advantage = rewarded.batch["rdan_scalar_advantage"].detach().float()
+    valid = rewarded.batch["rdan_response_valid"].detach().bool()
+    lengths = rewarded.batch["response_mask"].detach().sum(dim=-1).float()
+    eligible_quality = quality[quality_eligible]
+
+    metrics = {
+        "reward/selected_mean": float(selected.mean().item()),
+        "reward/selected_std": float(selected.std(unbiased=False).item()),
+        "reward/selected_min": float(selected.min().item()),
+        "reward/selected_max": float(selected.max().item()),
+        "reward/valid_rate": float(valid.float().mean().item()),
+        "reward/outcome_advantage_mean": float(outcome_advantage.mean().item()),
+        "reward/outcome_advantage_std": float(outcome_advantage.std(unbiased=False).item()),
+        "reward/process_quality_mean": float(eligible_quality.mean().item()) if eligible_quality.numel() else 0.0,
+        "reward/process_quality_std": (
+            float(eligible_quality.std(unbiased=False).item()) if eligible_quality.numel() >= 2 else 0.0
+        ),
+        "reward/process_advantage_mean": float(quality_advantage.mean().item()),
+        "reward/process_advantage_std": float(quality_advantage.std(unbiased=False).item()),
+        "advantage/mean": float(scalar_advantage.mean().item()),
+        "advantage/std": float(scalar_advantage.std(unbiased=False).item()),
+        "advantage/zero_rate": float((scalar_advantage.abs() <= 1e-8).float().mean().item()),
+        "advantage/positive_rate": float((scalar_advantage > 1e-8).float().mean().item()),
+        "length/mean": float(lengths.mean().item()),
+        "length/max": float(lengths.max().item()),
+        "length/cap_hit_rate": float((lengths >= response_length_cap).float().mean().item()),
+    }
+    _validate_finite_metrics(metrics, "reward curve")
+    return metrics
+
+
+def _validate_finite_metrics(metrics: Mapping[str, float], name: str) -> None:
+    values = torch.tensor(list(metrics.values()), dtype=torch.float64)
+    if not bool(torch.isfinite(values).all()):
+        raise RuntimeError(f"response {name} metrics are not finite")
+
+
+def _promoted_step_dirs(checkpoint_root: Path) -> list[Path]:
+    """Return promoted step-NNNNNN checkpoint directories, oldest first."""
+
+    prefix = "step-"
+    return sorted(
+        (
+            entry
+            for entry in checkpoint_root.iterdir()
+            if entry.is_dir()
+            and not entry.is_symlink()
+            and entry.name.startswith(prefix)
+            and len(entry.name) == len(prefix) + 6
+            and entry.name[len(prefix) :].isdigit()
+        ),
+        key=lambda path: path.name,
+    )
+
+
+def _prune_checkpoints(checkpoint_root: Path, resume_path: Path | None) -> None:
+    """Delete promoted checkpoints beyond the retention window and stale quarantine stages.
+
+    Runs only after this step's own checkpoint has been promoted, so a failure here never
+    risks the checkpoint just sealed. The checkpoint this run was resumed from, if any, is
+    always kept regardless of age, since a crash immediately afterwards may still need it.
+    """
+
+    promoted = _promoted_step_dirs(checkpoint_root)
+    stale = promoted[:-CHECKPOINT_RETENTION_COUNT] if len(promoted) > CHECKPOINT_RETENTION_COUNT else []
+    resolved_resume = resume_path.resolve() if resume_path is not None else None
+    for path in stale:
+        if resolved_resume is not None and path.resolve() == resolved_resume:
+            continue
+        shutil.rmtree(path)
+    for entry in checkpoint_root.iterdir():
+        if entry.is_dir() and not entry.is_symlink() and entry.name.startswith(".quarantined-step-"):
+            shutil.rmtree(entry)
 
 
 def build_response_training_pipeline(config: Any, **kwargs: Any) -> ResponseTrainingPipeline:
@@ -756,8 +868,23 @@ def _clipping_fraction(metrics: Mapping[str, float]) -> float:
     return float(value)
 
 
+def _publication_state_path(pipeline: ResponseTrainingPipeline) -> Path:
+    """Return the publication marker for this run's terminal step only.
+
+    Scoped by stop_after_step so that gates sharing one run directory at different
+    terminal steps -- e.g. certified recovery step 1 (stop_after_step=1) followed by
+    step 2 (stop_after_step=2) -- each own an independent marker instead of colliding on
+    one unscoped file. Deliberately not additionally scoped by _start_step: a crash mid
+    _run_steps and later resume of the SAME gate (same stop_after_step, later _start_step)
+    must find this same marker so _publication_steps (below) can still detect and publish
+    every step sealed before the resume point, not just the ones sealed after it.
+    """
+
+    return pipeline.artifact_root / f"publication-state-step-{pipeline.stop_after_step:06d}.json"
+
+
 def _load_publication_state(pipeline: ResponseTrainingPipeline) -> dict[str, Any] | None:
-    path = pipeline.artifact_root / "publication-state.json"
+    path = _publication_state_path(pipeline)
     if not path.exists():
         return None
     try:
@@ -786,7 +913,7 @@ def _create_publication_state(
         "artifacts": artifacts,
     }
     _validate_publication_state(pipeline, payload)
-    _write_publication_state(pipeline.artifact_root / "publication-state.json", payload)
+    _write_publication_state(_publication_state_path(pipeline), payload)
     return payload
 
 
@@ -804,7 +931,7 @@ def _publish_artifacts(pipeline: ResponseTrainingPipeline, state: dict[str, Any]
             diagnostics,
         )
         artifact["published"] = True
-        _write_publication_state(pipeline.artifact_root / "publication-state.json", state)
+        _write_publication_state(_publication_state_path(pipeline), state)
 
 
 def _validate_publication_state(pipeline: ResponseTrainingPipeline, payload: Any) -> None:
@@ -851,7 +978,25 @@ def _publication_checkpoints(payload: Mapping[str, Any], identity: CheckpointIde
 
 
 def _publication_steps(pipeline: ResponseTrainingPipeline) -> range:
-    return range(pipeline._start_step, pipeline.stop_after_step + 1)
+    """Return every step this gate's publication must cover, from 1 through stop_after_step.
+
+    Starting at 1 rather than pipeline._start_step ensures a resumed run backfills and
+    publishes step artifacts sealed before the resume point (e.g. steps 1..220 sealed by a
+    run that crashed at step 237, before it ever reached publication, and was then resumed
+    from step 220's checkpoint), instead of leaving them unpublished forever. For a fresh,
+    non-resumed run _start_step is already 1, so this is a no-op. _publication_artifact
+    still hard-raises if a step directory in this range is missing; the range is widened,
+    not weakened.
+
+    Accepted trade-off: certified recovery stages that deliberately share one run directory
+    across two terminal steps (step 1, stop_after_step=1, then step 2, stop_after_step=2)
+    will re-publish the earlier gate's step-000001 artifact a second time under the later
+    gate's own marker (see _publication_state_path). That is a harmless extra W&B artifact
+    version, not a correctness or data-loss risk, and is far smaller in scope than the
+    resume-backfill gap this range fixes.
+    """
+
+    return range(1, pipeline.stop_after_step + 1)
 
 
 def _publication_artifact(root: Path, step: int) -> dict[str, Any]:

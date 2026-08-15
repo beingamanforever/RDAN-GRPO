@@ -6,9 +6,7 @@ exp_name: qwen-rtt-papo-response-train-s240520
 logging_dir: ./output/qwen-rtt-papo-response-train-s240520/logs
 output_dir: ./output/qwen-rtt-papo-response-train-s240520
 rollout_dump_dir: ./.local-rdan/rollouts/qwen-rtt-papo-response-train-s240520
-checkpoint_config:
-  type: file_system
-  output_dir: ./.local-rdan/checkpoints/qwen-rtt-papo-response-train-s240520
+checkpoint_config: {}
 track_with: rdan_wandb
 tracker_kwargs: {}
 
