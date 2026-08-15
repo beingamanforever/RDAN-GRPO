@@ -254,6 +254,14 @@ def _validate_generation(value: Any, name: str) -> None:
         raise ValueError(f"{name} differs from the frozen RTT generation recipe")
 
 
+def _reward_worker_cls(worker: Any) -> Any:
+    """Read the worker class from a reward entry that construction turned into a dataclass."""
+
+    if isinstance(worker, Mapping):
+        return worker.get("worker_cls")
+    return getattr(worker, "worker_cls", None)
+
+
 def _method_profile(method: str) -> tuple[str, str]:
     if method in HYBRID_METHODS:
         return HYBRID_REWARD_WORKER_PATH, HYBRID_DATA_PATH
@@ -348,7 +356,7 @@ def _validate_config(config: Any) -> None:
     if not isinstance(rewards, Mapping) or set(rewards) != {"llm_judge"}:
         raise RuntimeError("constructed response config changed production rewards")
     expected_worker, expected_data = _method_profile(config.rdan_response.method)
-    if rewards["llm_judge"].get("worker_cls") != expected_worker:
+    if _reward_worker_cls(rewards["llm_judge"]) != expected_worker:
         raise RuntimeError("constructed response config changed the method reward worker")
     if config.actor_train.data_args.file_name != [expected_data]:
         raise RuntimeError("constructed response config changed the method dataset")
@@ -374,7 +382,7 @@ def _validate_preflight_config(config: Any) -> None:
     _validate_generation(config.actor_infer.generating_args, "constructed response preflight actor inference")
     _validate_generation(config.validation.generating_args, "constructed response preflight validation")
     expected_worker, expected_data = _method_profile(config.rdan_response.method)
-    if config.rewards["llm_judge"].get("worker_cls") != expected_worker:
+    if _reward_worker_cls(config.rewards["llm_judge"]) != expected_worker:
         raise RuntimeError("constructed response preflight changed the method reward worker")
     if config.actor_train.data_args.file_name != [expected_data] or config.validation.data_args.file_name != [
         expected_data
