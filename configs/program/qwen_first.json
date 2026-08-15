@@ -169,10 +169,10 @@
       "status": "pending"
     },
     "judge_calibration": {
-      "artifact_id": "pending",
+      "artifact_id": "qwen_judge_calibration_v1",
       "path": "configs/artifacts/qwen_judge_calibration.json",
-      "sha256": "pending",
-      "status": "pending"
+      "sha256": "9f3d20f1c79c04d64eadbc2a88b4dbba1c6ad0c2e47dad9eb655d13cd278e041",
+      "status": "frozen"
     },
     "no_update": {
       "artifact_id": "pending",
@@ -397,7 +397,7 @@
     "candidate_tuning": "blocked_until_frozen_dev_split",
     "confirmation": "blocked_until_immutable_selection_artifact",
     "gpqa": "blocked_until_revision_hash_and_access_manifest_frozen",
-    "judge": "blocked_until_frozen_calibration",
+    "judge": "ready",
     "launch": "blocked_until_all_launch_artifacts_frozen",
     "scalar_training": "ready",
     "token_training": "blocked_until_labels_discriminator_and_scalar_program_pass"

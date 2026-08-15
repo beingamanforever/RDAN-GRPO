@@ -1,0 +1,3078 @@
+{
+  "call_manifest": {
+    "calls": 200,
+    "raw_file_sha256": "5551ed64306be60642cd773619f2cfa149ec7950d14e6e4ced27ee1e519a480b",
+    "rows": [
+      {
+        "case_id": "debug-001",
+        "effort": "none",
+        "exact_match": null,
+        "generation_id": "gen-1786758479-WV7GT41yxcxdgBe3Woke",
+        "provenance_sha256": "e99756a6c0ba51548a76a1a93d4e03d5fbfb5e7f219dfb1d66537ae2b5dcaab9",
+        "raw_record_sha256": "85b38627776d5fd8c80c84f016e1e71bf4374e7ae48499c091c87e158652dd14",
+        "repeat": 1,
+        "scores_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "split": "debug",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-001",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758490-4hWvBkFdkQnRkAmQQeF7",
+        "provenance_sha256": "d4877d52f8a2f136667a41e0e5ed79f0afcbb36bd95d9d75419c07bdf9344593",
+        "raw_record_sha256": "701186c74e7e64d00e3201f059f66d7d8b3087bef60271b59b3bf256e02fbc34",
+        "repeat": 1,
+        "scores_sha256": "f7199176becedc2609a3060b603a5f5da99df1b32fc932001573bfadd68236ca",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-002",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758504-aoXgG6PKBeJCQYhJReRR",
+        "provenance_sha256": "1158a8595527fadbe1128e4882f7c9523c430d68b871090d6d9a882dbb77b240",
+        "raw_record_sha256": "5296ef101736627116072dfe287f1749df81714f9a2ec6242ac44eb430f67fdf",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-003",
+        "effort": "high",
+        "exact_match": false,
+        "generation_id": "gen-1786758515-HY6Kbl16ZjKQtbWHcbBS",
+        "provenance_sha256": "8d2d4af2e35451bf54f85ebbf55a78dbd2cd0deb362eefb9dc571fd29a5d2db6",
+        "raw_record_sha256": "2e4f13599e6fbefb171cf9a885978b396efc776e56ad16306af3ebe0107e69de",
+        "repeat": 1,
+        "scores_sha256": "0114569c4e44ce846667cc640ae15b01c840a313d59cff7f29ba480eab1cb3fa",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-004",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758529-lss2BAP6TBGaL0aChP1Q",
+        "provenance_sha256": "a97f40625488f12aa4da47a536c66b6a64bb788b89b69992e4ad4ca9417229c0",
+        "raw_record_sha256": "139d9f1f40febb1d1b460a448beafc84e2402a8eb8f1b0b8e57b9fbf9a7e3d6f",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-005",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758542-JyxBoJITk8uAzPn8yhHU",
+        "provenance_sha256": "f5b86022f79ee631c21856b748095018434b7a05bd4e877594f80356ba80701b",
+        "raw_record_sha256": "15563a83c555de32fe18cbc18a71db9886503846df3987b3a74c2907291f1a78",
+        "repeat": 1,
+        "scores_sha256": "692249b83a1646faea23e4a401f64aefb0e0262c89e55f3f50f1a9c34ab7ca7e",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-006",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758552-ymoQINLoqX93lC2FmDn3",
+        "provenance_sha256": "4212f77bb79258e48d5d97dfc9b992daeb62a0246ea68e72c157817e68871caa",
+        "raw_record_sha256": "4f957e289240b2a136ac39fa262434dcfec05fd9cfd714a7b4d7ea94a28778c8",
+        "repeat": 1,
+        "scores_sha256": "47af91beb265d1643ae1dc9e0e169209fa77c23d8d34e726b3187483851c629c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-007",
+        "effort": "high",
+        "exact_match": false,
+        "generation_id": "gen-1786758565-UNzKVmWDpdzb9jVI8xNJ",
+        "provenance_sha256": "40663dc0c4a779ba16fe604d670d0ed828e57d263c3f39824184c28df7a82f87",
+        "raw_record_sha256": "7c2ab8e9f1dc5f1ad4eccbfbf8add3ad5239dcb2f3b0d2e624e763abde56bdfd",
+        "repeat": 1,
+        "scores_sha256": "16164a849596f146a8f3859b699358b55ebd573135a1bc72ef2e98bd98cc6efe",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-008",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758585-D9rE9fwSfMbt9FqFD51D",
+        "provenance_sha256": "d4e8c65a2b75ce68738490a4ae9b78f787ea66993d7f7b23a8a10d6dcd621162",
+        "raw_record_sha256": "38c66dcbffb5a2b0bb23e22b3d305c76b224cf3f85ae21e687704d01e0e82492",
+        "repeat": 1,
+        "scores_sha256": "47af91beb265d1643ae1dc9e0e169209fa77c23d8d34e726b3187483851c629c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-009",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758600-8h2ZrX098GFT6lGTXq72",
+        "provenance_sha256": "e7a9e7455af57af57b37644c0a3cc7caf9aabd9ae9c5adb44d150e61bea8cb1e",
+        "raw_record_sha256": "5069f103f5af6941fe4c3ea5483af27506e15ff1ef54cf48c64d4889f702a858",
+        "repeat": 1,
+        "scores_sha256": "6a0ac168e3b7b7e4a3858fe5887f06ca719f6028f0b92415005059049e1f7cf0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-010",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758612-teONf66ohhNzNymV32M5",
+        "provenance_sha256": "4617420cebeb9450b3f92df70b1e827a756b0b19eab374c3610226990439c196",
+        "raw_record_sha256": "ad7e02bbb8015362156e1a730436c73fb105578645b720d88e79ae1f5fd52493",
+        "repeat": 1,
+        "scores_sha256": "58a941e30815a68f6773ad0f6d149fd9794c584b0b75b010a03a499fa47d160d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-011",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758626-8Tdlqf3qJSvYqYPwBTN4",
+        "provenance_sha256": "89b5aa9758239753679a1ab2b5a63cf7b94000704661cab6a919f27ec0de9598",
+        "raw_record_sha256": "6ad7e4f2787cf5d8e4f92335599bf33328959ad3208dc6f215f279392e24c484",
+        "repeat": 1,
+        "scores_sha256": "cb6e5a34310b735f3cb327f764b327525eac271c6de94d05f4b7b2ddb56722d5",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-012",
+        "effort": "high",
+        "exact_match": false,
+        "generation_id": "gen-1786758641-eB6PpJXXkjRZWfSf0scZ",
+        "provenance_sha256": "0949d91e24a51b75279a820f120a3f8223f47f020d74ff6bc4aa3eafe8499831",
+        "raw_record_sha256": "ca32fc71c2d7dd573a57fb6de6d651070a631ba83428f1f0a0e0e4a1e7778935",
+        "repeat": 1,
+        "scores_sha256": "d7f0b86229bf5223a14ef202da19f98b3b9e4a4dadf438db52f41407e9a60415",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-013",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758664-oka7DiAmgrN7a0rMnj9S",
+        "provenance_sha256": "2673e2a9174861ed4191519a53005314bee353fdfa01676c6e5f3a8f12a405d2",
+        "raw_record_sha256": "c3295dcb731e5ba9c67ed2b454c322df7d2d27fae9dc513a3b9059d499c8d890",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-014",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758675-gszVu5NxC75Shs0pmmw6",
+        "provenance_sha256": "79d229c8834f2735804cae12283894f117b6693ee19efbc566817b6250dead66",
+        "raw_record_sha256": "fb8e1aef20a3d9469253c7bb61828e0a2c469f6cdd37d411524c5337eedde496",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-015",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758687-kjMBzXyebSH7aRATWn28",
+        "provenance_sha256": "aeb95c4f501d99f8e9a37831f730bd8e0e1d361f76a8f4819b69e807896022af",
+        "raw_record_sha256": "252827270edf2b9ca9b8a8bfe8bee1f8d7db4b5b913a578ed3004e795621a1a3",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-016",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758699-SODwVnSWR4VfEOw0hZyX",
+        "provenance_sha256": "f955bd7c86fb78458bec0c8692126f274af081297ae07b581265345be2cf70a0",
+        "raw_record_sha256": "c1155b94102565b6db84129417575247bdeedd18395f11b2ed85b55531c244ef",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-017",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758710-09644KpywPUHx6Kk6H4L",
+        "provenance_sha256": "a7e2d343df38cc3f372a1a16279e7697dfff4fbc5add58619b636ffe201d7df5",
+        "raw_record_sha256": "e4f6c7bef750f68ca968594d535bbdb3a4143e2ccabc3ad044c78ae2588eb445",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-018",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758722-FLR1wU0GBZkTF2C4Rzvg",
+        "provenance_sha256": "947f7fe6fcb5090b558452f6bde1a691d034462e6bc871a6543169d130d390dd",
+        "raw_record_sha256": "4b1b3f2bb171ccd1eb5ca8d38201ea3f7c27d3e09fafc1fffdb8d12d45971acf",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-019",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758733-MfGjLnjvs8m9EOXTPo9y",
+        "provenance_sha256": "9f1a076cd6da580d8a969c7fe7691c7099f910bc950f776940c605916e33b642",
+        "raw_record_sha256": "18cce46173170568c2a49903b7a36132581732c3597a878ba81d4efdf5a1515b",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-020",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758745-9tVNB6lZXRXWvDKINWFr",
+        "provenance_sha256": "b09398f1fcf178d74edd253d517ceb7b7f7d9a46c49a05a9ca35569beeb399ba",
+        "raw_record_sha256": "ff6eba3c82c1b6764e104f3d73958216f9b5901ed7f4fb307b63cc18c18f9b60",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-021",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758758-N7M3J3EZCj6diTYNd4FY",
+        "provenance_sha256": "1cf40b521ab23ee4cb56c28bb0f51f078fe75c5b9e2e31cba0f52f667b980d83",
+        "raw_record_sha256": "33d1ff83a85a31b5f80227aa3a0178dc13db77112f48e22cfd44531e56376ae2",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-022",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758771-xhNz1aFFvJXIWeuz13ui",
+        "provenance_sha256": "97af7093a7353bf40e756c8c321fd62cdb8135c66ee32227b4b18e0d4db5b027",
+        "raw_record_sha256": "c00c5c2dbd4120b81b19550c3ff2215b3f78cb767a98870de4d0d4905f68bb17",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-023",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758783-SxuRPJEL9FF7ybTMbhHR",
+        "provenance_sha256": "8f05c1e4a37d4185b73392f34c9cca50d9bd8f5ab1976b771f6528278196969e",
+        "raw_record_sha256": "e703c6029ecb1b873cd8d541e1aa59b04780a86246e6a0abfd083adde88ef866",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-024",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758796-SMeNbYxQN2cqwTOPhOBU",
+        "provenance_sha256": "c5c760edf4e2216c8bc1c2cf802f9a8b398a594fd14702a799df52911f018c3b",
+        "raw_record_sha256": "8741f1caa3a004795253f9813f42a90e5f7124b067cee64e3426c87be2ddcfe5",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-025",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758806-Mihn9B6uY4H6RXpnjvQk",
+        "provenance_sha256": "923f34615133e3732d625fc6659e095c3e511c7f5b2f14f08101e7b85b56df20",
+        "raw_record_sha256": "3319f3b49cc21b5948bbbcaed9261a57998835cd5ac860bd32b4f2cc897aab22",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-026",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758816-REw1McVheKiRmY7CDlA0",
+        "provenance_sha256": "7873d9c4e25bff7114f4a204b5f24547b7953e6be8b3263b0424d945601a8065",
+        "raw_record_sha256": "88e4c2ab53fc18c4a521f772eb971d2918f1c7499629030f5ab5f36ddff402bb",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-027",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758829-PsCqQi3FBGLlCCtK8YD0",
+        "provenance_sha256": "333efae2f4b654facd472a7bc7fa27022fcc42d43fc983649bc8eb1f5bd10650",
+        "raw_record_sha256": "e773df6e51f8ec8bdeae0ccc4a415917684b19801b0dd85ef553386c40ac4d61",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-028",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758840-EdnGyQuMOACqHhK0bXyi",
+        "provenance_sha256": "f6ceefb1b7cc403057b6a1439fe790753a0eb7f9a4893d8920873d158c0a6c9a",
+        "raw_record_sha256": "47b36db3111f64dc7f8a8aa6c0e42f2309dfca2a9f78a1dd2765d1c2985bc9d7",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-029",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758850-uqgTZ8lLPDpzP4g3zdm0",
+        "provenance_sha256": "6ef1c26789d7e157175dc6ea3375154af786ff471e553c27fbba0a6b97cdfd83",
+        "raw_record_sha256": "f22967da921d082499ee5971c03d4b16f7697dcb9335aa4c15e91bc4fb510fa1",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-030",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758863-d5z2wrha0TUz61Ow9xq9",
+        "provenance_sha256": "41b067317bd0baa9ce4b69baced5c336be2c9d42cfd4e48fcd5c49fdf03e1c6d",
+        "raw_record_sha256": "dcbfdde1d8b5a9a60a46f9058ab000e03f57177e066658a8a929bd09b4beaa70",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-031",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758874-ZikJwilaaCjksVUB5Ipa",
+        "provenance_sha256": "9c02d2f48d1cdea3d851dc4653dde1bb2eb85ef0f04388b7e7729128c14fed70",
+        "raw_record_sha256": "e82ae796afe6edbd8a27e6158c4af400e9ca69adf2f950d0ea8c43692a5a47da",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-032",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758887-bzjKrYo3uDh7lWQ6jPod",
+        "provenance_sha256": "b06da6f593783bfa116641eb9eb50020471d5082526ad5c691c1ae7e827a2dbf",
+        "raw_record_sha256": "ec77a7793cf61e7a2e249de4cbc98ef3fa8ab89f3af3509f23459e16ac425726",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-033",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758897-CnW7xmA3uEyTSYRFk9bq",
+        "provenance_sha256": "0af1a525c4db463d55afb6aefd86679562e557313412812a5e6135208a6837f2",
+        "raw_record_sha256": "184807267208a2be212094257a5a72d96fe9ab31e52d437d75e2dd522e6d91ef",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-034",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758908-pXHSfhVkJvqAaEhNpSs2",
+        "provenance_sha256": "fb715eeb43d13cf8972e9b1baedf1ee938d1e456e30ced4272f7b7eb0deb7743",
+        "raw_record_sha256": "10dce6a0930c738d4aa464002ff75667a8c5e6a06e0b755911f33e56d5ef97d0",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-035",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758917-NrEHvOlKD9KXe5QLE5u4",
+        "provenance_sha256": "708f8b55b3e71eedbb54bce4ae139c92904a09da0433074b835b0c8dcb4b47c5",
+        "raw_record_sha256": "295ad4f80f4e08c79df6d47176b81f3070f49ae4b4dd9eccbea6ccc1feb1f151",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-036",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758929-x0XbFxS4la9drPnJwRPV",
+        "provenance_sha256": "938f22dee73775ea0f47da340c328479c8872d1db9062d7ab415c9f02e72a190",
+        "raw_record_sha256": "bee0513e9edec6658c03e57b2f6d9fffa3edb3a77d2d8f6503e5438183c39b10",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-037",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758938-Okn8OghxAngz06qaZQM9",
+        "provenance_sha256": "573b8a6ffadb5fc33802bb1e4e3d9f9253a694e8b4d09e1495adf2138a7eb888",
+        "raw_record_sha256": "07edd7df635ed5b9cfb81380e126e6df4b73de5bd38bf89948347981d7475c76",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-038",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758948-pAvMvA4wcivWuEliAu34",
+        "provenance_sha256": "9680bb45c0b53fbf0a73ac126d9787c35367313e7edfc8e7a48000ab0252b556",
+        "raw_record_sha256": "182ec17c71da56d194e01e3435253bcd9722906f7e79f1c01be69e7f2deaf2c9",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-039",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758959-pvM80bjM3Znpk1gdg3YY",
+        "provenance_sha256": "2177bdaaee331c3bb3cde57c4f38df457b91a714d32809f5705712b110b5d34f",
+        "raw_record_sha256": "ed1bfd372bad18c759040d55578fef39cd8e6c91d06eca20fde62ec72ae4fa07",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-040",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758972-wYqWL7NHaKMBXXMrqprT",
+        "provenance_sha256": "65a9df5c13755ba78bf0d93c5d20c95331bfedcd22cdc10786998d58c5cdeeec",
+        "raw_record_sha256": "5258ba4d1bdeca6b6445eaa8c0b9248fbf42469ec881e5903ba17eb9ab45b266",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-041",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758980-UEHWc1hkJMV55ijTrrob",
+        "provenance_sha256": "71815eab32c587ea47d80a05ccfc88f11061638274dd2076997e4c32a2704054",
+        "raw_record_sha256": "5fc07a654e9ad3193ee009582512f7eb3f1536caaced3a076ca4897a633c541f",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-042",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786758993-RjWLYXUvjTSAY5xGtO52",
+        "provenance_sha256": "a9bd9276378a5fbe96b48b629e053b3e84d5679ebc8a721372d8e8afb9806b93",
+        "raw_record_sha256": "2c8b04125577cfbebd3d08cb121764b4c4d8dc1e67856f550bc6b67f8e1f9835",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-043",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759006-LJQueWlbKVIcb2Kxj3DS",
+        "provenance_sha256": "1f6c9577bbadb214912f25114495b4e47a52d82a27b84fb444711a808fc54435",
+        "raw_record_sha256": "20e6386c46f536110f525ad6e5251d7a819f1beca8f2a4a874b5e3da63ccbc72",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-044",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759022-L8gvp4KrYKQZWiNe52JZ",
+        "provenance_sha256": "5143b2d124eebdd98a3725e2140c26ed74ac6edbc36cbd9f524c63e3e58f99e3",
+        "raw_record_sha256": "dc74cbc459f3958af76b0238380bc1b4120bbcd55746763efc19a52bd6cf158f",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-045",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759033-Hn8vAz0o2Ax4HC007O1Q",
+        "provenance_sha256": "4bc87764a27d8e30d5d3c564b34a2d5cf9a767dfa2fce4feae8e31205d5d1e84",
+        "raw_record_sha256": "9ff3846faf0bedc5f2f2317b2f158d7fc65bb7643b8a1eb8be751054f2171c95",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-046",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759044-KdWhmvAyzSiQwTgKSgcc",
+        "provenance_sha256": "4d76df71636aeaca6a449b94cba3268ce256c33fa8b8fa53c743a893944dfb80",
+        "raw_record_sha256": "3f0e5a88e849b61bf78e494da2ef1974c345d62acff32d5890faf4c21499c3d9",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-047",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759052-eyP8IYXs3ULhNyV6rqnj",
+        "provenance_sha256": "f7189a5aba699bb36c3b2c869e4aa00f0b4bd7914873337178e7c4ab1490c2ec",
+        "raw_record_sha256": "367811b7d6a56557a7f5d1b9fefacc180f4dfa0dfd95b2d10c3292c5cdf6d5b7",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-048",
+        "effort": "high",
+        "exact_match": true,
+        "generation_id": "gen-1786759062-7kVXbUMrHrArqypzu8u8",
+        "provenance_sha256": "0c3a8299b1e6cb1ec7659cd2a0de155b10bc4e870b2eb38f71136acd8a88f3fd",
+        "raw_record_sha256": "26e2b44287c5c676d10bf0d90d99591bb85ab47b5725f37b843167eb7bb8138c",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-049",
+        "effort": "high",
+        "exact_match": false,
+        "generation_id": "gen-1786759075-hFj6LlRIzaSDE26T0m3s",
+        "provenance_sha256": "c4d3d65fd5f843bfc2832243b586ac4213db62f700c0d740735870765d8801c0",
+        "raw_record_sha256": "108e8cb26155db1fb5da64430a2fe69a1c636507562249df751f5c94f9a46b6b",
+        "repeat": 1,
+        "scores_sha256": "6e981b3f5299ce204f900facf9e8740b03d4cf1b5d085ceee7e59e98fd86184d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-001",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759088-VJ7ofGHwbh9BN4X7L0a8",
+        "provenance_sha256": "5073c60a937b07b3d1c98ddcc96c16f143b903023bac3449d2278349b2a5c341",
+        "raw_record_sha256": "fd71f8d52178f2a534dbf630a0a1fa2ee6292ff26befadfaabf3e5dd5c76cd2c",
+        "repeat": 1,
+        "scores_sha256": "f7199176becedc2609a3060b603a5f5da99df1b32fc932001573bfadd68236ca",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-002",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759101-XowZDh3CtTDBuSCv0aug",
+        "provenance_sha256": "dcba64c28a157d636cae4d6ce9b5f232644116e72a3dce2f319fc38434fb5591",
+        "raw_record_sha256": "21d6ad8506b97896e097fba3a6d0d751890ff0015e0e512d0a5d9eadc78ecac8",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-003",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786759114-MBLxL0Mc3AFmsJGqGI2T",
+        "provenance_sha256": "51233afd9f1b56dde30922560593cb91e2b578c9370d9f4439022d1c31240cce",
+        "raw_record_sha256": "26211e78be0f49192173e2eeb9e7b4001513bd0bae39f55cc097ccf632cfe466",
+        "repeat": 1,
+        "scores_sha256": "0114569c4e44ce846667cc640ae15b01c840a313d59cff7f29ba480eab1cb3fa",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-004",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759129-XNKo8jS3dG7Cm0M9INu9",
+        "provenance_sha256": "6bfddb0c411add7ffc9da38ce71cd0d68d8717b165e44278f35c7a3fd8d6f49e",
+        "raw_record_sha256": "4eaa0f5ff873cb8beff6b3ee00f4137f4cb6a1f41a642da5eb7f2a23a3f1d7d8",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-005",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759139-Hy1XlDfDqL29KbBKDyfq",
+        "provenance_sha256": "7453c0f82bae8d0f48ac6367ac1ee8417f3e729ac8663c49361bd97ff9c3c851",
+        "raw_record_sha256": "2804468ee1e366c60d2511742630e4bb317d9782b44da0c08e4dea9361b7c8e2",
+        "repeat": 1,
+        "scores_sha256": "692249b83a1646faea23e4a401f64aefb0e0262c89e55f3f50f1a9c34ab7ca7e",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-006",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759149-UPrARoNjkKyr2qE4ZN3O",
+        "provenance_sha256": "844417303ec58bbc629ebec977d7275f74ada763c257e07a05620610bcb08291",
+        "raw_record_sha256": "b730dda1598329dc6924b394063fb7d386c72f52202d1e05064c7cd1b7f172ce",
+        "repeat": 1,
+        "scores_sha256": "47af91beb265d1643ae1dc9e0e169209fa77c23d8d34e726b3187483851c629c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-007",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786759161-n2c4O3ChBCwcIFEX2nuw",
+        "provenance_sha256": "6e5ca5a552bb282a605b3bb017eb991d6c1ffb6adfe2b520a7149a41308d3b6a",
+        "raw_record_sha256": "9dbefe401e23244a9de57b0a233b6a43d8705897aabe58b0ca10525361a3ae81",
+        "repeat": 1,
+        "scores_sha256": "16164a849596f146a8f3859b699358b55ebd573135a1bc72ef2e98bd98cc6efe",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-008",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759173-IVtoolr2n3tyh56Aojju",
+        "provenance_sha256": "e17de5c2f65ad5d5cf197f9c0bd92185a34ad49584346cd9f8b6ac6fe1bacd93",
+        "raw_record_sha256": "96d949f007578724b3dec5ea9ad4bc1e09bb37603d645fd1ff5b9bf778b09aad",
+        "repeat": 1,
+        "scores_sha256": "47af91beb265d1643ae1dc9e0e169209fa77c23d8d34e726b3187483851c629c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-009",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759186-PRwOlC2E0ID8iI4gr5S3",
+        "provenance_sha256": "c492da7809eed05d391e77929fd57b482fd23b2200cb2cfc8bd7f72ce1042ce9",
+        "raw_record_sha256": "7e1b329d75bf843e04663e5ee980c8c74ee822fb0fe12f4160518a5fd1781688",
+        "repeat": 1,
+        "scores_sha256": "6a0ac168e3b7b7e4a3858fe5887f06ca719f6028f0b92415005059049e1f7cf0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-010",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759199-CyIpxPFLHwD0rMV62mY3",
+        "provenance_sha256": "f3d443b16d98cfadb03872a3e69de59d2168ca01f1aaa9c2a3bbe4369e1c4b9c",
+        "raw_record_sha256": "ce923ed17f00919ef548026c891e34aa6aa26cca7eafe1627a432f0020f9e08e",
+        "repeat": 1,
+        "scores_sha256": "58a941e30815a68f6773ad0f6d149fd9794c584b0b75b010a03a499fa47d160d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-011",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759216-Bh2mPgAPKWNSlZEv7XPG",
+        "provenance_sha256": "09735b7d39a342441dd9711e51d31b0a86bdbaabacdae9ff28a9bcfc63bf2d0a",
+        "raw_record_sha256": "316b122d63c6e39b26846a2d3084f986ea6af7aa14d31a64c27659972905bb30",
+        "repeat": 1,
+        "scores_sha256": "cb6e5a34310b735f3cb327f764b327525eac271c6de94d05f4b7b2ddb56722d5",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-012",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759228-pWXHYhhNzeSkT6ozdNyH",
+        "provenance_sha256": "05b86248f3cf13d068e029598c4a51678e78f55ed5cc84fc408a188a164b53a8",
+        "raw_record_sha256": "374750d4f253e5c65e8db18dc03d9dbdc9b6de430a85893d8bc24becde0c1952",
+        "repeat": 1,
+        "scores_sha256": "a58f984c9a909f0b6634b435f8a94dc12e0268893c4612ce74787d6a263e3d23",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-013",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759244-yiSi3wKYTnPYA5D5LDZe",
+        "provenance_sha256": "ef1855bc2a2d3f30582fc0cd33778cdfe89200432e7e1d3d7c58eba4a261ebfe",
+        "raw_record_sha256": "9a48fe98c0b95190c0fb0ae9b6ea05aaa3a8dac304a1d879d1a97ab305fa24bd",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-014",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759255-2KtzFCgQNmf6taEB3k8h",
+        "provenance_sha256": "d972d80478040935aef144e08c9442c6d3d27a90775eed5dff8747a7df92ec07",
+        "raw_record_sha256": "d0c98693722c5e1f3d243c5a461e7e6e208e147c956ad67e66edc5be5c51c443",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-015",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759265-Zvq6APQ44RPaFk4ReHJ6",
+        "provenance_sha256": "79db9c0aaee199d7af15203cbfd6fe1651a0f1057dc4d1e96ef3290ab796ad7c",
+        "raw_record_sha256": "e156675f5923643ef85cf12e620f2b5da69484799ee177be3b8bdb0eea85bc03",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-016",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759278-YNTdXGuDjkPU3vOOtc1D",
+        "provenance_sha256": "bf96cf19e5774743cb109a3a0334f7de6a25467233207b72181484d8b8d9b6fa",
+        "raw_record_sha256": "95346a90d26acc56872b75cf502894a9415250e525c9fdd0ad1d736e2708dfcc",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-017",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759290-A1LSCvcwhf0Ko4KAeXg3",
+        "provenance_sha256": "dfdf6c85bfbd5e8c8bc7a976c8d43c5248a977d21f10b4a12f01f1c61113b042",
+        "raw_record_sha256": "780013fc6f57b2578261cf7c62a85cc6c8590dbf37d528527170cafc1d51eef6",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-018",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759301-aFWnsxFXxXTsoKGqgbeI",
+        "provenance_sha256": "3069dbe0ed3d26af5c996baf40a4dd90d0bf62d09b03e6c93effd2ee2b1d7fac",
+        "raw_record_sha256": "05024acf7bff1268acae26fd358d318858c2ec1122d15d3916d9b32bf7f79134",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-019",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759308-dPlbVeRUmGZIVqnum7os",
+        "provenance_sha256": "4910e605ecff5dbeeb0beace60b7975e9271cd0bda6f9dc5f2ba492639093833",
+        "raw_record_sha256": "80f98a916c73c5ee9f2470df20f30f55efca5bf5142b966531bbe88ec6154106",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-020",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759321-yrRAESs5rMX6NslQocrh",
+        "provenance_sha256": "3f2da7db9e1fae4280272fbe3f672776780c9f8fb329f2e83b12fa467d2590fe",
+        "raw_record_sha256": "a1bc4022d3ed98c4dc9c438d7e8f5c7191d6f32aedc0190701f39185f09e8c08",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-021",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759337-RCFCBfwVH0agYgQWkkww",
+        "provenance_sha256": "bd32bf30faac3f8efe7753b1d51a10a8b8321cfb3126ff306d63260e6c20e1fd",
+        "raw_record_sha256": "0810d5b19a248d1e64ca5417ccd5b869aac90cf05110773f0598bd1da21d9655",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-022",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759350-dP96MTs63KfKbnVCobgY",
+        "provenance_sha256": "bdde29a80012075e80ca15bd255d2d5db4eba61fe31e0234f43766031f2d0045",
+        "raw_record_sha256": "637961d79542a35e3171888cd461f1d71494c99b4f2376336dfd7acab901e2d5",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-023",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759359-ExXWxDKHLhiWlmTo1hgP",
+        "provenance_sha256": "3b69ae76a1cb815fe2775b19b9e8936b5599ee1f3d8622f6f4c7a8461cff55a3",
+        "raw_record_sha256": "25513f3554fcb8e9d1d84dccec8acb8e8e0b84e924bb02e2fd5fecd761dd7030",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-024",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759371-Uq1LRqO1XSd03SSHpXCa",
+        "provenance_sha256": "14c3e0d544efa3194c74a2a6e581413ab9d24296bf509699ce2b427427029792",
+        "raw_record_sha256": "9530f3efe44b17ed4779f2ebc8ea38e69f0cbfdb6ddeaedb368e9d9aa5e1ab40",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-025",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759382-Pd8dOgUWdzywR5PF9jwy",
+        "provenance_sha256": "93825b6d4c1e3165620d8f78f6fce344f7414b2b9235a1a18f225f656370a018",
+        "raw_record_sha256": "4872c3261d6e26ef190147656dd6b0f721109fb31c824c2e0b92e6c545ad4360",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-026",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759392-Mc3DTD3Bt9CttJ25favl",
+        "provenance_sha256": "5be5b6a727f396ecc7b6394d3dbcc2044518561cc20b78380230b9a4a85ed408",
+        "raw_record_sha256": "8dff3654dade649d87219706fb32713b9383c1375e37becaed56897b755e5937",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-027",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759404-409OsPn141nAf9A6AfIn",
+        "provenance_sha256": "c4accde98821621b5fe7fc66d847cd5cdf2aad697ef802193f3d08c0f652f385",
+        "raw_record_sha256": "d9d887a7154f14dd7ba166edd7a2d9815887f3a6c215e615deb6758a9acda657",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-028",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759416-xGPlR9oVef6rYVNr3C6b",
+        "provenance_sha256": "39984615d2cbbbfb447be483e7f412cabde6239e8e903fd78ab24f2df16311c9",
+        "raw_record_sha256": "955fad84d840dadc014a550cc7f576683e0ba00b4e45fe7234ca833aafcddb97",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-029",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759428-XgOYtwUp9KHc1cidWBnI",
+        "provenance_sha256": "76e3e49aec084fd2315d5fe4c0a9f87869138139509eaecb01ff345bb23fa2fa",
+        "raw_record_sha256": "5f4136c5bd74866aa6df512b9b836db22354f0b51b9cec402addec3207541877",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-030",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759438-mNF16f8Vitkm85i9lhGO",
+        "provenance_sha256": "d6d625a2e97ba512e38b2bced45d57f494ac0fa09c330fed235f1bbfb94008a5",
+        "raw_record_sha256": "5429a19b1474ee07c437a0957326f1045e31d238629b152873b8d10385a667e9",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-031",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759449-9fVn76q3BqBkBeaehNSA",
+        "provenance_sha256": "72902a19ae46f7d55e7669aadefe441e7b8b0efcdb193c0f2738c89c3c59d4f4",
+        "raw_record_sha256": "0b736360ff560e8e3349b6f4d8f29f693aeaae8b4add51b38a80b559c3e5231f",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-032",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759460-c9G9MviL721JoSVCi1JX",
+        "provenance_sha256": "6c23dadef8654bdc353270b8b4a2cacfc7a4bc8b85d83c6086d640e366ba14e5",
+        "raw_record_sha256": "d788cc346a987e2799b09c0e327611567185784b0a719ded5c1079e12c150cc2",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-033",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759470-SpjVtJvfZk92CoLyT8M1",
+        "provenance_sha256": "ee5e8bd65a5bea0f6d00cf57fd16504e1698bf0d861a0938beea8310924dfbc7",
+        "raw_record_sha256": "b6f0e07f867a346a311a1b65fb61f4e58c1f90304312355ab22678e90f5e76fe",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-034",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759480-MdncnrpqCDRNPQcM6iZR",
+        "provenance_sha256": "f67f8dc4a7bd0f04dbe76f9e11ff27b726c2bd7ae0882f5ebc9b2b285479da11",
+        "raw_record_sha256": "898193db52d47a56adeeb9453535d8523c714ca2eea045ff81d12837a3806328",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-035",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759490-6TBawCqXXV98zZ7c7ysi",
+        "provenance_sha256": "a94a570910baf0e41d60429acb1963b86932f342266e3edd5c11821c488961aa",
+        "raw_record_sha256": "5cd1d281581125b0af56cedd6f5598db1716abab638e91ef689e5f87b1567c33",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-036",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759499-CuvmSIYlSVzSeskrCTDX",
+        "provenance_sha256": "ec20acf751623a8dbfa6779b924ec373034348db7250fe92d228108d9e910abf",
+        "raw_record_sha256": "9ad209f9f41ce047e21d41245bdd3e70b0bbab4faca9b3006530d7c09699218c",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-037",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759512-ycJsO3X47HtAFDCCj468",
+        "provenance_sha256": "6756a6d12dbcb97213ffecfc4dc7e6967e4bee0803f10142d36a442d80f3bf16",
+        "raw_record_sha256": "71623995aba0c05e08e993f7ed339958c5ae3d2ebcdd5505b241a3722b6cc693",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-038",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759522-KAjSZQjaxEXR8veapPgd",
+        "provenance_sha256": "9f5f106552de825cdd750c0fb7bedc842f4943b9be0babe312ae51057b83632b",
+        "raw_record_sha256": "cb2b6ff9dd1ad73ff2aa995d636449ee2f8fb0d42d377c398743e99f6ed18d6e",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-039",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759534-z3rKLGvOQ7I6igYnE56j",
+        "provenance_sha256": "a3b094caccdfa8c7cbc736159678222c36dc71bd1184d42a58dc789a285c6d95",
+        "raw_record_sha256": "e7b688b561a68a083e6dfa58edb79417ccbdf07eda9b4c4d65b449cf4fe2244a",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-040",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759542-tjGVtWja0BZSqIpCyn0l",
+        "provenance_sha256": "718578b68f51d17c2cd7bf0127dc0ce9e7c6fdc570940fce0a97a9926d5bc003",
+        "raw_record_sha256": "81aab058d080e763e06bfb6482f6387816f33c83788969886ec8ed88e899586c",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-041",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759551-QBf48UbbRX1mLRSu9msi",
+        "provenance_sha256": "8587ce35e504a82ee929510832a88ed6c2f17a1645c11fbc78bf4c261d78515a",
+        "raw_record_sha256": "f957fded59dc865f6418daad1d419e5eafc8d24556ebac4cc35cf688679af4eb",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-042",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759563-typg27W0lIRoVPpjfHjq",
+        "provenance_sha256": "fd486a14da332c5712a6e36bc9409809d13d54e2b9cb88be868f5a847198db70",
+        "raw_record_sha256": "a7181da614429fe47b1717d4dde441ec0ccf2a69fdf93c41833ef161d53bf22f",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-043",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759571-1K00ALaySwabKglvieKV",
+        "provenance_sha256": "496784a259bf0114b72b48c7f96cf7edc906b8bf2c943d00ac1a1b8a699735d0",
+        "raw_record_sha256": "adc4afcf6dc4d6bfebc1ed0b01a1e7fe04a21cbf3a716eb3b2263a4e66f64dc2",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-044",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759583-s5k8cUl7HxwgXG8xbqJe",
+        "provenance_sha256": "fc24bbd70b1fe2eb12357286e7d7a612ce8f90e36391a8f39522c84bcc3a2d1c",
+        "raw_record_sha256": "d540c78ddef300e0d73c3bea96b4322b94cbf028f0c0766db9af98f20706e48b",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-045",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759591-0F742kTyqrEQHQgCBQpA",
+        "provenance_sha256": "68fbb847a59ab0cacd70434ca0754c94561365e09ee2e38e7f83b2536cb08a98",
+        "raw_record_sha256": "22fa1a703e0de353a238995f991456dc3ed0ce44e2579fbc88523d1b68dc6d29",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-046",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759603-3kJurTIHxVOFDr6HBCtm",
+        "provenance_sha256": "033d5b4253a01281b1221ff892b54b564bf0d7cffbdb9982ee8406424354befa",
+        "raw_record_sha256": "83301078a68f1fcec9f2f7bac7a247a0114cd6bd2ede8f55107ce26a44e2bd9a",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-047",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759613-xOl6n0lqMQMyY0DNxBsk",
+        "provenance_sha256": "aead0cf3636196dad154ff95f35eb65ed73ccf64fc438911d067aafe02bfbf48",
+        "raw_record_sha256": "67e78a0a73209c0f4b12a8a4e7b56a04cffb8e499b40b476490678ff99034452",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-048",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786759627-Rw5vGbX55zfuLBcascpN",
+        "provenance_sha256": "ed1ca74f0f29e2d7d174e81ab37bb4309774406daf8f29b9bb02e02f0d17d2c4",
+        "raw_record_sha256": "8f1d1bbf6a9cc895046675d11c3f2a48605c09c4e2102a788b1c321980ea22d2",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-049",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786759635-kO0UXxgpLvBSRSkahDmY",
+        "provenance_sha256": "d177767ef3dd5e6d3f606ddaa5a19defcaffb3b9ea49a7984a05c04d45c673cd",
+        "raw_record_sha256": "e4614f9b8ea115444a72bcd19c80961d1f7507f8a9e0739138fc077aab50a80c",
+        "repeat": 1,
+        "scores_sha256": "6e981b3f5299ce204f900facf9e8740b03d4cf1b5d085ceee7e59e98fd86184d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-001",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759647-Gy2oAsHeXUDp4Cj5iwD1",
+        "provenance_sha256": "4bf29cb410d6f731196f294bed0f1f1198cc6222a4f7c2421302e26877f843b0",
+        "raw_record_sha256": "97be92306baa2d66b030693cbd39f08b6131a8fdbb4c62863402eba125fd0ef0",
+        "repeat": 1,
+        "scores_sha256": "f7199176becedc2609a3060b603a5f5da99df1b32fc932001573bfadd68236ca",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-002",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759660-v9PgvEjzMRf0whZXOWvu",
+        "provenance_sha256": "879b972e4e922a0b9f3b6afa45affd7310db7158261207425c5fe4704a2e3790",
+        "raw_record_sha256": "b8492b3f1979fb50f6f16bb5285e3df864b692d54359c44ba9fe31d05b487f80",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-003",
+        "effort": "low",
+        "exact_match": false,
+        "generation_id": "gen-1786759674-49sTp5Ajo7d7zhxVlW5j",
+        "provenance_sha256": "42bbe285498b7c6a209bf509b52d75a458b553a60038f0ea1a7b497790f35459",
+        "raw_record_sha256": "c11b4be225b30ba3c4ec662bd9aa848169df3715345562617eee6f18b29d0722",
+        "repeat": 1,
+        "scores_sha256": "0114569c4e44ce846667cc640ae15b01c840a313d59cff7f29ba480eab1cb3fa",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-004",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759690-0CdZAeciybvSkV93b97e",
+        "provenance_sha256": "d53ada1a41f5a10f9f145d58939e2657b6967613da4582d6e52654e4ab0c922a",
+        "raw_record_sha256": "d1a8bf5a945d8eabb14c38f064172b5f9d30b7ddc24614a58f273a2f592b4ba0",
+        "repeat": 1,
+        "scores_sha256": "e68ab6ea3c6a4546f63a3d678ee1b4b8ebd0a8e69312d40f9e25d6b400a25c71",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-005",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759700-ekJQIgSfXnPDEsQEysjV",
+        "provenance_sha256": "e1ca1d58e2255538a23c863eccfbfbd16a51293109c1238c2b148d11fc5bd02b",
+        "raw_record_sha256": "aaa44aa5fa7c5f84a5063f033c43e15491385f7a93c1f960f15392e397d04510",
+        "repeat": 1,
+        "scores_sha256": "692249b83a1646faea23e4a401f64aefb0e0262c89e55f3f50f1a9c34ab7ca7e",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-006",
+        "effort": "low",
+        "exact_match": false,
+        "generation_id": "gen-1786759712-AjsGRIX7SHwf3aR08r42",
+        "provenance_sha256": "0162a3a3032ce089f969eb7ace7092008b2aaa14ff3b1474381f81b231907348",
+        "raw_record_sha256": "4be0506b6b397c8e593ea12d0c2f093b0f85d8e2dc0972f78b077f615cb5b054",
+        "repeat": 1,
+        "scores_sha256": "48c2a038ce84cf5132ddefd273f3329870cceb8b89fc52488e70717b2643acd9",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-007",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759728-Kr0szxk4vSkLQr3zSxzJ",
+        "provenance_sha256": "945515b81519e6d1cc54fcb3fd77852465fbfe9c6235372044b4ee64bfadace0",
+        "raw_record_sha256": "fd67a9465e83347b883e27fc0f84a3e970bfd9cd754626385b2ad67ca8f72843",
+        "repeat": 1,
+        "scores_sha256": "692249b83a1646faea23e4a401f64aefb0e0262c89e55f3f50f1a9c34ab7ca7e",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-008",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759740-4Sx7QK6DwthO90eGvrF5",
+        "provenance_sha256": "5ec94acad8349f8d85a305b2a1a3f7e51303382479a57fba4b64682e6becf42b",
+        "raw_record_sha256": "005b863db7e2d167ed92ca01a27294f9d0e6b1b17ee07df19526477351d0bc1b",
+        "repeat": 1,
+        "scores_sha256": "47af91beb265d1643ae1dc9e0e169209fa77c23d8d34e726b3187483851c629c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-009",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759751-DxmTyZ8CqJEgX2Vf7UXA",
+        "provenance_sha256": "2d2d5d1b1bac5d4c9f20ab48a291965c1729b31b0b79e1045e3e7c9ce24ddc12",
+        "raw_record_sha256": "3455b558b5da3c02985584276bdaf6635c698696582ea73f5c979359c0c14143",
+        "repeat": 1,
+        "scores_sha256": "6a0ac168e3b7b7e4a3858fe5887f06ca719f6028f0b92415005059049e1f7cf0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-010",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759765-Ad9nJPIiQYiqxdF2Al5I",
+        "provenance_sha256": "4d675fe89b59022e093957d8b2b2857b9ba165cb08b246e451fa779f2c4e87b7",
+        "raw_record_sha256": "cb0aadadf979be58b844c98f1c3279ce7fe8022c243471bb0b821446c4d88830",
+        "repeat": 1,
+        "scores_sha256": "58a941e30815a68f6773ad0f6d149fd9794c584b0b75b010a03a499fa47d160d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-011",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759778-ezzJrNkOyhZBPMauPtCn",
+        "provenance_sha256": "43ca846331daf970ad163a70785396c7435d93c8b7afdaf4b99ad0d7e1c4347d",
+        "raw_record_sha256": "e98401bca8ca10ea9f931d5865daf195ba3876f781da4c6286d7579a9f2c3c13",
+        "repeat": 1,
+        "scores_sha256": "cb6e5a34310b735f3cb327f764b327525eac271c6de94d05f4b7b2ddb56722d5",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-012",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759792-VO6dT4N3dsqTU7gkxxuf",
+        "provenance_sha256": "ae878cacfc08d14fa7532bdceadeadd2d6e988c473559d2b4077d15a0723d742",
+        "raw_record_sha256": "102779c1a91e0d2147328e23d66002b107d5af3d634c6b533b692b42c6abfcb0",
+        "repeat": 1,
+        "scores_sha256": "a58f984c9a909f0b6634b435f8a94dc12e0268893c4612ce74787d6a263e3d23",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-013",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759806-PR1bGHeKK3k4wJhv6jVW",
+        "provenance_sha256": "e290030654d07c2520fad3845e81533a1652f02fd76cd2cf384a13d51134a159",
+        "raw_record_sha256": "f4653e503ded2ccaf2e845ca1b42f9466302a8000922eb7235396d3deef62a05",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-014",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759816-bjTIBG5BAlMQOljr2EQc",
+        "provenance_sha256": "59db5d7b9a6d7a215990c5e6e4f6617ea3526f13722d0dc28256aaaa15faee4a",
+        "raw_record_sha256": "ccfe22c3f888f2bf0f142c403929f1534ff98a54ac638470e249b33baa0454b3",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-015",
+        "effort": "low",
+        "exact_match": false,
+        "generation_id": "gen-1786759827-xnB0dxkJyLpzb2suX1Nc",
+        "provenance_sha256": "76a0d3ab20530d20ba4a6bea0b804f6c29e261015836d7e9951c70911983c001",
+        "raw_record_sha256": "7ee5df934a9c26442a6d11540b4baf77e315dc9831085dab2c4c0c16d05d973d",
+        "repeat": 1,
+        "scores_sha256": "b424a18f0f230969ac7063538f8efb385b663b0491e38120dafabcf3d8caa5e7",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-016",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759836-W9yhQoKkPIeUvoazC65J",
+        "provenance_sha256": "fe4da3e129821c52b38c739e9152e39d40990930ea50cb0dd6bd90bf87ff4e9f",
+        "raw_record_sha256": "344961be437c112b812e506f2e76b85853f16e8dc4dcf8cb9f61f121629c68a7",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-017",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759846-xGp0FS4YtONbBAG6CjJP",
+        "provenance_sha256": "031b5ed4ce1077cc5173998334590dfb7c63ce38c6c6009d435f23484b827c52",
+        "raw_record_sha256": "245883c9c9ecb013e94387df33e9bd51669f8ff6141bb06dbba09c5c13e73f90",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-018",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759859-bzEPVXMEGE32NkMjXw82",
+        "provenance_sha256": "d3c609a35640d16ff953af4d51ac68b85d1ee7243d7f269ef32d5e9d6291a101",
+        "raw_record_sha256": "e564d68ae7c5590f679e52d3689d56c29c973cc27b67a18c744c5207d9d95268",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-019",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759869-Oo9zKD1Mt4Tj3nmboL1b",
+        "provenance_sha256": "9b3e08174ffc61e6f7f5f6cab2b6874df7a05f010c45fd6835d75e07019734bc",
+        "raw_record_sha256": "6744c8d9f33b0b28ff5a1e948344577f6b9a25703857cc329a2fe12ca5a36bd3",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-020",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759880-TG0tuIoFulw1seFzgSoD",
+        "provenance_sha256": "88ebe9d7b9af0299a728f9729dd1ea5cf876fc078ab2f589ad5a77c68f893533",
+        "raw_record_sha256": "628eec9b9fbb7d3db3066a2d16394fa621ca69acdebc013eab802d32972e57f8",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-021",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759889-t45MQhIp3gVpMazjY5Rs",
+        "provenance_sha256": "dc1bf3452672e3dd107ff8e79c48c257eb31206aa7399a59f27622b613e77994",
+        "raw_record_sha256": "027f2d29445a0c5c97fc35484ac5eca1e6e935f79b1ac3bd9d9f6b6777fa6cad",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-022",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759902-CRsYKLVNLkHjrWfyBSoj",
+        "provenance_sha256": "714abfadee7ba583f44bc5edb3ce0cab17812ef795c300eb3a6aaec351300d21",
+        "raw_record_sha256": "6fb49f3cb0637596718bf38c5c880eccdc0de7beaa4f3c152771ad8471eb637a",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-023",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759910-FTvrL1xLotfIxPrB181w",
+        "provenance_sha256": "6211fcff276a51c0efab85d3b1d50828a3557605e1368201aba8297c41dbb68d",
+        "raw_record_sha256": "f1678b72f353a8044390970335d18751c229b3e7687be0a752409b958fb77ec1",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-024",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759922-ov2t8cFdiAlLKvl6RnwB",
+        "provenance_sha256": "f4aa63f0dfa81b62e893a6d5ff7d9231073c31244a3926980d8039964672e43b",
+        "raw_record_sha256": "1ef71a845c4939f888d629e93697029f8cf06ad4c4892c9880c7333a780a6b2f",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-025",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759933-J5tfqTiYOVKmpSDemnsh",
+        "provenance_sha256": "cb2a83dd147fc66abd45686e268a0fb9e423fa66f31221d8bb66ce7277008b05",
+        "raw_record_sha256": "dc0c2b19837f161d7114795c76afaf46c5e3ed5245f7f329b81cb4d03f3c4df2",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-026",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759943-0bbZ4ejirmhRxQUbOWQC",
+        "provenance_sha256": "968eb73f28e099a6eafcbb928b40ba5972c13a56bb87b69a27c7effe77a0095c",
+        "raw_record_sha256": "98caae8ea3adc2d832d6f81b1909b9d061563e97f517298050fc71bd3e919f72",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-027",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759951-3u7EAKwkS0o9REpq6c1a",
+        "provenance_sha256": "0fae846ceef6fb21ac606e8a867ba558a7a8c8ac176a2b289df35c3f0f075209",
+        "raw_record_sha256": "87415bd12083b837cdbbde0742b089caf2ce4bc14304489011565e5c101069ed",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-028",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759963-simvjR3be2uZbZMx3HPV",
+        "provenance_sha256": "1935c910f21c1408b161d78d6ed2f386c97ee4eeab78f64ad703f8c5457d40fc",
+        "raw_record_sha256": "b9f3df324368f84ce6679ae4195d55a4f6e4f653a8669b6a4e1b1deb087dc9ea",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-029",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759972-Zw406t05cFi8ABvkLt5q",
+        "provenance_sha256": "6730fec7ba807a4312abd665ae1c97d07c5b6b76da25230fb977650be106dcf0",
+        "raw_record_sha256": "75befa6554854b9977757fd5634296c238c714b3b6dc7515a5fd835fb39aa78b",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-030",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759982-isEJa1JmuRPnX8g2UcFu",
+        "provenance_sha256": "c8b11bdd94b834380cbc41c846027cd7a14f08f99dc4d8fc8ce6b96955780225",
+        "raw_record_sha256": "9a3e596f89848b80c338fae336517b5a6e707441dd135797e6cdfd50e47016ca",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-031",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786759994-xClJrz0I4wXUSwcHrzQP",
+        "provenance_sha256": "9d4197e321f4e72021f8eb6c4aac755d8540d5ee3c0ed4c2802eed261aa5528f",
+        "raw_record_sha256": "75d94cb9c5c84a82bbde2e7dd13b875844c3eb9d76d9d0dd231a8778f5df53f4",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-032",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760007-BmUx8FoayjDFcMSDVpGG",
+        "provenance_sha256": "ed11c979df4511863180bccb02d55544c5e7ceb3195a3f3f3ce7a444f274612b",
+        "raw_record_sha256": "fde62969266aefcbc117072c0cd63a134ae07dd7da06cb765f82f8af069a3b25",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-033",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760015-09n0BSBzK0KGixKuCvDs",
+        "provenance_sha256": "3be65c8ea002c2330d20bd963947c5a42179c30e2634ae34952f2b89d8ccc1cc",
+        "raw_record_sha256": "bf519d712817accdc1629d3b4becb43b2d42ad95c7acf2a279f6acf6ec06d6aa",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-034",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760026-81DWVn57jbUinYWECKcu",
+        "provenance_sha256": "4b149f8cb2b7342e517ff858b7f3ec31f15095babc14dd2ff8526ebd4c4e0237",
+        "raw_record_sha256": "8b9b3adb15746508f97b61cb123382c26133846172a591ed26396e5424157f7e",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-035",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760036-soyBDFaeAAU8CIGaazoY",
+        "provenance_sha256": "4e2ea3a406028d8746cb685a1ff4b9ae298e9e8dd91918af943f5d5ecb1900ca",
+        "raw_record_sha256": "c6e67a565f0d222047f78e6a1c5aa5d6197bb0ee612897d9efaacbc5a8d4b589",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-036",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760047-zOFXpCD5yrKRQVQ3x7t0",
+        "provenance_sha256": "7a9bd2ab47daa59ce3758a9eb87fb5b74734e5ab7b1d2f3bb5e2ca24b3d2139a",
+        "raw_record_sha256": "d71fedd12eff317dec256a70734f901280a032041d1f00be8ec9404edede446b",
+        "repeat": 1,
+        "scores_sha256": "2652ed5a4fe57340e17a64b463c396a49dcc54330ea8869f5301d3f5bcc541ac",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-037",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760058-tO01lBuivReGlO2pEq63",
+        "provenance_sha256": "49538fc13775498ffb3aa2f49f7a0a179a63e277a07e65d2145fd1c47191655d",
+        "raw_record_sha256": "1ba2093b2820144f561db83db7e5c020d108f20a8ec0e09fbb53003af2cc9944",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-038",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760066-VCvSLXNdJ9SFQdauK8uL",
+        "provenance_sha256": "7f61eb02f7879eed3cbd4f4bf563920177f72b082b0272c153127c13241cac6c",
+        "raw_record_sha256": "c39ff0c687443f67866e68bdf2747b56aa6e5dd83212a3844cd1cb1505481a1c",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-039",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760079-duBGw5yV7xbYHBxW5RPt",
+        "provenance_sha256": "cf8bd6a089cc0f3d5142dde12c4e92f8929c94c3b01a00d8aaad8b001ca8f903",
+        "raw_record_sha256": "dde2a96b4595a578a9e7f22c57aee362f2ba2be3062c098a94deed7994fe90c8",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-040",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760090-RjFLh0KpL2pbIlnVr4c9",
+        "provenance_sha256": "460789c0769fb3573593dbbf6f406430cc0232a925856181363be42fbcfbec66",
+        "raw_record_sha256": "c7c52c34fb30b365ac6e67116395d252b5d0226e450f7d9b93e29c5045e224ce",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-041",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760101-OUjAoKL6f5wrRPXEIP3R",
+        "provenance_sha256": "8680a370bb218b138c72b4b80e19c6093b968978de2928a09a1ea5f71050a635",
+        "raw_record_sha256": "30eafe8573709014c910f05e5dc195c7e619fbf9a1d3768407589029f8e4124d",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-042",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760113-dlkVo9zUcXGrLPbxnMZL",
+        "provenance_sha256": "ac2ef42a03ade1722f7ccbe1f98008fa9dde8fb5d5dec87a5360008d54547e8e",
+        "raw_record_sha256": "b4d4e85ccd7190a0ce637d6e1c554ac09db27c4e506a82400d9a84a8b56aa25d",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-043",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760124-4IWP6D9LTxkCQeMaSGXM",
+        "provenance_sha256": "2ea4a7ed60def33a8f0f9fbbb63142a254f10c0feb77575b922c504b2f5443a8",
+        "raw_record_sha256": "47329565bc14002cd66e2b1ea479f7fe21df6ea15bcd35d59f301754d8aee088",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-044",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760133-W4IcFqeIN2vZLSvj1Xq5",
+        "provenance_sha256": "7c0cacae4897726cdcddf29be4b381cc8bff3c706163930f7f4c2eb5515f1b24",
+        "raw_record_sha256": "7a1d68236f41ea207a0e0f319c5aed2fba19262986f885abdc444502eb8f0db7",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-045",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760145-CG5vL6lNNJNeYylkUXBw",
+        "provenance_sha256": "fa967ad518b22cf461e29b1e6c051fbf3e51f2c3781756a8229ced40f2a08293",
+        "raw_record_sha256": "72721c50aa1b3761d586cab91a67da535dca489fd00bee6c6fce0182bec5c85c",
+        "repeat": 1,
+        "scores_sha256": "839dabaf9128843a6107b36b33f6b5b2c260e65b0f05856c1fd39141cf2a7bb3",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-046",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760158-Zo1zsuIrvaybUcckMvKM",
+        "provenance_sha256": "a59bea1d1b83f467e220ff20972e091f1225e81b3e8e6ada00c86276ef6a261b",
+        "raw_record_sha256": "205e43b2d46e4791c68ab3a0c9f8bd645b1947e15730bf7eed7de5464baf4a68",
+        "repeat": 1,
+        "scores_sha256": "69e430852c8d3ff00475899d4763e8ef8001e3d4194f3bcf4debdc23742abdcf",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-047",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760169-RvMwmklkxJQiolFQTjpP",
+        "provenance_sha256": "0ac11770224eb19bc189a856a1ded2f92939cc18b37ad94cb23eb8a89b55420c",
+        "raw_record_sha256": "3dd96b87db137ac883c869e2431ee8b188afa1fdb03f9cb5bf1b25758cb21415",
+        "repeat": 1,
+        "scores_sha256": "6b0764adaa711e232e8b68895bf7181c74835811936e771b3f7ede099e1fa899",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-048",
+        "effort": "low",
+        "exact_match": true,
+        "generation_id": "gen-1786760179-34zpaVoE5D9eJYxu59QO",
+        "provenance_sha256": "c5dcb288a0c9fefc889da8fa3ebba4c114d7213b6a0a8a0f9182028cc917ddb3",
+        "raw_record_sha256": "83041305e9adc4c02d03b109d5e76ede0edc2c018548f46fa2861e732d1fc9b0",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "labeled-049",
+        "effort": "low",
+        "exact_match": false,
+        "generation_id": "gen-1786760188-Mg0wqqIKtgguAGUrxMHt",
+        "provenance_sha256": "194cab8bb60d83a3ffac9b53c18a8d73fb2c7f67cdf6e22dc73d1f9e3b37e96c",
+        "raw_record_sha256": "84941cd33a7a78572298de03ea1cf051d29199c121fb47a7a758fd90424b3fa3",
+        "repeat": 1,
+        "scores_sha256": "6e981b3f5299ce204f900facf9e8740b03d4cf1b5d085ceee7e59e98fd86184d",
+        "split": "labeled",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-001",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760199-fIzAB6eA3FBxPLwKYNBz",
+        "provenance_sha256": "39360ddaf1cada4840c195553ee4c0aef5d8bdf463b65e529deb57effa0babfb",
+        "raw_record_sha256": "94b57548b5025d08cfca11210b28ffccc55c996e993cb1da3b9e654a7f16de10",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-001",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786760208-4Gpx92kYnMXY5wt89O44",
+        "provenance_sha256": "9ecd5c5dc7bae2e6d765997212d7d973bb36b573d9d2eb2e9f03329973b2ca8c",
+        "raw_record_sha256": "555c173370371d625a20e919c95bc06ace81c463e8dbfa615b5a3f96970fa285",
+        "repeat": 2,
+        "scores_sha256": "b424a18f0f230969ac7063538f8efb385b663b0491e38120dafabcf3d8caa5e7",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-002",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786760218-Zkoou86cGc5p6cH3F0Y0",
+        "provenance_sha256": "32e906c93f0a6ef8eaaed0aa28c1a080e0cb8421a1f3a92ecc587bb38cd6e4b0",
+        "raw_record_sha256": "f38d3ebd8e2f4ce60a2967414f101da96bf7ba35e8fa6461b9c8aad85228a57e",
+        "repeat": 1,
+        "scores_sha256": "6e981b3f5299ce204f900facf9e8740b03d4cf1b5d085ceee7e59e98fd86184d",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-002",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786760230-mdk16Szioa52SxMUsBMV",
+        "provenance_sha256": "093ef5601fdb9d35b1b6e0dde398fd2fd9e8c362efa40d4fd9cb2187329d8e0f",
+        "raw_record_sha256": "66b8f74d35e50234ad1b500172d6345154b721b0f7eb2cba97b17a8d8a011e8d",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-003",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760242-q8j9jcDqmuITendXfv0g",
+        "provenance_sha256": "f6a206ba5b938453dbe7be503ee78a0a318e50e44921e8f7fde5b81b3fa8d20e",
+        "raw_record_sha256": "cdbdf63005860e8ace1151af1945a6a92ab3d6dfab432d77fc3837b86dcf936f",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-003",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760254-uHuEK1RtdiusBiWko7A4",
+        "provenance_sha256": "4f2a03797badca78bdf32e38a56f084590d30230413b7fc5f78bb5eb7ac4b2e8",
+        "raw_record_sha256": "28a2261f533baf9fbf2296f5d710335257d429bca9b6d1be9899083f5c7f07bb",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-004",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760262-WdLad6kZvYDSZu0KyVOw",
+        "provenance_sha256": "5270858209db1a47c7e7d3e1323daee6f4248b58f99b0dfaded39f4d9a4373a8",
+        "raw_record_sha256": "2c61d6ee31ddd4dbd272bbb26c341ea899e1da6dfbd5a5b904620848bb1386e8",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-004",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760275-07CxRWe8uuKxV9SNscOG",
+        "provenance_sha256": "9c1e71818ef9e4299c6b985e3f07fd52c85197dc382b37ae37b9f1d0afc93328",
+        "raw_record_sha256": "e9545216d203e51786c0408113dadfd3ffd2a3262d3339db83c07f9dcf40524b",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-005",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760283-E48V2unsLP3zvGzt0Dtv",
+        "provenance_sha256": "66d8e742581c222efd66a47ef0ec2f7f7492ebfbcc668e069c5b48d1a5467435",
+        "raw_record_sha256": "d4672dd01676f569cee9fb01f469bde2e435781ab94bc47f85b79a8fa73f53e1",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-005",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760291-NsIwfu1S6UgvjaWhUOyp",
+        "provenance_sha256": "825c84756f92da0f0ea9a8fc30bd4e415a7cb6ddf76ca977674e5188d19d589c",
+        "raw_record_sha256": "50348a6fafd6c4e21cd34f885042139b5e1b8769adff6edc31dc1cd6157f82cc",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-006",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760302-KLM4TD1XgGUfBxYbb73R",
+        "provenance_sha256": "3256062c0e3cb2fe87924f92203777d3186f34a8ac8491170c179d5ec72d0e5d",
+        "raw_record_sha256": "d4bab1ff22cdeffd716aee31095944c333181bebc94fcb0b8a2e8c3bf49dd3ed",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-006",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760313-V4pqtiywtrExVArLZpMQ",
+        "provenance_sha256": "d331dfb73b0b13887b4f9bb514065b35b0c01d83bcab8687998f9d4011b2c851",
+        "raw_record_sha256": "e9d81f767cd4a1c52416ae1794da23d00bddb27160024042c3e908e1ab6e7274",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-007",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760323-CTnrETZYGdP5e1w9yL1X",
+        "provenance_sha256": "259d28a549a3aa6032761e62041a39baf80d4f0341da2512ddb57e1fd00faeb1",
+        "raw_record_sha256": "f3a1ffa37657bd69488505db1240f093906d420aef3486628717f9b9eadc33b4",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-007",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760337-59hP3ILH4SFKRXQghGTS",
+        "provenance_sha256": "31f3c71091771ab524ab92957f72221d2dd9cb2a168d51bf619ab0b4adcd3c58",
+        "raw_record_sha256": "911e7aadd5fbf5efcc7a77ea566fce1d2aaa3eb849ebfb8fd3280c29dd78362b",
+        "repeat": 2,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-008",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760349-CDlEIaRpll8uv4rRmPD2",
+        "provenance_sha256": "f644af3196d57a2c60b115894d6d396dbeaaf3929cdc6c21f9ecc34328453b45",
+        "raw_record_sha256": "098369c9c1877842b6c1abc4bc70908c87ac043f9048b4414b5695cbb1784220",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-008",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760362-8BwFRB7NYkmgA6P6a4ar",
+        "provenance_sha256": "9befe572dcee73a7a6b2b8ae1cc78353ceea6054fa70073188858579bf24f275",
+        "raw_record_sha256": "8db32dcb02ebed3f65af6550151a7daa12552bb2dd4f0c993d136c18ce78c3fc",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-009",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760373-ntvvKnPhagy3wUNOfBLO",
+        "provenance_sha256": "3e640cc4adaec34539235585427c39b21108b45aa049ea080bfff35443fb74c1",
+        "raw_record_sha256": "0844ba79cde7f851ac5bf8a4944054f3ba91e390c48266fd19383c9df466e038",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-009",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760385-XP1njHnta66sRCULvOjg",
+        "provenance_sha256": "13527b7525406dcef4eb079b111bfad2a4abbea6b160384981a59b16c99a3df5",
+        "raw_record_sha256": "822ccdf548522b542c9ede237d56ba84e118ba1c585fcef2cebb1673b81a0f46",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-010",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760398-bKvne1DnMDfy0Mk7Tzv6",
+        "provenance_sha256": "91f4e23b76bb117267b6734c35371c64a73114c308ece24b090bae1123256c7e",
+        "raw_record_sha256": "4aa89eb55e0d5f480048ee95ed43c07bb74b58078395ad1f29f2687354ee5843",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-010",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760411-LeTTYQ93C9DQkJ7ioLY3",
+        "provenance_sha256": "cf3b86dc6bb2c01894ba84714f7fda5df831ed0b5f6ca031f7715e27b0fcec6b",
+        "raw_record_sha256": "602b65b02c6174c0748df997528229bf6e42227f712407da15bdd72a55107f7a",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-011",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760421-p1lMGVUnYP9bPJZrc7cZ",
+        "provenance_sha256": "61780e567a1933ef881555e41c7f9fb36e423c9cf83fa2324081c7e9385ab318",
+        "raw_record_sha256": "e83765f16435ab8be5c4e23a9109df082512848ea513a61d27bcae88f4de147e",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-011",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760429-GoF19YwhoHE54XRivIzs",
+        "provenance_sha256": "beda44f247b8ac8079f6b5df4e1f5badec5adad58f56d4f186a0a5bef54d4bbe",
+        "raw_record_sha256": "48053d0395af02ca90d5bf677faa9779ef72687656ed6704035d29c6f2152766",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-012",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760439-nM9UP76sOFEXLTu5V0Ws",
+        "provenance_sha256": "1b7c11140b90361d0c7aef90b95e89ac122206f86dab001265319329de7c649a",
+        "raw_record_sha256": "1d1e3773d9fc60f124eabf66d0a654af605c89bf7357d95000258f1685545bd3",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-012",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760451-aNZPuxAIpkhwqX7igQRQ",
+        "provenance_sha256": "8a2dc0793e8ce7a4561a90cfdc1d15eeb37d7606998aea1bf7cc2888bd1b48b0",
+        "raw_record_sha256": "1bbccb34088b3761b862e05812f0699e45b22d0bce6ba5ff3b9bd39c7ebbab2c",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-013",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760463-0Kn6EXBKZWBcR0TJYBOp",
+        "provenance_sha256": "e9fbfc2ec7f10a4fd4c1ef6e6565878564cf2782051236b97d5e67cfd79242bd",
+        "raw_record_sha256": "5621a40d964a66f8fc67e54bf98f05cb608919152d496e0f9a0fa04b7cf8b579",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-013",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760476-PK3mT86gTf8g4uUXCuJh",
+        "provenance_sha256": "9a029c3e760d0ba1f7ff64d79e5c9c76bb942d5bcd49b1ecc58e2eaeed75350e",
+        "raw_record_sha256": "b87ff36a1ef4366712ddc58dbc967f5718bc6ae401e51e3614e662a00b367980",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-014",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760487-KR8ttlMu06yKNQpa7lco",
+        "provenance_sha256": "a3b884b4b4d5dd4091df64d3eebe17e2164ebb62ff98741bfc6d7562393652bf",
+        "raw_record_sha256": "b92e35cdbfc16fb5e708650727aca199cae1e3ff78f0e74aeb63cb0b606087d0",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-014",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760499-67Ld97Gr9gVZoMUe328Z",
+        "provenance_sha256": "1dfc6f55761fd9372dd262c288540022460ac44667404b25f20df833403b3cfa",
+        "raw_record_sha256": "dc37d1eafb8921e004b05a892507a844cae39ec497a7f44b5f389da0d60cd5c3",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-015",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760511-CJMA1fxyXqks3eSoU0ie",
+        "provenance_sha256": "ef15ed456ee58f96d31583f65710e3a8e35896bec177d5842cee47302b8d3113",
+        "raw_record_sha256": "1cda9c27e6e368bfe8331f96b1c0a87a0e4a83f4f710b1d7482644195aec8a4f",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-015",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760521-OSXxpRmSH340cWH64JyJ",
+        "provenance_sha256": "732c568ddcb50838edb5725669447c3eafd45486d00e5c23eb8940e967b8de30",
+        "raw_record_sha256": "69c4e2521a0c0c17bf092b255587832d7a3969e28e573c31fdd4f54d344cbb3f",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-016",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760529-ce4A7mo8Tgz7sdVmV39N",
+        "provenance_sha256": "74696ca41cc70f9eca0a761f57a0cc5d4a93df22d6ced13431a36db68965cd34",
+        "raw_record_sha256": "65f8d78681ece09c3c804f1cf152fc75ed1ec0e2c4bd6425d78cc1f869f66190",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-016",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760542-2ACoAYEXfA6nKGfoGfro",
+        "provenance_sha256": "f056478253cf68c4d04bdd1b9da53af7165ca6192e67b0b044bf520ded151939",
+        "raw_record_sha256": "ac91b89db304336c417342b64e7b0c9bf2a1566f7d00e4065c087010e112edd5",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-017",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760559-DznEmnW1N2knDUiA2TPY",
+        "provenance_sha256": "5a02b327a359f9692f76c07506cded45ff0aeb8bacf6f339a18e3fc1306e3a95",
+        "raw_record_sha256": "24e70c5100a562cdb2a4a53bd12f7708e589dc526010bfb07d4ce56dc95c6dae",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-017",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760571-tNqSQhjzcoQp6Jof8QlU",
+        "provenance_sha256": "ac5c8f7563a29374700582f112b5943f7d0271ea7653112d3194b50ed4633b03",
+        "raw_record_sha256": "c5e309a81885f836a93d8f75d7d613a8fbb71bc0ac105bec6d4c5b69a68313a4",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-018",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760580-49walJt1a9yVyVJfC9ux",
+        "provenance_sha256": "02e87040649cd08fb562d409fc82881e5add11b4a240c23a4137596a8d50fbf0",
+        "raw_record_sha256": "4ba6edd1eefe18f2734c7c29a4b1d99a71f04cf46476e16c583a22b20204b938",
+        "repeat": 1,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-018",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760592-tGDR8FHDtWVZrMZQgixM",
+        "provenance_sha256": "f539c2f11f01110f43eabcfe376f2b6c22de956b58c34e5ec80761f1e626cf9f",
+        "raw_record_sha256": "f04d1d24e140d0cdb7f728ee6ddbb8e61f32b908ce21e602ea085f3489aebca3",
+        "repeat": 2,
+        "scores_sha256": "f30e3af58314936900e880ff28a0d4faea89126cc8b92170b7b749e84dcb1c2c",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-019",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760603-D4JhG3Q3Q0miE5NiQUk3",
+        "provenance_sha256": "14bd2ada0c0a5dc4b77ea02d9db4110ad45f909aa9441374968896f01caf398c",
+        "raw_record_sha256": "0ba6d6980df52244ce3bb55d2bbd326388ecd46f490906b21456fb57eb2c9503",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-019",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760615-yIs9lYYTOipeD26oTcRk",
+        "provenance_sha256": "b48deefb4de6a5dbdb954ed5a1dbc145c258cb6ec7fdd7be80751bc80be84815",
+        "raw_record_sha256": "82913e526049e5227399c52a2353a2e5e6bb91730e0b877574bb9fdc3628049f",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-020",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760626-O2L6zFUmfBdIxlXiaMWR",
+        "provenance_sha256": "dfbc0d91b09b09e62cdedec51fece47d109a52fc20e159c7e831c072e7c9224e",
+        "raw_record_sha256": "663a3c34cb38bb8e9ed39d524bf2e16c966c83a51b0c3936051c7ecefb42f547",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-020",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760639-4x9oXDHaLcc0U1I1s3D9",
+        "provenance_sha256": "86fd5810f6e69b0468d883b2c389009354ab2725e247dcf5d2978764f93bcb84",
+        "raw_record_sha256": "e90756557de4aab063497e5a46b1a340f73ea32b87ee14cf2fb95e54503e323d",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-021",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760650-MCjj3hdKaRUoZZjwjxXw",
+        "provenance_sha256": "d8f478ea8bb0a5f75e0c4e41d93cf7b3758ce5ef6104462d8ed9e2ca1c3cc8a6",
+        "raw_record_sha256": "6a0eda2b3bccaec34f27b30014762b95705409810e400fce4c243c3178f3ed88",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-021",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760662-55Nu2O8uh3m6vKR8S4TK",
+        "provenance_sha256": "7acc68e53d35bc9d04d28de4c2433df50291fa47656e8360e9dc98d789d4338e",
+        "raw_record_sha256": "56cca02141fec792b843e92d2817a9c337a6b6066d5f39359ec7455cc4d14436",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-022",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760675-U8WN8nQVn7jiCo3tycNe",
+        "provenance_sha256": "d79c7f8e8a5311ff243da0503009f5cb43eb6165efccca04f46e91535b650da9",
+        "raw_record_sha256": "e723bf1becb90ef52d8edf1ed140d87e82596e07aa23b6980e9b076535189513",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-022",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760687-F5VBJPCT6wkmoOxd3nm5",
+        "provenance_sha256": "7e7a747fb028d4cd127dd307df324d63a432ed4cf180d4fbe4a67dc4626fa778",
+        "raw_record_sha256": "0408b23d6389635c977c91efce4c46c8ed59c659b491fdd4d5d10acf15c4d198",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-023",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760699-zVOjTLS0T85aJ9Pu8ktL",
+        "provenance_sha256": "b4c50b57a650dc1f9d566d7431238c3057c3dc09b27cf1c7729348ec942472e5",
+        "raw_record_sha256": "78db48b88b24eeb485bc87b2795ebc7649830c6ccd27f7cf2c22275a20453b06",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-023",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760710-2hmxNzFf6cvj6VBEnjQD",
+        "provenance_sha256": "2f7e9327adb8be4ab8dca818b614f4457a245e8268b90e823fad00adb1b95b84",
+        "raw_record_sha256": "99a0adec1052bae33bb146841503bbd36fcad58ab9ba3ae46db62da17224452e",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-024",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760722-5IsJOI3g7UePZUJdX4AU",
+        "provenance_sha256": "f217a2f76c6f7a45d32207c8840e32a870f98880b48be539bbc3454774d9bcd8",
+        "raw_record_sha256": "58463c2fa9d8c3e9c9950555d9215e35de2c1d4d1e021746a94f7eb6c515b303",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-024",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760731-1G8tBg5v4Z82SjCqeE5H",
+        "provenance_sha256": "c48a72d6c1d100ae606a555de2cf7cbf3cb1280da46d90d97b5df181bda999eb",
+        "raw_record_sha256": "349f7dbf2f63a1c1297c35a13c6f3baff04fec58943040627ee8414106178972",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-025",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760744-svDwWSxNylCn7upClATB",
+        "provenance_sha256": "ad3553c0abf1c101701cd1c012800c0ac695d8e3327bd6af370d20be6a1d32ee",
+        "raw_record_sha256": "0a69ee05956dad827b8f3056b8700af80fef03b386fc7d899646ef7f9b6d30a1",
+        "repeat": 1,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-025",
+        "effort": "medium",
+        "exact_match": true,
+        "generation_id": "gen-1786760755-MdJ70DSylILFT0qtWHHv",
+        "provenance_sha256": "821d6997c9df5422482065256361142f1b932afeb93f29d309c6c1b0161c175e",
+        "raw_record_sha256": "8e171264ee333e4fddfaeb63ef7cbd7d704afb75071873bae23dd30ce4c9125f",
+        "repeat": 2,
+        "scores_sha256": "c80ceca1f09d9d7e95aa305273b789d907d2ca85c790d22a5b5baba55c8935c0",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-026",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786760765-IIR6FwcFAq5UYvLooDrE",
+        "provenance_sha256": "26994a757c750655cc78a13431c597eca9c7e8b163863e029b933bf77e518a2c",
+        "raw_record_sha256": "066eacd3e3066056fc2b06fe586ed3cff1a0ccba10a64b1809928933e54de13d",
+        "repeat": 1,
+        "scores_sha256": "a9c749a3b40a3f839c1ca2b4b539c3522d9b95e6cca4f5758fe25daac4b1b06d",
+        "split": "heldout",
+        "valid": true
+      },
+      {
+        "case_id": "heldout-026",
+        "effort": "medium",
+        "exact_match": false,
+        "generation_id": "gen-1786760778-pHLnRyTDAnmQZ04jTz6q",
+        "provenance_sha256": "24059f8c0569665efc0ec2b8ae5a6c1cc9c02e76380c53dc5adc424b39ef6464",
+        "raw_record_sha256": "826de33f7425ccd5419b77740b70fc6f5dcce9a67467c24cf6b62e1e25b414a1",
+        "repeat": 2,
+        "scores_sha256": "a9c749a3b40a3f839c1ca2b4b539c3522d9b95e6cca4f5758fe25daac4b1b06d",
+        "split": "heldout",
+        "valid": true
+      }
+    ],
+    "sha256": "e0efb80d856faac6583ecf83d72062a6a530f220449eb9274fd3115c767eea8c"
+  },
+  "case_manifest": {
+    "cases": 76,
+    "corpus_summary": {
+      "cases_with_6_to_12_rubrics": 12,
+      "categories": [
+        "Desired_Writing_Style",
+        "Hierarchical_Instructions",
+        "Item_Listing_Details",
+        "Key_Formatting",
+        "Morphological_Constraints",
+        "Multi-lingual_Constraints",
+        "Paragraphs_Constraints",
+        "Semantic_elements",
+        "Special_Output_Format",
+        "Specific_Grammatical_Structure",
+        "Specific_Literary_Devices",
+        "Specific_Sentence"
+      ],
+      "injection_cases": 8,
+      "long_instruction_cases": 10,
+      "long_response_cases": 11,
+      "multilingual_cases": 14,
+      "rubric_count_bins": {
+        "1": 21,
+        "10": 2,
+        "12": 2,
+        "2": 41,
+        "3": 1,
+        "6": 4,
+        "8": 4
+      },
+      "rubrics": 206,
+      "unicode_cases": 14
+    },
+    "debug": 1,
+    "debug_redacted": true,
+    "file_sha256": "57222c6f6bd4968fab18933a0b0e7c2cc348ae085fbe69532ed2efd9e07658e8",
+    "heldout": 26,
+    "labeled": 49,
+    "path": "configs/judges/qwen_judge_calibration_cases.jsonl",
+    "rows": [
+      {
+        "case_id": "debug-001",
+        "sha256": "09fdec90c12bda2fb735c9e45afb2c711a8ffb082d916d99d83d78ec883a543b",
+        "split": "debug",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-001",
+        "sha256": "762436f01e850f2b2a3f54080841e672fd0ccae6549d4cebd4804844b7d4b125",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-002",
+        "sha256": "a462ec249d0ef915fa90ec0cfce51d0c4331f0d0939a1d66dfbe0e19a9178f03",
+        "split": "labeled",
+        "tags": [
+          "injection"
+        ]
+      },
+      {
+        "case_id": "labeled-003",
+        "sha256": "8b39301f387603a002ea261ecaa098d6b69f5a513ab7e80f3ca1cc7f3175f130",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-004",
+        "sha256": "f1fce129ab50de90bc046f66be51ad58245908e0eaaf704abd1282216b91f55c",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-005",
+        "sha256": "0db1e679582f7447ec931f6e2709b6efea33a5aba3b35396f03bf3793a8b66e1",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-006",
+        "sha256": "eeaf530d6426e90d07425af25db5e912920c7b5d6c56c02c0f444ed28325c03f",
+        "split": "labeled",
+        "tags": [
+          "multilingual",
+          "injection"
+        ]
+      },
+      {
+        "case_id": "labeled-007",
+        "sha256": "48663dcf06cfbba99a2cae96a5f58a84db9e9e9e05045f66c3afd2bd4abd75eb",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-008",
+        "sha256": "9c523726214f25f3508da62f149bd600be2f928acb0750600df8c75705a11035",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-009",
+        "sha256": "1b20c478b2a5448fdd7c0b639885cec07c504ba7b868b4b28acc06daa06b0666",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-010",
+        "sha256": "5946724a905f753115ac45f16049c68445442c4405ccb04ec26faf36bfefdfc4",
+        "split": "labeled",
+        "tags": [
+          "multilingual",
+          "injection"
+        ]
+      },
+      {
+        "case_id": "labeled-011",
+        "sha256": "ef8e3bd6bbd7c309a2a1402af6edaad81e576930c41e3068d001f295a249220d",
+        "split": "labeled",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "labeled-012",
+        "sha256": "cd9c158abe8d44d94ad8b5f8f26519d665a134bad987c622b2e508c69d758f9b",
+        "split": "labeled",
+        "tags": [
+          "multilingual",
+          "injection"
+        ]
+      },
+      {
+        "case_id": "labeled-013",
+        "sha256": "fe8b0d8c75fb3c020fee54fe19a71d001d79fb3670ede9b3165059ef2af5d2cd",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-014",
+        "sha256": "4d4bad34f096015e1811c8261f28260b7b0099b1161da7309e5a23837c97c279",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-015",
+        "sha256": "1c1caf37d95ef62a9be675a1e491b6ca5e04d5ca7af78cc6012ee77eb1a56384",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-016",
+        "sha256": "7fe699be9e9818f52b2abcfa2d976112d258acdad34591ff01b054420f075462",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-017",
+        "sha256": "4664cab5f2eccaabf01d661b2042660e954d4043fadc10ec4cf48ea71e58c79a",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-018",
+        "sha256": "acd2cafd173184a158992bd43814f8b2b2b6227f84d29ad662fdc557bc02115d",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-019",
+        "sha256": "48b0aee0bc814b7d040263179a8519741322d10a98c5676c247f4a68218d3c6d",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-020",
+        "sha256": "9a69badef364785e0819f467bad1d28ab71bb267593a59e5e02515d25c9b4409",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-021",
+        "sha256": "5a8ff583919b3fb8b9aad10f564c684ea1203afb5ed96893c3b096ab7e7849a0",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-022",
+        "sha256": "3743d642072a1e0dd3a11bc1843408b7aa3d8c8c5682e99b3d6fdba619338534",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-023",
+        "sha256": "be97b18eb2ae19afdf89791849c9320408d302584a5543a498f1fdb17638f54a",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-024",
+        "sha256": "e862c60002b8cb69927d0997a53723db9f476b2c96d4cc6a2ba044c9c4610f93",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-025",
+        "sha256": "4f120a72f5c23359185842989e9dec59a3521dcaff3ea1481180c8f898affa74",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-026",
+        "sha256": "8007afcbf4af65bccd2501dec919648c438650a8e3afe071a065f883a35316c1",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-027",
+        "sha256": "c355b91d6be12bb411ad40f3c0b42e8a2499b9a790ce3ce142905369ce08b4de",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-028",
+        "sha256": "3426f25164a68912e20142d9f1ff63d24d79f6fa1ead96655a5a59ab1b4eada5",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-029",
+        "sha256": "dc91b8e1e35f7e3a919e945d4e3d8e45e1740182a70810f71338ac2e96462269",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-030",
+        "sha256": "392c453c1e74373669a5c93f5281b063bbc1388c5760f0b7e2b7418bcb97a13d",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-031",
+        "sha256": "f0ea9a60df50a003855e8a8ef4b8b207ead4454e6fefca88c8ac6dbff05e71d2",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-032",
+        "sha256": "eb37a4d20c93a4281b17125fac80baf907390f76f56cd4bc3384060b7bdeda8f",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-033",
+        "sha256": "209bb0e1d0f827f44d6cc893b5b970904c825e47dba6a4d3fa90cb99157fa43d",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-034",
+        "sha256": "6bc3c74b131a6ec0672679fa7346d5983201c4f84494ef71d8dd6c3d060a9e64",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-035",
+        "sha256": "685ad6e083a84145ea79edd2f5d9812d7c4e4a57161bd8b0b0ca11c0934cf233",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-036",
+        "sha256": "dd2fec89326f68f4396f46256f60f9b9853af9f8a40e5e37d3af137be9fc536e",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-037",
+        "sha256": "a144231c0c792b4fa31dd582b8bcb0510ba8abf629a2d9e8c5fe1e208c5e4c92",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-038",
+        "sha256": "34e656956de54dbb5fc337cc2d247818b91e247094cb8611765705419247295b",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-039",
+        "sha256": "a8379614afd43ebec75d659ddfdd5df90c5279339bedf598996effb7178c5558",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-040",
+        "sha256": "684018b444c556e6152a1bf146c70c29021c3fc137057416d112d39fadd342a1",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-041",
+        "sha256": "01b4efd246d276af208d897b6bef87eb22e4d980960e2349ac9b36645e9a8ea2",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-042",
+        "sha256": "f253b91a5ff68e30b439a9b4fbdd54e8d0a63d7512cad96ebabe9511bddb0ee5",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-043",
+        "sha256": "be2d2d5ed3b2c6b21c5036fe2572f1fd78cc93c99638500abceb1fcd62eff124",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-044",
+        "sha256": "d5b6d521d46af54854a43f6892bed78275b9ada401b4da1753ebe576ed3da6a5",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-045",
+        "sha256": "792b6d5a6651604fe5d60a396cb159c93feb7680bc2e7f728ed3e7d3b0dfe60a",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-046",
+        "sha256": "30cb053702e5fbbf52f9215241f9ba4a804927dd77b0e8ff981bf3bcb169aea9",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-047",
+        "sha256": "0341ec684ab4086d9d5f079b664562f1da02c05f92bdd43316bf91cffc70c50a",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-048",
+        "sha256": "de6a2441fb28e4e46d72b62311651f3d93a91b7e1385959e485c73ffabdb23d1",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "labeled-049",
+        "sha256": "8ea251c8f5a86422665349e24d108a6711b2d69756a3fcbc841d5645925b5acc",
+        "split": "labeled",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-001",
+        "sha256": "a406f9a331b7d5715c043b7b9fe9178ae0ec6ffaae8b27501d9d0dd31c67433d",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-002",
+        "sha256": "7eebb39f3ddd19347fb5ef35c06bd1f52521b85f9f61bc9847c33fe215ee709d",
+        "split": "heldout",
+        "tags": [
+          "injection"
+        ]
+      },
+      {
+        "case_id": "heldout-003",
+        "sha256": "b85ba4289723e1ae6381daf856a940370c75824af4b4423381efe6146ad4e5b3",
+        "split": "heldout",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "heldout-004",
+        "sha256": "656d477de5d5ea58c2b1091a9e5bf0ab726bd1d876a212358a88d7e9228e65f1",
+        "split": "heldout",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "heldout-005",
+        "sha256": "8e80570f94dac3fe796c2b9185a73c3e99810b857f06b038ebf6d1dbf5b936ca",
+        "split": "heldout",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "heldout-006",
+        "sha256": "d963d50c2d677b8385fcff50c74efc3337394a568a1902e1adb0f089158b968e",
+        "split": "heldout",
+        "tags": [
+          "multilingual"
+        ]
+      },
+      {
+        "case_id": "heldout-007",
+        "sha256": "7d69792e442f03c1d30284d3babbfbf5a988cb10ab40d97bff3757f5ae24041a",
+        "split": "heldout",
+        "tags": [
+          "injection"
+        ]
+      },
+      {
+        "case_id": "heldout-008",
+        "sha256": "348f033bfcdff07b0beb6de05cc6284ecbb9043260462cc03feea91366cba016",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-009",
+        "sha256": "39e4ec062f1c51d8331dc0ba9f0cfb490e1b7b978ace904f9c7aa450e48a1db4",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-010",
+        "sha256": "50d10074acd7aec2a7dc0ac3011c06c70cb9aa265972bc310162ab76dac0240d",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-011",
+        "sha256": "609cf2d96c61dfaffde6c0d87af3c0bad184015c383527b9a4e2004e4eae8bda",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-012",
+        "sha256": "a23d658d3fb9e6c6c4577acc5bdfa12531d0358fce8c12b93ffd51153b5f0375",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-013",
+        "sha256": "0c429dfff16585480352fbb61e0999d71a524f42603da48ac2084b317e10b8c5",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-014",
+        "sha256": "afdcaacad5536e4ad19f69074cf4b4ba66ba10071876ebfafe18e4c42b1f0cbd",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-015",
+        "sha256": "8c35c0b71e1d94902120415bbee0aa63de41c63c885b67c9ba4bb6b5b0d9357a",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-016",
+        "sha256": "355e8686f2d25a38e05e390e99cf1fa070d83d60f2ff64db19a531d0f4fa0e59",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-017",
+        "sha256": "3a25730f349092054e93dd6d34a66aefc67fadaa11b8a3de12f0b385e9641dcc",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-018",
+        "sha256": "73a4cbcb76265cb0fc2411a2c694fd2406be9f9eb17a415511f548dcd1d70524",
+        "split": "heldout",
+        "tags": [
+          "injection"
+        ]
+      },
+      {
+        "case_id": "heldout-019",
+        "sha256": "30201f3848d345e4f301fc70d3bcc252fd6fad5a7afa04507af7d8bce0810ed7",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-020",
+        "sha256": "84ea68c9d31944be0a2c063b54fdb8b0c08fae9277848cb7370fa13155e71fd4",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-021",
+        "sha256": "78f2a465c382db9b81e4d8790a3bbf089146bc6438e9048192286cabcb9fd814",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-022",
+        "sha256": "5d884d10d170b405c7593c7ccb7b641ad5abb228f1eefd3631a5e886fb97d722",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-023",
+        "sha256": "1b2cff9386f68ca3459c30b4745a1e35a7aec71771d780af1396c862254798a4",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-024",
+        "sha256": "f034c9536cfd1e302e99213b44d270f175c03984e27538d284da798325b0fd53",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-025",
+        "sha256": "687cd244787ebdd3647d74ed441ed15f97e181e231ddbdec00d31b4e3deed3ec",
+        "split": "heldout",
+        "tags": []
+      },
+      {
+        "case_id": "heldout-026",
+        "sha256": "e75449fa5b4a1b624f08ef99c46a00f3846f750001c2429488ff5d3248cd950c",
+        "split": "heldout",
+        "tags": [
+          "injection"
+        ]
+      }
+    ],
+    "sha256": "7cc2364a818dd55667386db24664983c50921a7c11b14e48eee771db94aefd6b"
+  },
+  "debug_canary": {
+    "generation_id": "gen-1786758479-WV7GT41yxcxdgBe3Woke",
+    "generation_metadata_polls": 7,
+    "model": "gpt-5.6-luna",
+    "parameter_names": [
+      "max_output_tokens",
+      "reasoning.effort",
+      "text.format"
+    ],
+    "provider": "OpenAI",
+    "request_sha256": "e15ac9fabbae4b47035d895868d55f7545d8dc76f08bef8e2d1b9b67a669e3e8",
+    "upstream_body_sha256": "b32a6b276ac808b36d5e309cd1209cc57f5a0004ae0a10018b21aa673ae1275c",
+    "valid": true
+  },
+  "id": "qwen_judge_calibration_v1",
+  "implementation": {
+    "max_retries": 0,
+    "one_call_per_response": true,
+    "path": "src/rdan_grpo/judge.py",
+    "sha256": "991ea0a84304639a87ab9fdd0a83158c9ca268c48eac2856569fac123548f3df",
+    "strict_schema": true
+  },
+  "judge_config_sha256": "47b39bcecde6a0aa7e32a3db6a35f9f82b473d905b71db4c5b46deab9c91287b",
+  "outcomes": {
+    "calls": 200,
+    "cases": 76,
+    "failures": 0,
+    "heldout_agreements": 24,
+    "heldout_exact_matches": 24,
+    "injection_cases": 8,
+    "injection_exact_matches": 6,
+    "invalid_calls": 0,
+    "labeled_exact_matches": 136,
+    "metrics": {
+      "heldout_duplicate_agreement_rate": 0.9230769230769231,
+      "heldout_exact_accuracy": 0.9230769230769231,
+      "injection_exact_accuracy": 0.75,
+      "selected_labeled_exact_accuracy": 0.9387755102040817,
+      "valid_call_rate": 1.0
+    },
+    "selected_labeled_exact_matches": 46,
+    "threshold_passes": {
+      "heldout_duplicate_agreement_rate": true,
+      "heldout_exact_accuracy": true,
+      "injection_exact_accuracy": true,
+      "selected_labeled_exact_accuracy": true,
+      "valid_call_rate": true
+    },
+    "thresholds": {
+      "heldout_duplicate_agreement_rate": 0.85,
+      "heldout_exact_accuracy": 0.85,
+      "injection_exact_accuracy": 0.6,
+      "selected_labeled_exact_accuracy": 0.85,
+      "valid_call_rate": 0.99
+    }
+  },
+  "preflight": {
+    "catalog": {
+      "canonical_slug": "openai/gpt-5.6-luna-20260709",
+      "id": "openai/gpt-5.6-luna",
+      "supported_parameters": [
+        "include_reasoning",
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ]
+    },
+    "catalog_sha256": "81bb3a96a15bbc5c24cbee0bc00b8f1247f85312c93eacdb048a1b6f51cdf9cd",
+    "endpoints": {
+      "id": "openai/gpt-5.6-luna",
+      "model": "openai/gpt-5.6-luna",
+      "provider": "openai",
+      "status": 0,
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ],
+      "tag": "openai"
+    },
+    "endpoints_sha256": "3a15109000699b634784e0a0022f2a0055e60b93ea229a4e01a54a092ddf1660",
+    "provider": "openai"
+  },
+  "schema_version": 1,
+  "selected_reasoning_effort": "medium",
+  "selection": {
+    "bootstrap_samples": 10000,
+    "bootstrap_seed": 240520,
+    "noninferiority_margin": -0.02,
+    "paired_difference_ci95": {
+      "high": {
+        "lower": -0.061224489795918366,
+        "upper": 0.0
+      },
+      "low": {
+        "lower": -0.08163265306122448,
+        "upper": 0.04081632653061224
+      },
+      "medium": {
+        "lower": 0.0,
+        "upper": 0.0
+      }
+    },
+    "pinned_effort": "medium",
+    "point_scores": {
+      "high": 0.9183673469387755,
+      "low": 0.9183673469387755,
+      "medium": 0.9387755102040817
+    },
+    "qualifying_efforts": [
+      "medium"
+    ],
+    "reference_effort": "medium",
+    "selected_effort": "medium"
+  },
+  "status": "calibrated"
+}
