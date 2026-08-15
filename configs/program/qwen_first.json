@@ -189,7 +189,7 @@
     "runtime_parity": {
       "artifact_id": "qwen_runtime_parity_v1",
       "path": "configs/artifacts/qwen_runtime_parity.json",
-      "sha256": "af2abb3b44dbb2f3395f0e6d6e06ca2dd466552cb97664ce5b417af3056d2b31",
+      "sha256": "adae5a0cec9ef26001ff54365a72c1ab2c007f36dc6aef73b7178e3daee30f8e",
       "status": "frozen"
     },
     "scalar_data": {
