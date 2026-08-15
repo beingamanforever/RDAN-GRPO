@@ -195,6 +195,8 @@ def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseCo
         raise ValueError("response preflight requires no actor devices and vLLM inference on [0, 1]")
     if infer.get("world_size") != 2 or infer.get("num_gpus_per_worker") != 1:
         raise ValueError("response preflight requires inference DP2")
+    if infer.get("max_concurrency") != 32:
+        raise ValueError("response preflight requires actor_infer.max_concurrency=32")
     if payload.get("max_steps") != 0 or payload.get("track_with") != "stdout":
         raise ValueError("response preflight requires zero updates and stdout tracking")
     _validate_recipe(payload, actor, infer, max_steps=0)
@@ -358,17 +360,22 @@ def _validate_config(config: Any) -> None:
 
 
 def _validate_preflight_config(config: Any) -> None:
-    if (
-        config.actor_train.worker_cls != ACTOR_WORKER_PATH
-        or config.actor_train.strategy_args.strategy_name != "fsdp2_train"
-        or config.actor_train.device_mapping != []
-        or config.actor_infer.worker_cls != INFER_WORKER_PATH
-        or config.actor_infer.strategy_args.strategy_name != "vllm"
-        or config.actor_infer.device_mapping != [0, 1]
-        or config.actor_infer.world_size != 2
-        or config.actor_infer.max_concurrency != 32
-    ):
-        raise RuntimeError("constructed response preflight changed worker topology")
+    expected = {
+        "actor_train.worker_cls": ACTOR_WORKER_PATH,
+        "actor_train.strategy_args.strategy_name": "fsdp2_train",
+        "actor_train.device_mapping": [],
+        "actor_infer.worker_cls": INFER_WORKER_PATH,
+        "actor_infer.strategy_args.strategy_name": "vllm",
+        "actor_infer.device_mapping": [0, 1],
+        "actor_infer.world_size": 2,
+    }
+    drift = [
+        f"{name} is {_dotted_attr(config, name)!r} rather than {value!r}"
+        for name, value in expected.items()
+        if _dotted_attr(config, name) != value
+    ]
+    if drift:
+        raise RuntimeError(f"constructed response preflight changed worker topology: {'; '.join(drift)}")
     if config.max_steps != 0 or config.track_with != "stdout":
         raise RuntimeError("constructed response preflight can perform updates or external tracking")
     if config.validation.generating_args.num_return_sequences != 8:
@@ -382,3 +389,11 @@ def _validate_preflight_config(config: Any) -> None:
         expected_data
     ]:
         raise RuntimeError("constructed response preflight changed the method dataset")
+
+
+def _dotted_attr(value: Any, path: str) -> Any:
+    """Read a dotted attribute path out of a constructed RTT config."""
+
+    for name in path.split("."):
+        value = getattr(value, name, None)
+    return value
