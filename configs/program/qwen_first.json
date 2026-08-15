@@ -145,7 +145,7 @@
       "sha256": "9560713cf9064fa4287ac0b678db0ccb9f11f346883fbac4c352ce78154227bd"
     },
     "path": "configs/roll/qwen_rtt_papo_response_train.yaml",
-    "preflight_sha256": "40f4ec06d9f5e59642eeb6506602fc8410853652aeb0a3da99fa863087b77599",
+    "preflight_sha256": "715859c9d05e42cc978bb7e6d42e513a454d0e4a4959a49161ac9bfb64657516",
     "purpose": "500_step_recipe_with_stop_after_step_pilot_gate",
     "sha256": "865ec70e8eb073fea55dac29252504679bef5f36ba3c09a1e8571064a332d0f1"
   },

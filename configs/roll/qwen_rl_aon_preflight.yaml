@@ -8,21 +8,13 @@ output_dir: ./output/qwen-rl-aon-preflight-s240520
 track_with: stdout
 tracker_kwargs: {}
 max_steps: 0
-# The no-update rollout judges every response over a slow hf_infer generation, so one
+# The no-update rollout generates 256 groups of eight and judges each response, so one
 # RPC outlives the one hour default.
 rpc_timeout: 21600
 generate_opt_level: 0
 force_disable_old_logprobs_recompute: true
 actor_train:
   device_mapping: "[]"
-actor_infer:
-  worker_cls: rdan_grpo.roll_response_workers.ResponseInferWorker
-  strategy_args:
-    strategy_name: hf_infer
-    strategy_config:
-      transformer_impl: huggingface
-      max_model_len: 8000
-  max_concurrency: 1
 validation:
   model_args:
     disable_gradient_checkpointing: true

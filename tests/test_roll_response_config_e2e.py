@@ -194,14 +194,14 @@ def test_production_constructor_preserves_native_vllm_topology(monkeypatch: pyte
     assert "rdan_response" not in observed["surrogate"]
 
 
-def test_preflight_constructor_restores_zero_update_hf_topology(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_preflight_constructor_restores_zero_update_vllm_topology(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _module(monkeypatch)
     payload = _payload()
     payload.update(max_steps=0, track_with="stdout")
     payload["actor_train"]["device_mapping"] = "[]"
     payload["actor_infer"] = {
-        **_worker("ResponseInferWorker", "hf_infer"),
-        "max_concurrency": 1,
+        **_worker("ResponseVLLMInferWorker", "vllm"),
+        "max_concurrency": 32,
         "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
     }
     payload["validation"] = {
@@ -217,7 +217,7 @@ def test_preflight_constructor_restores_zero_update_hf_topology(monkeypatch: pyt
     assert payload == original
     assert config.actor_train.device_mapping == []
     assert config.actor_infer.device_mapping == [0, 1]
-    assert config.actor_infer.strategy_args.strategy_name == "hf_infer"
+    assert config.actor_infer.strategy_args.strategy_name == "vllm"
     assert config.max_steps == 0
     assert config.track_with == "stdout"
 
@@ -242,8 +242,8 @@ def test_preflight_constructor_rejects_generation_drift(
     payload.update(max_steps=0, track_with="stdout")
     payload["actor_train"]["device_mapping"] = "[]"
     payload["actor_infer"] = {
-        **_worker("ResponseInferWorker", "hf_infer"),
-        "max_concurrency": 1,
+        **_worker("ResponseVLLMInferWorker", "vllm"),
+        "max_concurrency": 32,
         "generating_args": copy.deepcopy(payload["actor_infer"]["generating_args"]),
     }
     payload["validation"] = {
@@ -366,9 +366,9 @@ def test_method_preflight_yaml_is_zero_update_over_hybrid_data(path: str) -> Non
     assert payload["max_steps"] == 0
     assert payload["track_with"] == "stdout"
     assert payload["actor_train"]["device_mapping"] == "[]"
-    assert payload["actor_infer"]["worker_cls"].endswith("ResponseInferWorker")
-    assert payload["actor_infer"]["strategy_args"]["strategy_name"] == "hf_infer"
-    assert payload["actor_infer"]["max_concurrency"] == 1
+    assert payload["actor_infer"]["worker_cls"].endswith("ResponseVLLMInferWorker")
+    assert payload["actor_infer"]["strategy_args"]["strategy_name"] == "vllm"
+    assert payload["actor_infer"]["max_concurrency"] == 32
     assert payload["validation"]["generating_args"]["num_return_sequences"] == 8
     assert payload["validation"]["generating_args"]["do_sample"] is True
     assert payload["validation"]["generating_args"]["max_new_tokens"] == "${response_length}"

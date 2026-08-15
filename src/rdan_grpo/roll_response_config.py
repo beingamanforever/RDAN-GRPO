@@ -14,7 +14,6 @@ from rdan_grpo.wandb_tracking import canonical_config_sha256
 
 ACTOR_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseActorWorker"
 INFER_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseVLLMInferWorker"
-HF_INFER_WORKER_PATH = "rdan_grpo.roll_response_workers.ResponseInferWorker"
 VLLM_RECEIPT_WORKER_PATH = "rdan_grpo.roll_weight_receipt.ReceiptWorkerV1"
 HYBRID_REWARD_WORKER_PATH = "rdan_grpo.roll_reward.RTTCompatibleRubricRewardWorker"
 SCALAR_REWARD_WORKER_PATH = "rdan_grpo.roll_reward.ScalarRubricRewardWorker"
@@ -106,7 +105,7 @@ def load_response_rlvr_config(rtt_root: str | Path, config_cls: type, payload: M
 
 
 def load_response_preflight_config(rtt_root: str | Path, config_cls: type, payload: Mapping[str, Any]) -> Any:
-    """Construct the no-update HF rollout config through RTT's vLLM parser boundary."""
+    """Construct the no-update rollout config on the production vLLM inference backend."""
 
     original = deepcopy(payload)
     preflight = deepcopy(payload)
@@ -116,13 +115,8 @@ def load_response_preflight_config(rtt_root: str | Path, config_cls: type, paylo
 
     surrogate = deepcopy(preflight)
     surrogate["actor_infer"]["device_mapping"] = repr([0, 1])
-    surrogate["actor_infer"]["strategy_args"]["strategy_name"] = "vllm"
-    surrogate["actor_infer"]["strategy_args"]["strategy_config"] = deepcopy(VLLM_STRATEGY_CONFIG)
     _drop_cpu_device_mapping(surrogate)
     config = _construct(config_cls, surrogate)
-    config.actor_infer.strategy_args.strategy_name = "hf_infer"
-    config.actor_infer.strategy_args.strategy_config = {"transformer_impl": "huggingface", "max_model_len": 8000}
-    config.actor_infer.max_concurrency = 1
     response = replace(response, resolved_config_sha256=canonical_config_sha256(config.to_dict()))
     config.rdan_response = response
     _validate_preflight_config(config)
@@ -196,9 +190,9 @@ def _validate_payload(payload: Mapping[str, Any], response: ResponseConfig) -> N
 
 def _validate_preflight_payload(payload: Mapping[str, Any], response: ResponseConfig) -> None:
     actor = _worker(payload, "actor_train", ACTOR_WORKER_PATH, "fsdp2_train")
-    infer = _worker(payload, "actor_infer", HF_INFER_WORKER_PATH, "hf_infer")
+    infer = _worker(payload, "actor_infer", INFER_WORKER_PATH, "vllm")
     if actor.get("device_mapping") != "[]" or infer.get("device_mapping") != [0, 1]:
-        raise ValueError("response preflight requires no actor devices and HF inference on [0, 1]")
+        raise ValueError("response preflight requires no actor devices and vLLM inference on [0, 1]")
     if infer.get("world_size") != 2 or infer.get("num_gpus_per_worker") != 1:
         raise ValueError("response preflight requires inference DP2")
     if payload.get("max_steps") != 0 or payload.get("track_with") != "stdout":
@@ -368,11 +362,11 @@ def _validate_preflight_config(config: Any) -> None:
         config.actor_train.worker_cls != ACTOR_WORKER_PATH
         or config.actor_train.strategy_args.strategy_name != "fsdp2_train"
         or config.actor_train.device_mapping != []
-        or config.actor_infer.worker_cls != HF_INFER_WORKER_PATH
-        or config.actor_infer.strategy_args.strategy_name != "hf_infer"
+        or config.actor_infer.worker_cls != INFER_WORKER_PATH
+        or config.actor_infer.strategy_args.strategy_name != "vllm"
         or config.actor_infer.device_mapping != [0, 1]
         or config.actor_infer.world_size != 2
-        or config.actor_infer.max_concurrency != 1
+        or config.actor_infer.max_concurrency != 32
     ):
         raise RuntimeError("constructed response preflight changed worker topology")
     if config.max_steps != 0 or config.track_with != "stdout":
