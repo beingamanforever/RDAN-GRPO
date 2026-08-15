@@ -345,8 +345,10 @@ class ResponseVLLMInferWorker(InferWorker):
         step = data.meta_info.get("global_step")
         previous_step = getattr(self, _VLLM_GENERATION_STEP_ATTR, 0)
         previous_ordinal = getattr(self, _VLLM_GENERATION_ORDINAL_ATTR, -1)
-        if isinstance(step, bool) or not isinstance(step, int) or step not in {previous_step, previous_step + 1}:
-            raise RuntimeError("vLLM generation step is not contiguous with restored progress")
+        if isinstance(step, bool) or not isinstance(step, int):
+            raise RuntimeError(f"vLLM generation requires an integer global_step, received {step!r}")
+        if step not in {previous_step, previous_step + 1}:
+            raise RuntimeError(f"vLLM generation step {step} is not contiguous with restored progress {previous_step}")
         if step == 0 or (step == previous_step and previous_step == 0):
             raise RuntimeError("vLLM generation requires a positive pipeline step")
         ordinal = previous_ordinal + 1 if step == previous_step else 0

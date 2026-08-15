@@ -56,6 +56,8 @@ from rdan_grpo.weight_receipt import (
     seal_weight_receipt as write_weight_receipt,
 )
 
+PREFLIGHT_PIPELINE_STEP = 1
+
 
 class ObservedLogprobInferWorker(InferWorker):
     """Parity-only vLLM worker that preserves observed token logprobs."""
@@ -538,6 +540,9 @@ class ScalarPreflightPipeline(RLVRRolloutPipeline):
 
         request = DataProto(
             meta_info={
+                # The vLLM worker seeds generation from the pipeline step and rejects
+                # zero, so the single preflight rollout runs as the step training starts at.
+                "global_step": PREFLIGHT_PIPELINE_STEP,
                 "is_offload_states": False,
                 "generation_config": self.pipeline_config.validation.generating_args.to_dict(),
             }
