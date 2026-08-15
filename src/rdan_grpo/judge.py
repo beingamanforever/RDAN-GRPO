@@ -314,8 +314,11 @@ def select_reasoning_effort(
     samples: int = 10_000,
     seed: int = 240520,
     margin: float = -0.02,
+    pinned: str | None = None,
 ) -> JsonObject:
     efforts = EFFORT_CANDIDATES
+    if pinned is not None and pinned not in efforts:
+        raise ValueError("pinned reasoning effort is not a calibration candidate")
     if set(indicators) != set(efforts) or samples <= 0:
         raise ValueError("paired calibration indicators or bootstrap sample count are invalid")
     rows = {effort: list(indicators[effort]) for effort in efforts}
@@ -345,7 +348,8 @@ def select_reasoning_effort(
         "reference_effort": reference,
         "paired_difference_ci95": intervals,
         "qualifying_efforts": qualifying,
-        "selected_effort": qualifying[0],
+        "pinned_effort": pinned,
+        "selected_effort": pinned or qualifying[0],
     }
 
 

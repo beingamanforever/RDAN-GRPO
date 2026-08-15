@@ -301,7 +301,7 @@ def _calibration_artifact(config_root: Path) -> dict:
         {
             "case_id": case["case_id"],
             "split": "heldout",
-            "effort": "high",
+            "effort": "medium",
             "repeat": repeat,
             "generation_id": f"gen-{case['case_id']}-{repeat}",
             "valid": True,
@@ -404,9 +404,9 @@ def _calibration_artifact(config_root: Path) -> dict:
             "valid": True,
         },
         "selection": program_contract.select_reasoning_effort(
-            {effort: [1] * 49 for effort in ("high", "medium", "low")}
+            {effort: [1] * 49 for effort in ("high", "medium", "low")}, pinned="medium"
         ),
-        "selected_reasoning_effort": "high",
+        "selected_reasoning_effort": "medium",
         "outcomes": {
             "calls": 200,
             "cases": 76,
@@ -1068,7 +1068,7 @@ def test_missing_calibration_and_failing_parity_cannot_unlock(tmp_path: Path) ->
 def test_calibrated_reasoning_effort_must_match_live_request(tmp_path: Path) -> None:
     program_path = _contract_copy(tmp_path)
     artifact = _calibration_artifact(program_path.parent.parent)
-    artifact["selected_reasoning_effort"] = "low"
+    artifact["selected_reasoning_effort"] = "high"
     _freeze_lifecycle(program_path, "judge_calibration", artifact)
     with pytest.raises(ProgramContractError, match="calibration artifact is invalid"):
         check_program(program_path)

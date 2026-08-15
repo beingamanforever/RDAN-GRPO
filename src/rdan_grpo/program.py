@@ -697,7 +697,8 @@ def _validate_judge(judge: JsonObject, prompt: str) -> None:
             "heldout_cases": 26,
             "calls_per_labeled_case": 3,
             "heldout_duplicates": 2,
-            "selection_rule": "paired_bootstrap_noninferiority_then_highest_effort",
+            "selection_rule": "owner_pinned_effort_with_paired_bootstrap_evidence",
+            "pinned_reasoning_effort": "medium",
             "bootstrap_samples": 10_000,
             "bootstrap_seed": 240520,
             "noninferiority_margin": -0.02,
@@ -2771,6 +2772,7 @@ def _validate_judge_calibration(
             "reference_effort",
             "paired_difference_ci95",
             "qualifying_efforts",
+            "pinned_effort",
             "selected_effort",
         },
         "judge calibration selection",
@@ -2885,7 +2887,9 @@ def _validate_judge_calibration(
         ]
         for effort in EFFORT_CANDIDATES
     }
-    selection_evidence = select_reasoning_effort(indicators)
+    selection_evidence = select_reasoning_effort(
+        indicators, pinned=judge["calibration"].get("pinned_reasoning_effort")
+    )
     selected_labeled = sum(
         int(call_rows.get((case_id, selected_effort, 1), {}).get("exact_match", False)) for case_id in labeled_case_ids
     )

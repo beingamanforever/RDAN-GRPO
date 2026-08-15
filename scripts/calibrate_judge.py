@@ -95,7 +95,7 @@ def run_calibration(cases_path: Path, raw_path: Path, certificate_path: Path, ap
     indicators = {
         effort: [_exact(case, results[(case["case_id"], effort, 1)]) for case in labeled] for effort in EFFORTS
     }
-    selection = select_reasoning_effort(indicators)
+    selection = select_reasoning_effort(indicators, pinned=contract["calibration"].get("pinned_reasoning_effort"))
     selected = selection["selected_effort"]
     heldout = [case for case in cases if case["split"] == "heldout"]
     for case in heldout:
