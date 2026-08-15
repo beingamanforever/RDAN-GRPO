@@ -216,6 +216,17 @@ def test_canonical_config_accepts_nonsecret_hf_strategy_name() -> None:
     )
 
 
+def test_canonical_config_accepts_an_unset_credential_field() -> None:
+    config = {"rewards": {"llm_judge": {"judge_api_key": None, "judge_model_type": "api"}}}
+    assert canonical_config_sha256(config)
+
+
+def test_canonical_config_rejects_a_populated_credential_field() -> None:
+    config = {"rewards": {"llm_judge": {"judge_api_key": "sk-or-v1-" + "a" * 32}}}
+    with pytest.raises(WandbTrackingError, match="resolved credentials"):
+        canonical_config_sha256(config)
+
+
 def test_semantic_config_hash_excludes_only_tracker_kwargs() -> None:
     config = {
         "track_with": "rdan_wandb",

@@ -439,7 +439,10 @@ def _secret_key(key: str) -> bool:
 
 def _contains_secret(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return any(_secret_key(str(key)) or _contains_secret(item) for key, item in value.items())
+        # An unset credential field carries nothing to leak, so only a populated one counts.
+        return any(
+            (_secret_key(str(key)) and item is not None) or _contains_secret(item) for key, item in value.items()
+        )
     if isinstance(value, (list, tuple)):
         return any(_contains_secret(item) for item in value)
     return isinstance(value, str) and _SECRET_VALUE.search(value) is not None
