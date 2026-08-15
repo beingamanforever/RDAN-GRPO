@@ -505,7 +505,7 @@ def main() -> int:
     runner = Runner()
     env = dict(os.environ)
     try:
-        if args.launch_setup or args.launch_check:
+        if args.launch_setup or args.launch_check or args.launch_refresh:
             inputs = _inputs(args)
             report = launch_environment(
                 inputs,
@@ -515,6 +515,8 @@ def main() -> int:
                 setup=args.launch_setup,
                 max_build_jobs=args.max_build_jobs,
             )
+            if args.launch_refresh:
+                report = _refresh_launch_marker(inputs, Path(args.venv), report)
         elif args.resolve_lock:
             report = resolve_lock(runner, env)
         else:
@@ -830,6 +832,23 @@ def launch_environment(
     ):
         raise BootstrapError("container bootstrap did not return the inspected image identity")
     return report | {"external_identity_receipt": str(receipt)}
+
+
+def _refresh_launch_marker(inputs: Inputs, venv: Path, report: Mapping[str, Any]) -> dict[str, Any]:
+    """Rewrite the launch marker from a passing check without rebuilding the environment.
+
+    Setup seals the marker once and then refuses to touch an existing environment, so a
+    later repository revision can never be attested even though the venv is unchanged.
+    The launch check revalidates every package, import, and host fact at the current
+    revision, and the venv entry it omits is only the environment path.
+    """
+
+    marker = inputs.run_root / "a100-response-bootstrap.json"
+    if not marker.is_file():
+        raise BootstrapError("launch refresh requires an existing bootstrap marker")
+    refreshed = dict(report) | {"venv": str(_alias_path(venv))}
+    _write_marker(marker, refreshed)
+    return refreshed
 
 
 def _verify_launch_platform(system: str, machine: str, contract: RuntimeContract) -> None:
@@ -1198,6 +1217,7 @@ def _parse_args() -> argparse.Namespace:
     mode.add_argument("--setup", action="store_true")
     mode.add_argument("--launch-check", action="store_true")
     mode.add_argument("--launch-setup", action="store_true")
+    mode.add_argument("--launch-refresh", action="store_true")
     mode.add_argument("--resolve-lock", action="store_true")
     parser.add_argument("--rtt-root", type=Path)
     parser.add_argument("--rdan-root", type=Path, default=REPO_ROOT)
@@ -1208,7 +1228,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--venv", type=Path)
     parser.add_argument("--max-build-jobs", type=int, default=4)
     args = parser.parse_args()
-    if (args.check or args.setup or args.launch_check or args.launch_setup) and args.venv is None:
+    if (
+        args.check or args.setup or args.launch_check or args.launch_setup or args.launch_refresh
+    ) and args.venv is None:
         parser.error("runtime checks and setup require --venv")
     if not 1 <= args.max_build_jobs <= 16:
         parser.error("--max-build-jobs must be between 1 and 16")
