@@ -22,7 +22,6 @@ from roll.distributed.scheduler.generate_scheduler import DynamicSamplingSchedul
 from roll.distributed.scheduler.protocol import DataProto
 from roll.models.model_providers import default_tokenizer_provider
 from roll.pipeline.base_pipeline import BasePipeline
-from roll.pipeline.rlvr.rlvr_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
 from roll.utils.worker_state import WorkerState
 
 from rdan_grpo.response_dataset import canonical_json as _canonical_json
@@ -562,6 +561,7 @@ def _load_domain_dataset(config: Any, tokenizer: Any) -> tuple[str, Any]:
     if not isinstance(ratios, Mapping) or len(ratios) != 1 or next(iter(ratios.values())) != 1.0:
         raise ValueError("response training requires exactly one full-weight domain")
     domain = next(iter(ratios))
+    get_encode_function, preprocess_dataset, update_dataset_domain = _rlvr_dataset_helpers()
     dataset = _load_response_dataset(config.actor_train.data_args)
     template = config.global_template or config.actor_train.data_args.template
     dataset = preprocess_dataset(
@@ -584,6 +584,19 @@ def _load_domain_dataset(config: Any, tokenizer: Any) -> tuple[str, Any]:
     if len(selected) <= config.rollout_batch_size:
         raise ValueError("response training domain is too small for one rollout batch")
     return domain, selected.with_transform(_restore_rubrics)
+
+
+def _rlvr_dataset_helpers() -> tuple[Callable[..., Any], Callable[..., Any], Callable[..., Any]]:
+    """Import RTT's dataset helpers only once the compat hook has run.
+
+    RTT's rlvr pipeline imports a symbol its own utils module never defines, which the
+    compat hook supplies. Ray workers import this module to unpickle scheduler callables
+    without running that hook, so importing it at module scope kills every worker.
+    """
+
+    from roll.pipeline.rlvr.rlvr_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
+
+    return get_encode_function, preprocess_dataset, update_dataset_domain
 
 
 def _load_response_dataset(data_args: Any) -> Any:
