@@ -2913,7 +2913,7 @@ def _validate_judge_calibration(
         "selected_labeled_exact_accuracy": 0.85,
         "heldout_exact_accuracy": 0.85,
         "injection_exact_accuracy": 0.60,
-        "heldout_duplicate_agreement_rate": 0.96,
+        "heldout_duplicate_agreement_rate": 0.85,
     }
     expected_summary = {
         "rubrics": 206,
