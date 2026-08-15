@@ -95,6 +95,7 @@ def load_response_rlvr_config(rtt_root: str | Path, config_cls: type, payload: M
 
     production["actor_train"]["device_mapping"] = repr([0, 1])
     production["actor_infer"]["device_mapping"] = repr([0, 1])
+    _drop_cpu_device_mapping(production)
     config = _construct(config_cls, production)
     response = replace(response, resolved_config_sha256=canonical_config_sha256(config.to_dict()))
     config.rdan_response = response
@@ -117,6 +118,7 @@ def load_response_preflight_config(rtt_root: str | Path, config_cls: type, paylo
     surrogate["actor_infer"]["device_mapping"] = repr([0, 1])
     surrogate["actor_infer"]["strategy_args"]["strategy_name"] = "vllm"
     surrogate["actor_infer"]["strategy_args"]["strategy_config"] = deepcopy(VLLM_STRATEGY_CONFIG)
+    _drop_cpu_device_mapping(surrogate)
     config = _construct(config_cls, surrogate)
     config.actor_infer.strategy_args.strategy_name = "hf_infer"
     config.actor_infer.strategy_args.strategy_config = {"transformer_impl": "huggingface", "max_model_len": 8000}
@@ -285,6 +287,18 @@ def _worker(payload: Mapping[str, Any], name: str, worker_cls: str, strategy: st
     ):
         raise ValueError(f"response config requires {name} bf16 SDPA")
     return worker
+
+
+def _drop_cpu_device_mapping(payload: dict[str, Any]) -> None:
+    """Omit a null reward device mapping so RTT applies its cpu-only default.
+
+    RTT documents None as cpu-only but types the field without Optional, so an explicit
+    null fails construction while an absent key uses the default.
+    """
+
+    for worker in payload.get("rewards", {}).values():
+        if isinstance(worker, dict) and worker.get("device_mapping", False) is None:
+            worker.pop("device_mapping")
 
 
 def _construct(config_cls: type, payload: Mapping[str, Any]) -> Any:

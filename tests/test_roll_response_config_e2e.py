@@ -171,7 +171,12 @@ def test_production_constructor_preserves_native_vllm_topology(monkeypatch: pyte
     def construct(config_cls: type, surrogate: dict[str, Any]) -> FakeConfig:
         observed["surrogate"] = copy.deepcopy(surrogate)
         assert surrogate["actor_infer"]["strategy_args"]["strategy_name"] == "vllm"
-        assert surrogate["rewards"] == payload["rewards"]
+        # RTT types device_mapping without Optional, so a cpu-only reward worker omits it.
+        expected_rewards = {
+            name: {key: value for key, value in worker.items() if key != "device_mapping"}
+            for name, worker in payload["rewards"].items()
+        }
+        assert surrogate["rewards"] == expected_rewards
         return FakeConfig(surrogate)
 
     monkeypatch.setattr(module, "_construct", construct)
@@ -181,7 +186,10 @@ def test_production_constructor_preserves_native_vllm_topology(monkeypatch: pyte
     assert config.actor_train.worker_cls == module.ACTOR_WORKER_PATH
     assert config.actor_infer.worker_cls == module.INFER_WORKER_PATH
     assert config.actor_infer.strategy_args.strategy_name == "vllm"
-    assert config.rewards == payload["rewards"]
+    assert config.rewards == {
+        name: {key: value for key, value in worker.items() if key != "device_mapping"}
+        for name, worker in payload["rewards"].items()
+    }
     assert config.rdan_response == module.ResponseConfig("rtt_papo_response", 1.0, None, "f" * 64)
     assert "rdan_response" not in observed["surrogate"]
 
