@@ -25,7 +25,7 @@ from rdan_grpo.checkpoint import (
     stage_checkpoint,
 )
 from rdan_grpo.config import ResponseConfig, load_config, updates_per_step
-from rdan_grpo.judge import JudgeRequest, OpenRouterJudge
+from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats
 from rdan_grpo.rewards import extract_quality, score_rubrics
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
 from rdan_grpo.scalar import build_scalar_output
@@ -315,7 +315,8 @@ def test_judge_scores_map_onto_the_signed_rubric_scale() -> None:
 
     assert result.valid
     assert [row["score"] for row in result.judgments.values()] == [0.0, 0.0]
-    assert judge.drain_stats()["judge/cost_usd"] == pytest.approx(100 * 0.1e-6 + 40 * 0.6e-6)
+    stats = aggregate_stats([judge.drain_stats()])
+    assert stats["judge/cost_usd"] == pytest.approx(100 * 0.1e-6 + 40 * 0.6e-6)
 
 
 def test_judge_batch_runs_concurrently_and_preserves_request_order() -> None:
@@ -336,7 +337,7 @@ def test_judge_retries_a_rate_limit_then_succeeds(monkeypatch: pytest.MonkeyPatc
     result = judge.judge(make_request([1]))
 
     assert result.valid and result.attempts == 2
-    assert judge.drain_stats()["judge/retry_rate"] == 1.0
+    assert aggregate_stats([judge.drain_stats()])["judge/retry_rate"] == 1.0
 
 
 def test_judge_does_not_retry_a_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -359,7 +360,7 @@ def test_judge_gives_up_after_max_attempts_without_raising(monkeypatch: pytest.M
 
     assert not result.valid and result.judgments == {}
     assert len(client.calls) == config["max_attempts"]
-    assert judge.drain_stats()["judge/failure_rate"] == 1.0
+    assert aggregate_stats([judge.drain_stats()])["judge/failure_rate"] == 1.0
 
 
 @pytest.mark.parametrize(
@@ -382,6 +383,46 @@ def test_judge_rejects_output_that_does_not_match_the_schema(payload: Any) -> No
 def test_judge_requires_an_api_key() -> None:
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         OpenRouterJudge(judge_config(), "", client=FakeClient([]))
+
+
+def test_step_stats_combine_counters_across_reward_workers() -> None:
+    """Rates must be recomputed from summed counters, never averaged per worker."""
+
+    workers = [
+        {
+            "calls": 10,
+            "failures": 1,
+            "retries": 0,
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "latencies": [1.0],
+            "errors": {"APITimeoutError": 1},
+            "cost_usd": 0.01,
+        },
+        {
+            "calls": 90,
+            "failures": 0,
+            "retries": 9,
+            "prompt_tokens": 900,
+            "completion_tokens": 90,
+            "latencies": [3.0],
+            "errors": {},
+            "cost_usd": 0.09,
+        },
+    ]
+
+    stats = aggregate_stats(workers)
+
+    assert stats["judge/calls"] == 100.0
+    # A naive per-worker average of failure rate would give 0.05, not the true 0.01.
+    assert stats["judge/failure_rate"] == pytest.approx(0.01)
+    assert stats["judge/retry_rate"] == pytest.approx(0.09)
+    assert stats["judge/cost_usd"] == pytest.approx(0.10)
+    assert stats["judge/error_APITimeoutError"] == 1.0
+
+
+def test_step_stats_are_empty_when_no_response_needed_a_judge() -> None:
+    assert aggregate_stats([{"calls": 0}, {"calls": 0}]) == {}
 
 
 # --------------------------------------------------------------------------------------

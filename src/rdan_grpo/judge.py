@@ -134,26 +134,26 @@ class OpenRouterJudge:
         self._record(result)
         return result
 
-    def drain_stats(self) -> dict[str, float]:
-        """Return aggregate judge metrics for this batch and reset the accumulator."""
+    def drain_stats(self) -> dict[str, Any]:
+        """Return this worker's raw counters and reset the accumulator.
+
+        Counters rather than rates, because one training step is judged across several reward
+        workers and rates cannot be averaged back together correctly.
+        """
 
         with self._lock:
             stats, self.stats = self.stats, JudgeStats()
-        if not stats.calls:
-            return {}
-        latencies = sorted(stats.latencies)
         price = self.config["price_per_million"]
-        cost = (stats.prompt_tokens * price["prompt"] + stats.completion_tokens * price["completion"]) / 1_000_000
         return {
-            "judge/calls": float(stats.calls),
-            "judge/failure_rate": stats.failures / stats.calls,
-            "judge/retry_rate": stats.retries / stats.calls,
-            "judge/latency_p50": _quantile(latencies, 0.5),
-            "judge/latency_p95": _quantile(latencies, 0.95),
-            "judge/prompt_tokens": float(stats.prompt_tokens),
-            "judge/completion_tokens": float(stats.completion_tokens),
-            "judge/cost_usd": cost,
-            **{f"judge/error_{name}": float(count) for name, count in stats.errors.items()},
+            "calls": stats.calls,
+            "failures": stats.failures,
+            "retries": stats.retries,
+            "prompt_tokens": stats.prompt_tokens,
+            "completion_tokens": stats.completion_tokens,
+            "latencies": stats.latencies,
+            "errors": stats.errors,
+            "cost_usd": (stats.prompt_tokens * price["prompt"] + stats.completion_tokens * price["completion"])
+            / 1_000_000,
         }
 
     def _build_payload(self, request: JudgeRequest) -> dict[str, Any]:
@@ -201,6 +201,31 @@ class OpenRouterJudge:
                 self.stats.failures += 1
                 name = result.error or "unknown"
                 self.stats.errors[name] = self.stats.errors.get(name, 0) + 1
+
+
+def aggregate_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    """Combine per-worker counters from one training step into judge health metrics."""
+
+    totals = {name: sum(int(row.get(name, 0)) for row in rows) for name in ("calls", "failures", "retries")}
+    tokens = {name: sum(int(row.get(name, 0)) for row in rows) for name in ("prompt_tokens", "completion_tokens")}
+    if not totals["calls"]:
+        return {}
+    latencies = sorted(value for row in rows for value in row.get("latencies", ()))
+    errors: dict[str, int] = {}
+    for row in rows:
+        for name, count in row.get("errors", {}).items():
+            errors[name] = errors.get(name, 0) + int(count)
+    return {
+        "judge/calls": float(totals["calls"]),
+        "judge/failure_rate": totals["failures"] / totals["calls"],
+        "judge/retry_rate": totals["retries"] / totals["calls"],
+        "judge/latency_p50": _quantile(latencies, 0.5),
+        "judge/latency_p95": _quantile(latencies, 0.95),
+        "judge/prompt_tokens": float(tokens["prompt_tokens"]),
+        "judge/completion_tokens": float(tokens["completion_tokens"]),
+        "judge/cost_usd": float(sum(row.get("cost_usd", 0.0) for row in rows)),
+        **{f"judge/error_{name}": float(count) for name, count in errors.items()},
+    }
 
 
 def _validate_rows(rows: Any, ids: list[int]) -> dict[int, dict[str, Any]]:

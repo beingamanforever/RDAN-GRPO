@@ -131,6 +131,7 @@ class RdanTrainingPipeline(BasePipeline):
         """Train through the requested step and return the promoted checkpoints."""
 
         promoted: list[Path] = []
+        failed = False
         try:
             # The rollout engine starts from its own copy of the weights, so the trained actor
             # must be pushed across before the first rollout of a fresh or resumed run.
@@ -143,9 +144,15 @@ class RdanTrainingPipeline(BasePipeline):
                 if self._should_save(step):
                     promoted.append(self._save(step, metrics))
                 self.tracker.log(values=metrics, step=None)
+        except BaseException:
+            failed = True
+            raise
         finally:
-            self.tracker.finish()
-            ray.kill(self.scheduler)
+            # Shut down either way, but never let a cleanup error replace the training error
+            # that caused it.
+            shutdown_error = _shutdown(self.scheduler, self.tracker)
+            if shutdown_error is not None and not failed:
+                raise shutdown_error
         return CompletedRun(completed_step=self.completed_step, checkpoints=tuple(promoted))
 
     def _run_step(self, step: int) -> tuple[DataProto, TrainStepResult]:
@@ -190,6 +197,14 @@ class RdanTrainingPipeline(BasePipeline):
                 reward.offload_states(blocking=True)
             self.actor_train.load_states(blocking=True)
 
+    def _reward_stats(self) -> dict[str, float]:
+        """Pull judge and checker health off the reward workers for this step."""
+
+        from rdan_grpo.reward_worker import aggregate_reward_stats
+
+        rows = [row for cluster in self.rewards.values() for row in cluster.rdan_reward_stats(blocking=True)]
+        return aggregate_reward_stats(rows)
+
     def _step_metrics(self, step: int, rewarded: DataProto, result: TrainStepResult) -> dict[str, float]:
         scalar = result.scalar
         lengths = rewarded.batch["response_mask"].detach().sum(dim=-1).float()
@@ -198,7 +213,8 @@ class RdanTrainingPipeline(BasePipeline):
         advantage = scalar.scalar_advantage
         metrics = {
             **result.metrics,
-            **_reward_metrics(rewarded),
+            **_scheduler_metrics(rewarded),
+            **self._reward_stats(),
             "reward/selected_mean": float(scalar.selected_raw_reward.mean()),
             "reward/selected_std": float(scalar.selected_raw_reward.std(unbiased=False)),
             "reward/valid_rate": scalar.diagnostics["response_valid_rate"],
@@ -256,8 +272,20 @@ def build_pipeline(config: Any, **kwargs: Any) -> RdanTrainingPipeline:
     return RdanTrainingPipeline(config, response_config=config.rdan_response, **kwargs)
 
 
-def _reward_metrics(rewarded: DataProto) -> dict[str, float]:
-    """Forward the judge and checker health metrics the reward worker attached."""
+def _shutdown(scheduler: Any, tracker: Any) -> BaseException | None:
+    """Stop the scheduler and close tracking, attempting both regardless of the first result."""
+
+    errors: list[BaseException] = []
+    for close in (lambda: ray.get(scheduler.shutdown.remote()), tracker.finish):
+        try:
+            close()
+        except BaseException as error:  # noqa: BLE001 - collect, the caller decides
+            errors.append(error)
+    return errors[0] if errors else None
+
+
+def _scheduler_metrics(rewarded: DataProto) -> dict[str, float]:
+    """Forward the sampling metrics the scheduler stamps onto the assembled batch."""
 
     values = getattr(rewarded, "meta_info", {}).get("metrics")
     if not isinstance(values, Mapping):

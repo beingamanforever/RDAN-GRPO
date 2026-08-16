@@ -73,7 +73,7 @@ def _score(rows: list[dict[str, Any]], responses: list[list[str]], samples: int)
 
     import torch
 
-    from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, load_judge_config
+    from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats, load_judge_config
     from rdan_grpo.reward_worker import JUDGE_CONFIG, _evaluate_hard_rubrics
     from rdan_grpo.scalar import build_scalar_output
 
@@ -121,7 +121,7 @@ def _score(rows: list[dict[str, Any]], responses: list[list[str]], samples: int)
     return {
         "output": output,
         "evaluated": evaluated,
-        "judge_stats": judge.drain_stats(),
+        "judge_stats": aggregate_stats([judge.drain_stats()]),
         "lengths": [len(text) for text in flat_responses],
     }
 

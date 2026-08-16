@@ -10,12 +10,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+from roll.distributed.scheduler.decorator import Dispatch, register
 from roll.distributed.scheduler.protocol import DataProto
 from roll.pipeline.rlvr.rewards.rubrics_llm_judge_reward_worker import (
     CONSTRAINT_CHECKER_MAP,
@@ -26,7 +27,7 @@ from roll.pipeline.rlvr.rewards.rubrics_llm_judge_reward_worker import (
     call_ifeval_function,
 )
 
-from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, load_judge_config
+from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats, load_judge_config
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +48,18 @@ class RubricRewardWorker(RubricsLLMJudgeRewardWorker):
         if self.judge_api_url:
             config["base_url"] = self.judge_api_url
         self.judge = OpenRouterJudge(config, api_key)
+        self._rubric_counts = _empty_counts()
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_reward_stats(self) -> dict[str, Any]:
+        """Return and reset this worker's judge and checker counters for one step.
+
+        ROLL's scheduler replaces the batch meta_info metrics after concatenation, so reward
+        health has to be pulled from the workers rather than ridden in on the batch.
+        """
+
+        counts, self._rubric_counts = self._rubric_counts, _empty_counts()
+        return {**self.judge.drain_stats(), **counts}
 
     def _compute_rewards_impl(self, data: DataProto, metrics: dict[str, Any]) -> DataProto:
         responses = self.actor_tokenizer.batch_decode(data.batch["responses"], skip_special_tokens=True)
@@ -72,7 +85,8 @@ class RubricRewardWorker(RubricsLLMJudgeRewardWorker):
         for index, result in zip(pending, self.judge.judge_batch(requests), strict=True):
             _apply_judgments(rows[index], result)
 
-        return _build_output(data, rows, metrics | self.judge.drain_stats())
+        self._rubric_counts = _accumulate_counts(self._rubric_counts, rows)
+        return _build_output(data, rows, metrics)
 
 
 def _evaluate_hard_rubrics(
@@ -190,18 +204,39 @@ def _build_output(data: DataProto, rows: list[dict[str, Any]], metrics: dict[str
             "rdan_hard_mask": hard,
         }
     )
-    responses = len(rows)
-    judge_rows = sum(1 for row in rows if row["judge_rubrics"])
-    output.meta_info = {
-        "metrics": metrics
-        | {
-            "reward/checker_failure_rate": sum(row["checker_failures"] for row in rows) / max(active.sum().item(), 1),
-            "reward/judge_failed_rate": sum(1 for row in rows if row["judge_failed"]) / max(judge_rows, 1),
-            "reward/judged_response_rate": judge_rows / responses,
-        }
-    }
+    output.meta_info = {"metrics": metrics}
     output.non_tensor_batch["rdan_prompt_key"] = np.asarray(_prompt_keys(data), dtype=object)
     return output
+
+
+def _empty_counts() -> dict[str, int]:
+    return {"responses": 0, "rubrics": 0, "checker_failures": 0, "judged_responses": 0, "judge_failed_responses": 0}
+
+
+def _accumulate_counts(counts: dict[str, int], rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Add one batch's checker and judge outcomes to this worker's running totals."""
+
+    return {
+        "responses": counts["responses"] + len(rows),
+        "rubrics": counts["rubrics"] + sum(row["active"] for row in rows),
+        "checker_failures": counts["checker_failures"] + sum(row["checker_failures"] for row in rows),
+        "judged_responses": counts["judged_responses"] + sum(1 for row in rows if row["judge_rubrics"]),
+        "judge_failed_responses": counts["judge_failed_responses"] + sum(1 for row in rows if row["judge_failed"]),
+    }
+
+
+def aggregate_reward_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+    """Combine per-worker reward counters from one step into checker and judge health metrics."""
+
+    totals = {name: sum(int(row.get(name, 0)) for row in rows) for name in _empty_counts()}
+    if not totals["responses"]:
+        return aggregate_stats(rows)
+    return {
+        **aggregate_stats(rows),
+        "reward/checker_failure_rate": totals["checker_failures"] / max(totals["rubrics"], 1),
+        "reward/judged_response_rate": totals["judged_responses"] / totals["responses"],
+        "reward/judge_failed_rate": totals["judge_failed_responses"] / max(totals["judged_responses"], 1),
+    }
 
 
 def _prompt_keys(data: DataProto) -> list[str]:

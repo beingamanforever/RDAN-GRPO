@@ -42,7 +42,9 @@ class RdanTracker:
     """Mirror every metric row to disk and forward it to W&B when available."""
 
     def __init__(self, config: Mapping[str, Any], **kwargs: Any) -> None:
-        log_dir = Path(kwargs.pop("log_dir", None) or "output")
+        # ROLL builds trackers with the pipeline config plus tracker_kwargs and passes no
+        # directory, so the run's own logging_dir is what keeps runs from sharing a mirror.
+        log_dir = Path(kwargs.pop("log_dir", None) or config.get("logging_dir") or "output")
         self.metrics_path = log_dir / METRICS_FILE
         self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
         self.run = _start_wandb(redact(dict(config)), log_dir, kwargs)
