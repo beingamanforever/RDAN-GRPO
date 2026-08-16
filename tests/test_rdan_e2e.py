@@ -385,15 +385,51 @@ def test_judge_gives_up_after_max_attempts_without_raising(monkeypatch: pytest.M
         {"rubrics": [{"id": 9, "score": 1, "reason": "wrong id"}]},
         {"rubrics": [{"id": 1, "score": 0.7, "reason": "off-scale"}]},
         {"rubrics": [{"id": 1, "score": 1, "reason": ""}]},
+        {"rubrics": []},
         "not json at all",
     ],
 )
-def test_judge_rejects_output_that_does_not_match_the_schema(payload: Any) -> None:
+def test_judge_rejects_output_with_nothing_usable(payload: Any) -> None:
     judge = OpenRouterJudge(judge_config(), "key", client=FakeClient([FakeCompletion(payload)]))
 
     result = judge.judge(make_request([1]))
 
     assert not result.valid and result.error.startswith("schema_")
+
+
+def test_judge_keeps_the_well_formed_subset_when_a_row_is_mangled() -> None:
+    """A single bad row must not forfeit the whole response's process signal."""
+
+    payload = {
+        "rubrics": [
+            {"id": 1, "score": 1, "reason": "satisfied"},
+            {"id": 2, "score": 0.7, "reason": "off-scale, unusable"},
+            {"id": 3, "score": 0, "reason": "violated"},
+        ]
+    }
+    judge = OpenRouterJudge(judge_config(), "key", client=FakeClient([FakeCompletion(payload)]))
+
+    result = judge.judge(make_request([1, 2, 3]))
+
+    assert result.valid
+    assert sorted(result.judgments) == [1, 3]
+    assert result.judgments[1]["score"] == 1.0 and result.judgments[3]["score"] == -1.0
+
+
+def test_judge_ignores_ids_it_was_not_asked_about_and_duplicates() -> None:
+    payload = {
+        "rubrics": [
+            {"id": 1, "score": 1, "reason": "first"},
+            {"id": 1, "score": 0, "reason": "duplicate, ignored"},
+            {"id": 7, "score": 1, "reason": "never requested"},
+        ]
+    }
+    judge = OpenRouterJudge(judge_config(), "key", client=FakeClient([FakeCompletion(payload)]))
+
+    result = judge.judge(make_request([1, 2]))
+
+    assert result.valid and sorted(result.judgments) == [1]
+    assert result.judgments[1]["reason"] == "first"
 
 
 def test_judge_requires_an_api_key() -> None:

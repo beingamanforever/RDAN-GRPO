@@ -173,14 +173,19 @@ def _run_checker(
 
 
 def _apply_judgments(row: dict[str, Any], result: Any) -> None:
-    """Write judge scores into the row, or mark the soft channel failed."""
+    """Write back every rubric the judge scored, leaving any it skipped unevaluated."""
 
     if not result.valid:
         row["judge_failed"] = True
         return
     for rubric in row["judge_rubrics"]:
+        judgment = result.judgments.get(rubric["id"])
+        if judgment is None:
+            # Withhold credit for this rubric only; the rest of the response still counts.
+            row["judge_failed"] = True
+            continue
         index = rubric["id"] - 1
-        row["scores"][index] = float(result.judgments[rubric["id"]]["score"])
+        row["scores"][index] = float(judgment["score"])
         row["evaluated"][index] = True
 
 

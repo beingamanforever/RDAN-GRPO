@@ -231,15 +231,29 @@ def aggregate_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
 
 
 def _validate_rows(rows: Any, ids: list[int]) -> dict[int, dict[str, Any]]:
-    if not isinstance(rows, list) or [row.get("id") for row in rows if isinstance(row, dict)] != ids:
-        raise ValueError("judge returned different rubric ids")
+    """Keep every well-formed judgment for a requested rubric, and drop the rest.
+
+    The response schema cannot pin down *which* rubric ids come back, and the judge
+    occasionally omits or repeats one. Taking the good subset costs only the rubrics that
+    were actually mangled, where rejecting the whole reply would forfeit the response's
+    entire process signal over a single bad row.
+    """
+
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("judge returned no rubric rows")
+    requested = set(ids)
     result: dict[int, dict[str, Any]] = {}
     for row in rows:
-        if set(row) != {"id", "score", "reason"} or row["score"] not in PROCESS_SCORES:
-            raise ValueError("judge output does not match the schema")
+        if not isinstance(row, dict) or set(row) != {"id", "score", "reason"}:
+            continue
+        rubric_id = row["id"]
+        if rubric_id not in requested or rubric_id in result or row["score"] not in PROCESS_SCORES:
+            continue
         if not isinstance(row["reason"], str) or not row["reason"]:
-            raise ValueError("judge reason is empty")
-        result[row["id"]] = {"score": signed_process_score(row["score"]), "reason": row["reason"]}
+            continue
+        result[rubric_id] = {"score": signed_process_score(row["score"]), "reason": row["reason"]}
+    if not result:
+        raise ValueError("judge returned no usable rubric judgments")
     return result
 
 
