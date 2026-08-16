@@ -24,6 +24,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
+from rdan_grpo import baseline_models
+
 ROOT = Path(__file__).resolve().parents[2]
 if not (ROOT / "configs").is_dir():
     ROOT = Path(__file__).resolve().parents[3]
@@ -32,6 +34,20 @@ MAX_HTTP_BYTES = 16 * 1024 * 1024
 PINNED_MODEL = "Qwen/Qwen3-4B-Instruct-2507"
 PINNED_MODEL_REVISION = "cdbee75f17c01a7cc42f958dc650907174af0554"
 PINNED_RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
+MULDIMIF_PER_EXAMPLE_CODE = """
+import json
+import sys
+
+from evaluation.evaluation import check, pre_process
+from utils.data_utils import load_data
+
+rows = check(pre_process(load_data(sys.argv[1]), "auto"))
+with open(sys.argv[2], "w", encoding="utf-8") as output:
+    for index, row in enumerate(rows):
+        judges = row["judges"]
+        value = {"index": index, "id": row["id"], "judges": judges, "passed": all(judges)}
+        output.write(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\\n")
+"""
 
 
 class EvaluationError(RuntimeError):
@@ -84,15 +100,9 @@ def _load_config(path: Path) -> dict[str, Any]:
             config = json.load(file)
         if config["schema_version"] != 1 or set(config["benchmarks"]) != {"ifeval", "ifbench", "muldimif"}:
             raise EvaluationError("unsupported baseline configuration")
-        model = config["model"]
-        if (
-            model.get("name") != PINNED_MODEL
-            or model.get("revision") != PINNED_MODEL_REVISION
-            or not isinstance(model.get("served_name"), str)
-            or not model["served_name"].strip()
-            or config["rtt"]["revision"] != PINNED_RTT_REVISION
-        ):
+        if config["rtt"]["revision"] != PINNED_RTT_REVISION:
             raise EvaluationError("model or RTT pin does not match the base-evaluation contract")
+        baseline_models.load_model_contract(config)
         generation = config["generation"]
         expected = {
             "temperature": 0,
@@ -101,12 +111,11 @@ def _load_config(path: Path) -> dict[str, Any]:
             "max_tokens": 4096,
             "seed": 42,
             "n": 1,
-            "chat_template_kwargs": {"enable_thinking": False},
         }
         if any(generation.get(key) != value for key, value in expected.items()):
             raise EvaluationError("generation settings do not match the pinned greedy contract")
         return config
-    except (KeyError, TypeError, json.JSONDecodeError) as error:
+    except (KeyError, TypeError, json.JSONDecodeError, baseline_models.ModelContractError) as error:
         raise EvaluationError(f"invalid baseline configuration: {error}") from error
 
 
@@ -287,6 +296,17 @@ def _required_snapshot_roles(path: Path) -> set[str]:
     return roles
 
 
+def _resolve_snapshot_file(path: Path, snapshot: Path) -> Path:
+    try:
+        resolved = path.resolve(strict=True)
+        cache_root = snapshot.parent.parent.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise EvaluationError(f"snapshot symlink is invalid: {path.relative_to(snapshot)}") from error
+    if path.is_symlink() and not resolved.is_relative_to(cache_root):
+        raise EvaluationError(f"snapshot symlink escapes the model cache: {path.relative_to(snapshot)}")
+    return resolved
+
+
 def _load_server_manifest(path: Path, expected_model: dict[str, Any]) -> tuple[dict[str, Any], str]:
     try:
         manifest_bytes = path.read_bytes()
@@ -328,6 +348,10 @@ def _load_server_manifest(path: Path, expected_model: dict[str, Any]) -> tuple[d
     if not isinstance(argv, list) or not argv or not all(isinstance(value, str) and value for value in argv):
         raise EvaluationError("server argv must be a non-empty string list")
     _reject_sensitive_argv(argv)
+    if any(argument == "--chat-template" or argument.startswith("--chat-template=") for argument in argv):
+        raise EvaluationError("server argv must use the pinned tokenizer chat template")
+    if any(argument == "--tokenizer" or argument.startswith("--tokenizer=") for argument in argv):
+        raise EvaluationError("server argv must not override the pinned tokenizer")
     model_argument = Path(_argument(argv, "--model"))
     if not model_argument.is_absolute() or model_argument.resolve() != snapshot_path:
         raise EvaluationError("server argv model path does not match the resolved snapshot")
@@ -372,7 +396,10 @@ def _load_server_manifest(path: Path, expected_model: dict[str, Any]) -> tuple[d
         seen_paths.add(relative)
         declared_roles[relative] = set(roles)
         file_path = snapshot_path.joinpath(*PurePosixPath(relative).parts)
-        if not file_path.is_file():
+        if not file_path.exists() and not file_path.is_symlink():
+            raise EvaluationError(f"server model file is missing: {relative}")
+        resolved_file = _resolve_snapshot_file(file_path, snapshot_path)
+        if not resolved_file.is_file():
             raise EvaluationError(f"server model file is missing: {relative}")
         size, digest = _sha256(file_path)
         if entry.get("bytes") != size or entry.get("sha256") != digest:
@@ -388,6 +415,8 @@ def _load_server_manifest(path: Path, expected_model: dict[str, Any]) -> tuple[d
     if covered_roles != {"model", "tokenizer", "chat_template"}:
         raise EvaluationError("server identities must cover model, tokenizer, and chat template files")
     for file_path in snapshot_path.rglob("*"):
+        if file_path.is_symlink():
+            _resolve_snapshot_file(file_path, snapshot_path)
         if file_path.is_file():
             relative = file_path.relative_to(snapshot_path).as_posix()
             required_roles = _required_snapshot_roles(file_path)
@@ -527,6 +556,11 @@ def _generation_rows(benchmark: str, items: list[Item], responses: list[str]) ->
     return rows
 
 
+def _prepend_pythonpath(env: dict[str, str], path: Path) -> None:
+    inherited = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = os.pathsep.join(value for value in (str(path.resolve()), inherited) if value)
+
+
 def _scorer_command(
     benchmark: str, rtt_root: Path, generation_path: Path, native_dir: Path
 ) -> tuple[list[str], Path, dict[str, str]]:
@@ -560,7 +594,7 @@ def _scorer_command(
         ]
     else:
         cwd = rtt_root / "Benchmark/MulDimIF"
-        env["PYTHONPATH"] = "Code"
+        _prepend_pythonpath(env, cwd / "Code")
         command = [
             sys.executable,
             "Code/evaluation/evaluation.py",
@@ -598,6 +632,27 @@ def _run_scorer(
     if exit_code:
         raise EvaluationError(f"native {benchmark} scorer exited {exit_code}")
     return command, cwd
+
+
+def _derive_muldimif_per_example(rtt_root: Path, generation_path: Path, output: Path, timeout: int) -> None:
+    native_path = output / "native/per_example.jsonl"
+    env = os.environ.copy()
+    _prepend_pythonpath(env, rtt_root / "Benchmark/MulDimIF/Code")
+    command = [sys.executable, "-c", MULDIMIF_PER_EXAMPLE_CODE, str(generation_path), str(native_path)]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=rtt_root / "Benchmark/MulDimIF",
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise EvaluationError("MulDimIF per-example derivation timed out") from error
+    if result.returncode:
+        raise EvaluationError(f"MulDimIF per-example derivation exited {result.returncode}: {result.stderr.strip()}")
 
 
 def _read_jsonl(path: Path, expected_records: int) -> list[dict[str, Any]]:
@@ -655,7 +710,8 @@ def _if_metrics(output: Path, items: list[Item], responses: list[str]) -> dict[s
     return metrics
 
 
-def _muldimif_metrics(output: Path, expected_records: int) -> dict[str, Any]:
+def _muldimif_metrics(output: Path, items: list[Item]) -> dict[str, Any]:
+    expected_records = len(items)
     path = output / "native/breakdown.json"
     try:
         with path.open(encoding="utf-8") as file:
@@ -670,6 +726,26 @@ def _muldimif_metrics(output: Path, expected_records: int) -> dict[str, Any]:
     correct, total, accuracy = int(match[1]), int(match[2]), float(match[3])
     if total != expected_records or correct > total or abs(correct / total - accuracy) > 1e-9:
         raise EvaluationError("MulDimIF Overall result is inconsistent")
+    per_example = _read_jsonl(output / "native/per_example.jsonl", expected_records)
+    derived_correct = 0
+    for index, (row, item) in enumerate(zip(per_example, items)):
+        judges = row.get("judges")
+        if (
+            set(row) != {"index", "id", "judges", "passed"}
+            or row.get("index") != index
+            or row.get("id") != item.source.get("id")
+            or not isinstance(judges, list)
+            or not judges
+            or not all(isinstance(judge, int) and not isinstance(judge, bool) and judge in {0, 1} for judge in judges)
+            or not isinstance(row.get("passed"), bool)
+            or row["passed"] != all(judges)
+        ):
+            raise EvaluationError(f"invalid MulDimIF per-example result at record {index}")
+        derived_correct += int(row["passed"])
+    if derived_correct != correct:
+        raise EvaluationError(
+            f"MulDimIF per-example aggregate disagrees with Overall: expected {correct}, found {derived_correct}"
+        )
     return {
         "schema_version": 1,
         "records": expected_records,
@@ -679,7 +755,11 @@ def _muldimif_metrics(output: Path, expected_records: int) -> dict[str, Any]:
 
 def _harness_identity() -> dict[str, Any]:
     files = []
-    for path in (Path(__file__).resolve(), (ROOT / "scripts/run_base_eval.py").resolve()):
+    for path in (
+        Path(__file__).resolve(),
+        Path(baseline_models.__file__).resolve(),
+        (ROOT / "scripts/run_base_eval.py").resolve(),
+    ):
         size, digest = _sha256(path)
         files.append({"path": path.relative_to(ROOT).as_posix(), "bytes": size, "sha256": digest})
     return {"algorithm": "sha256", "files": files, "sha256": _json_hash(files)}
@@ -972,10 +1052,10 @@ def run_evaluation(
         scorer_command, scorer_cwd = _run_scorer(
             benchmark, rtt_root, generation_path, partial, generation["scorer_timeout_seconds"]
         )
+        if benchmark == "muldimif":
+            _derive_muldimif_per_example(rtt_root, generation_path, partial, generation["scorer_timeout_seconds"])
         metrics = (
-            _muldimif_metrics(partial, len(items))
-            if benchmark == "muldimif"
-            else _if_metrics(partial, items, responses)
+            _muldimif_metrics(partial, items) if benchmark == "muldimif" else _if_metrics(partial, items, responses)
         )
         metrics["benchmark"] = benchmark
         _write_json(partial / "metrics.json", metrics)

@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from rdan_grpo.judge import (
+    TRANSPORT_RETRIES,
     JudgeResult,
     OpenRouterJudge,
     calibration_plan,
@@ -278,7 +279,7 @@ def test_generation_metadata_poll_rejects_invalid_contract(
         OpenRouterJudge(contract, prompt, "redacted", client=FakeClient())
 
 
-def test_client_constructor_disables_retries_and_enables_router_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_client_constructor_retries_transport_and_enables_router_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     import openai
 
     contract, prompt = _contract()
@@ -291,7 +292,8 @@ def test_client_constructor_disables_retries_and_enables_router_metadata(monkeyp
     monkeypatch.setattr(openai, "OpenAI", factory)
     OpenRouterJudge(contract, prompt, "redacted")
     assert captured["base_url"] == "https://openrouter.ai/api/v1"
-    assert captured["max_retries"] == 0
+    assert TRANSPORT_RETRIES > 0
+    assert captured["max_retries"] == TRANSPORT_RETRIES
     assert captured["default_headers"] == {"X-OpenRouter-Metadata": "enabled"}
 
 

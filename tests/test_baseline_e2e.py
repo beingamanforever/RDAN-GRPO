@@ -297,3 +297,91 @@ def test_rejects_partial_from_different_server_manifest(tmp_path: Path, monkeypa
     partial = tmp_path / ".output.partial"
     assert len((partial / "partial_generation.jsonl").read_text(encoding="utf-8").splitlines()) == 1
     assert len(list((partial / "failures").glob("*.json"))) == 2
+
+
+def test_muldimif_derives_per_example_and_requires_aggregate_agreement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rtt = tmp_path / "rtt"
+    code = rtt / "Benchmark/MulDimIF/Code"
+    (code / "evaluation").mkdir(parents=True)
+    (code / "utils").mkdir()
+    (code / "evaluation/__init__.py").write_text("", encoding="utf-8")
+    (code / "utils/__init__.py").write_text("", encoding="utf-8")
+    (code / "evaluation/evaluation.py").write_text(
+        "from overlay_dependency import SENTINEL\n"
+        "def pre_process(data, _mode): return data\n"
+        "def check(data):\n"
+        "    for row in data: row['judges'] = row.pop('expected_judges')\n"
+        "    return data\n",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    (overlay / "overlay_dependency.py").write_text("SENTINEL = 'overlay-visible'\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(overlay))
+    (code / "utils/data_utils.py").write_text(
+        "import json\n"
+        "def load_data(path):\n"
+        "    with open(path, encoding='utf-8') as file:\n"
+        "        return [json.loads(line) for line in file]\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "output"
+    (output / "native").mkdir(parents=True)
+    generation = output / "generation.jsonl"
+    generated = [
+        {"id": "zero", "expected_judges": [1, 1]},
+        {"id": "one", "expected_judges": [1, 0]},
+    ]
+    baseline._write_jsonl(generation, generated)
+    baseline._write_json(output / "native/breakdown.json", {"Overall": "1/2=0.5"})
+    items = [
+        baseline.Item(identity=json.dumps(row["id"]), prompt=str(index), messages=[], source={"id": row["id"]})
+        for index, row in enumerate(generated)
+    ]
+
+    baseline._derive_muldimif_per_example(rtt, generation, output, 10)
+
+    assert baseline._muldimif_metrics(output, items)["overall"]["correct"] == 1
+    rows = [json.loads(line) for line in (output / "native/per_example.jsonl").read_text().splitlines()]
+    assert rows == [
+        {"index": 0, "id": "zero", "judges": [1, 1], "passed": True},
+        {"index": 1, "id": "one", "judges": [1, 0], "passed": False},
+    ]
+
+    baseline._write_json(output / "native/breakdown.json", {"Overall": "2/2=1.0"})
+    with pytest.raises(baseline.EvaluationError, match="aggregate disagrees"):
+        baseline._muldimif_metrics(output, items)
+
+
+def test_muldimif_scorer_preserves_inherited_dependency_overlay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rtt = tmp_path / "rtt"
+    scorer = rtt / "Benchmark/MulDimIF/Code/evaluation/evaluation.py"
+    scorer.parent.mkdir(parents=True)
+    scorer.write_text(
+        "import argparse, json\n"
+        "from overlay_dependency import SENTINEL\n"
+        "parser = argparse.ArgumentParser()\n"
+        "parser.add_argument('--file_path')\n"
+        "parser.add_argument('--save_path')\n"
+        "args = parser.parse_args()\n"
+        "with open(args.save_path, 'w', encoding='utf-8') as file:\n"
+        "    json.dump({'Overall': '0/1=0.0'}, file)\n"
+        "print(SENTINEL)\n",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "overlay"
+    overlay.mkdir()
+    (overlay / "overlay_dependency.py").write_text("SENTINEL = 'overlay-visible'\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONPATH", str(overlay))
+    generation = tmp_path / "generation.jsonl"
+    generation.write_text("{}\n", encoding="utf-8")
+    output = tmp_path / "output"
+    output.mkdir()
+
+    baseline._run_scorer("muldimif", rtt, generation, output, 10)
+
+    assert (output / "scorer_stdout.txt").read_text(encoding="utf-8").strip() == "overlay-visible"

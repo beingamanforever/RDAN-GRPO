@@ -1,4 +1,0 @@
-# RTT imports these padding helpers even when the model attention implementation is SDPA.
-# This source hash is the PyPI release artifact for the exact RTT Dockerfile version.
-flash-attn==2.7.4.post1 \
-    --hash=sha256:f03485c9a49a4d68d0733acdcad80ab0e72afa025a777fdc2966ceccf9d51765

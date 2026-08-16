@@ -761,9 +761,9 @@ def _compact_certificates(
     rows: list[dict[str, Any]],
     language_path: Path,
 ) -> tuple[Path, Path]:
-    implementation = ROOT / "src/rdan_grpo/rubrichub_rules.py"
-    checker_generator = ROOT / "scripts/certify_rubrichub_rules.py"
-    tokenizer_generator = ROOT / "scripts/certify_rubrichub_tokenizer.py"
+    implementation = ROOT / "src/rdan_grpo/rules.py"
+    checker_generator = _write_generator(root, "checker_generator.py")
+    tokenizer_generator = _write_generator(root, "tokenizer_generator.py")
     rtt_root = ROOT.parent / "Rubrics-To-Tokens"
     source_path = rtt_root / "Benchmark/instruction_following_eval/instructions.py"
     reference = json.loads((ROOT / "configs/artifacts/rubrichub_rule_certificate.json").read_text())["reference"]
@@ -893,6 +893,12 @@ def _compact_certificates(
     tokenizer_path.write_text(json.dumps(tokenizer, sort_keys=True), encoding="utf-8")
     assert source_path.is_file()
     return checker_path, tokenizer_path
+
+
+def _write_generator(root: Path, name: str) -> Path:
+    path = root / name
+    path.write_text(f"# stand-in generator identity for {name}\n", encoding="utf-8")
+    return path
 
 
 def _certificate_source(config: dict[str, Any]) -> dict[str, Any]:

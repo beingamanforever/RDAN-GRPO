@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rdan_grpo.evaluator_cert import verify_type4_certificate  # noqa: E402
+from rdan_grpo.evaluator import verify_type4_certificate  # noqa: E402
 from rdan_grpo.scalar_data import (  # noqa: E402
     ScalarDataError,
     build_rtt_hir_dataset,

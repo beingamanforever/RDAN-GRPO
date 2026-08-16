@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "model": {
+    "name": "mistralai/Ministral-3-3B-Instruct-2512",
+    "revision": "b35d4dfe56c142746f54dbd64f579faab2744308",
+    "served_name": "ministral-3-3b-instruct-2512"
+  },
+  "rtt": {
+    "repository": "https://github.com/TURLEing/Rubrics-To-Tokens",
+    "revision": "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
+  },
+  "generation": {
+    "temperature": 0,
+    "top_p": 1,
+    "top_k": -1,
+    "max_tokens": 4096,
+    "seed": 42,
+    "n": 1,
+    "chat_template_kwargs": {},
+    "request_timeout_seconds": 600,
+    "scorer_timeout_seconds": 3600
+  },
+  "benchmarks": {
+    "ifeval": {
+      "records": 541,
+      "input_path": "Benchmark/instruction_following_eval/data/input_data.jsonl",
+      "sha256": "67ffeee0fcb87c317c5b08a2de85557b4a7e96ada6178aa645b4954fe4b53d49",
+      "input_format": "jsonl",
+      "response_format": "prompt_response_jsonl",
+      "scorer": "python -m instruction_following_eval.evaluation_main from Benchmark"
+    },
+    "ifbench": {
+      "records": 294,
+      "input_path": "Benchmark/IFBench/data/IFBench_test.jsonl",
+      "sha256": "11c3d683dcc7f4908a4d3cacd05c9a8bbd5484af2f8fde969e7abe2b8bad3e34",
+      "input_format": "jsonl",
+      "response_format": "prompt_response_jsonl",
+      "scorer": "python run_eval.py from Benchmark/IFBench"
+    },
+    "muldimif": {
+      "records": 1200,
+      "input_path": "Benchmark/MulDimIF/Data/test.json",
+      "sha256": "37de38b3eb8eec449f3f95dcc0bb0b4fa63a9351988a44d7b232d13348711c5b",
+      "input_format": "json",
+      "response_format": "source_with_assistant_jsonl",
+      "scorer": "PYTHONPATH=Code python Code/evaluation/evaluation.py from Benchmark/MulDimIF"
+    }
+  },
+  "result_schema": {
+    "ifeval_and_ifbench": {
+      "modes": ["strict", "loose"],
+      "levels": ["instruction_level", "rubric_level"],
+      "fields": ["correct", "total", "accuracy"]
+    },
+    "muldimif": {
+      "overall_fields": ["correct", "total", "accuracy", "native"],
+      "native_breakdown": "native/breakdown.json"
+    }
+  },
+  "artifact_requirements": {
+    "success": [
+      "command.json",
+      "environment.json",
+      "generation.jsonl",
+      "metrics.json",
+      "native/",
+      "provenance.json",
+      "resolved_config.json",
+      "resume_identity.json",
+      "scorer.json",
+      "scorer_stdout.txt",
+      "scorer_stderr.txt",
+      "server_identity.json",
+      "sha256_manifest.json"
+    ],
+    "failure": [
+      "failure.json",
+      "failures/*.json",
+      "resume_identity.json",
+      "server_identity.json",
+      "generation.jsonl or partial_generation.jsonl when generation started"
+    ],
+    "manifest_scope": "all regular final files except sha256_manifest.json"
+  }
+}

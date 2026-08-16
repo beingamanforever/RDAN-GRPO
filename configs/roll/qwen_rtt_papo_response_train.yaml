@@ -78,7 +78,6 @@ actor_infer:
       max_model_len: 8000
       load_format: auto
       sleep_level: 1
-      worker_extension_cls: rdan_grpo.roll_weight_receipt.ReceiptWorkerV1
   device_mapping: [0, 1]
   world_size: 2
   num_gpus_per_worker: 1

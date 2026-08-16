@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate the pinned Qwen base model through a local vLLM server and RTT."""
+"""Evaluate an exact pinned base model through a local vLLM server and RTT."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rdan_grpo.baseline import EvaluationError, run_evaluation  # noqa: E402
+from rdan_grpo.baseline import CONFIG, EvaluationError, run_evaluation  # noqa: E402
 
 
 def main() -> None:
@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--server-manifest", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--concurrency", type=int, default=8)
+    parser.add_argument("--config", type=Path, default=CONFIG)
     args = parser.parse_args()
     try:
         output = run_evaluation(
@@ -30,6 +31,7 @@ def main() -> None:
             args.server_manifest,
             args.output_dir,
             args.concurrency,
+            config_path=args.config,
             argv=sys.argv,
         )
     except EvaluationError as error:

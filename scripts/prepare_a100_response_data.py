@@ -19,8 +19,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from rdan_grpo.response_dataset import load_response_dataset  # noqa: E402
-from rdan_grpo.response_identity import response_data_identity  # noqa: E402
+from rdan_grpo.dataset import load_response_dataset  # noqa: E402
 
 RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
 DATA_PYTHON = "3.11.15"
@@ -63,16 +62,9 @@ def main() -> int:
         _prepare_merge(args.data_python, manifest, manifest_path, expected_manifest)
 
     _verify_all(args, manifest_path)
-    identity = response_data_identity(ROOT / "configs/program/qwen_first.json")
     print(
         json.dumps(
-            {
-                "status": "passed",
-                "manifest_sha256": identity["manifest_sha256"],
-                "output_sha256": identity["output_sha256"],
-                "records": identity["records"],
-                "checked_only": args.check,
-            },
+            {"status": "passed", "checked_only": args.check},
             sort_keys=True,
             separators=(",", ":"),
         )
