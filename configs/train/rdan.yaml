@@ -5,6 +5,9 @@ defaults:
 exp_name: rdan-grpo-qwen3-4b
 
 # Decoupled advantage: outcome over the whole group, process over hard-passing responses only.
+tracker_kwargs:
+  tags: [qwen3-4b, instruction-following, hybrid-16k, rdan]
+
 rdan_response:
   method: rdan
   quality_weight: 1.0

@@ -5,5 +5,8 @@ defaults:
 exp_name: rl-aon-qwen3-4b
 
 # Baseline: one outcome channel, all-or-nothing over all rubrics.
+tracker_kwargs:
+  tags: [qwen3-4b, instruction-following, hybrid-16k, rl-aon]
+
 rdan_response:
   method: rl_aon

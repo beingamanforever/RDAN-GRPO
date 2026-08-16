@@ -33,5 +33,5 @@ tensordict==0.10.0
 transformers==4.57.0
 uv==0.11.6
 vllm==0.11.0
-wandb==0.21.1
+wandb==0.28.2
 wheel==0.45.1

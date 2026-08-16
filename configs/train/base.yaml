@@ -14,9 +14,12 @@ output_dir: ./output/${exp_name}
 rollout_dump_dir: ./output/${exp_name}/rollouts
 checkpoint_config: {}
 track_with: rdan_wandb
+# group ties the method runs together so W&B overlays them on one comparison chart.
 tracker_kwargs:
   project: rdan-grpo-qwen3-4b
   name: ${exp_name}
+  group: qwen3-4b-instruct-2507
+  tags: [qwen3-4b, instruction-following, hybrid-16k]
 
 num_gpus_per_node: ${num_gpus}
 max_steps: 500
