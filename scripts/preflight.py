@@ -38,14 +38,21 @@ def main() -> int:
     rows = _load_rows(args.data, args.prompts)
     print(f"loaded {len(rows)} prompts: " + ", ".join(sorted({row["source"] for row in rows})))
 
-    responses = _generate(args.model, rows, args.samples, args.max_new_tokens)
+    responses, prompt_tokens, response_tokens = _generate(args.model, rows, args.samples, args.max_new_tokens)
     scored = _score(rows, responses, args.samples)
-    _report(scored, rows, args)
+    _report(scored, args)
+    _report_lengths(prompt_tokens, response_tokens, args.max_new_tokens)
     return 0
 
 
-def _generate(model: str, rows: list[dict[str, Any]], samples: int, max_new_tokens: int) -> list[list[str]]:
-    """Sample responses per prompt with the same decoding settings training uses."""
+def _generate(
+    model: str, rows: list[dict[str, Any]], samples: int, max_new_tokens: int
+) -> tuple[list[list[str]], list[int], list[int]]:
+    """Sample responses with the decoding settings training uses, and record token lengths.
+
+    Prompt and response token lengths decide prompt_length and response_length, which in turn
+    set how much padding every training sequence carries.
+    """
 
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams
@@ -60,12 +67,15 @@ def _generate(model: str, rows: list[dict[str, Any]], samples: int, max_new_toke
         )
         for row in rows
     ]
-    engine = LLM(model=model, dtype="bfloat16", max_model_len=8000, gpu_memory_utilization=0.8)
+    engine = LLM(model=model, dtype="bfloat16", max_model_len=max_new_tokens + 2048, gpu_memory_utilization=0.85)
     sampling = SamplingParams(
         n=samples, temperature=0.99, top_p=0.99, top_k=100, max_tokens=max_new_tokens, seed=240520
     )
     outputs = engine.generate(prompts, sampling)
-    return [[completion.text for completion in output.outputs] for output in outputs]
+    texts = [[completion.text for completion in output.outputs] for output in outputs]
+    prompt_tokens = [len(output.prompt_token_ids) for output in outputs]
+    response_tokens = [len(completion.token_ids) for output in outputs for completion in output.outputs]
+    return texts, prompt_tokens, response_tokens
 
 
 def _score(rows: list[dict[str, Any]], responses: list[list[str]], samples: int) -> dict[str, Any]:
@@ -126,7 +136,7 @@ def _score(rows: list[dict[str, Any]], responses: list[list[str]], samples: int)
     }
 
 
-def _report(scored: dict[str, Any], rows: list[dict[str, Any]], args: argparse.Namespace) -> None:
+def _report(scored: dict[str, Any], args: argparse.Namespace) -> None:
     """Print reward, advantage, judge health, and the projected cost of a full run."""
 
     output = scored["output"]
@@ -171,26 +181,56 @@ def _report(scored: dict[str, Any], rows: list[dict[str, Any]], args: argparse.N
         print(f"  judging per step      ~{max(waves, 1) * stats['judge/latency_p50']:.0f}s")
 
 
-def _load_rows(path: Path, count: int) -> list[dict[str, Any]]:
-    """Take the first row of each source, so every checker route is exercised."""
+def _report_lengths(prompt_tokens: list[int], response_tokens: list[int], cap: int) -> None:
+    """Report the token lengths that decide how much padding each training sequence carries."""
 
-    picked: dict[str, dict[str, Any]] = {}
+    print("\n--- token lengths ---")
+    for name, values in (("prompt", prompt_tokens), ("response", response_tokens)):
+        ordered = sorted(values)
+        total = len(ordered)
+
+        def at(fraction: float) -> int:
+            return ordered[min(int(fraction * total), total - 1)]
+
+        print(
+            f"{name:9} n={total:5} mean={statistics.fmean(ordered):6.0f} "
+            f"p50={at(0.5):5} p90={at(0.9):5} p99={at(0.99):5} max={ordered[-1]:5}"
+        )
+    print(f"response cap {cap} hit by {sum(1 for v in response_tokens if v >= cap) / len(response_tokens):.2%}")
+    print("length budget: a training row costs prompt_length + response_length tokens regardless of content")
+    for candidate in (1024, 1536, 2048, 3072, 4096):
+        covered = sum(1 for v in response_tokens if v <= candidate) / len(response_tokens)
+        print(f"  response_length {candidate:5}: covers {covered:7.2%} of responses")
+
+
+def _load_rows(path: Path, count: int) -> list[dict[str, Any]]:
+    """Take rows round-robin across sources, so every checker route is exercised."""
+
+    by_source: dict[str, list[dict[str, Any]]] = {}
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
-            if row["source"] in picked:
+            bucket = by_source.setdefault(row["source"], [])
+            if len(bucket) >= count:
                 continue
             truth = row["ground_truth"]
-            picked[row["source"]] = {
-                "id": str(row["id"]),
-                "source": row["source"],
-                "prompt": row["prompt"],
-                "rubrics": json.loads(row["rubrics"]) if isinstance(row["rubrics"], str) else row["rubrics"],
-                "ground_truth": json.loads(truth) if isinstance(truth, str) else truth,
-            }
-            if len(picked) >= count:
+            bucket.append(
+                {
+                    "id": str(row["id"]),
+                    "source": row["source"],
+                    "prompt": row["prompt"],
+                    "rubrics": json.loads(row["rubrics"]) if isinstance(row["rubrics"], str) else row["rubrics"],
+                    "ground_truth": json.loads(truth) if isinstance(truth, str) else truth,
+                }
+            )
+            if all(len(values) >= count for values in by_source.values()) and len(by_source) >= 5:
                 break
-    return list(picked.values())
+    rows: list[dict[str, Any]] = []
+    for index in range(count):
+        for bucket in by_source.values():
+            if index < len(bucket) and len(rows) < count:
+                rows.append(bucket[index])
+    return rows
 
 
 def _parse_args() -> argparse.Namespace:
