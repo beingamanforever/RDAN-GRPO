@@ -606,7 +606,9 @@ def test_tracker_uses_the_pipeline_step_as_the_wandb_step(tmp_path: Path) -> Non
     logged: list[tuple[dict[str, Any], int | None]] = []
 
     class FakeRun:
-        def log(self, values: dict[str, Any], step: int | None = None, **_: Any) -> None:
+        def log(self, values: dict[str, Any], step: int | None = None, **kwargs: Any) -> None:
+            # An explicit step without commit leaves the row buffered until a later step.
+            assert kwargs.get("commit") is True, "an explicitly stepped row must be committed"
             logged.append((values, step))
 
         def finish(self) -> None:

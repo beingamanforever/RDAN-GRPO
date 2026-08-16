@@ -62,7 +62,10 @@ class RdanTracker:
             # the axis self-referential and every panel empty.
             if step is None and isinstance(row.get(STEP_METRIC), (int, float)):
                 step = int(row[STEP_METRIC])
-            self.run.log(dict(row), step=step, **kwargs)
+            # commit=True is required whenever step is explicit: W&B otherwise holds the row
+            # open until a later step arrives, so the dashboard trails by one step and the
+            # final step of a run never lands at all.
+            self.run.log(dict(row), step=step, commit=True, **kwargs)
 
     def finish(self) -> None:
         """Write the curve plots and close the W&B run."""
