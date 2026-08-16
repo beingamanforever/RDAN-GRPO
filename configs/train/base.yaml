@@ -76,7 +76,6 @@ actor_train:
     file_name: [data/hybrid.jsonl]
     domain_interleave_probs:
       llm_judge: 1.0
-    dataset_dir: .
     messages: messages
     interleave_probs: "1.0"
     preprocessing_num_workers: 16

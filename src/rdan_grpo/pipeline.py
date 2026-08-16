@@ -329,8 +329,10 @@ def _load_dataset(config: Any, tokenizer: Any) -> tuple[str, Any]:
 
     from roll.pipeline.rlvr.rlvr_pipeline import get_encode_function, preprocess_dataset, update_dataset_domain
 
+    # ROLL's DataArguments has no directory field: file_name is resolved against the
+    # working directory the run was launched from.
     data_args = config.actor_train.data_args
-    dataset = load_response_dataset(data_args.file_name, dataset_dir=data_args.dataset_dir)
+    dataset = load_response_dataset(data_args.file_name)
     dataset = preprocess_dataset(
         dataset,
         config.prompt_length,
