@@ -25,7 +25,7 @@ from rdan_grpo.checkpoint import (
     stage_checkpoint,
 )
 from rdan_grpo.config import ResponseConfig, load_config, updates_per_step
-from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats
+from rdan_grpo.judge import JudgeRequest, JudgeUnavailableError, OpenRouterJudge, aggregate_stats
 from rdan_grpo.rewards import extract_quality, score_rubrics
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
 from rdan_grpo.scalar import build_scalar_output
@@ -430,6 +430,24 @@ def test_judge_ignores_ids_it_was_not_asked_about_and_duplicates() -> None:
 
     assert result.valid and sorted(result.judgments) == [1]
     assert result.judgments[1]["reason"] == "first"
+
+
+@pytest.mark.parametrize("status", [401, 402, 403])
+def test_judge_stops_the_run_on_exhausted_credit_or_bad_credentials(status: int) -> None:
+    """Failing these soft would strip the process channel and silently invalidate the run."""
+
+    judge = OpenRouterJudge(judge_config(), "key", client=FakeClient([FakeStatusError(status)]))
+
+    with pytest.raises(JudgeUnavailableError, match=str(status)):
+        judge.judge(make_request([1]))
+
+
+def test_judge_batch_surfaces_a_fatal_failure_rather_than_absorbing_it() -> None:
+    config = judge_config()
+    judge = OpenRouterJudge(config, "key", client=FakeClient([FakeStatusError(402)] * 4))
+
+    with pytest.raises(JudgeUnavailableError):
+        judge.judge_batch([make_request([1]), make_request([2])])
 
 
 def test_judge_requires_an_api_key() -> None:

@@ -26,6 +26,14 @@ RETRY_BASE_SECONDS = 1.0
 RETRY_CAP_SECONDS = 30.0
 # Status codes worth another attempt: rate limits, upstream overload, gateway errors.
 RETRY_STATUS = frozenset({408, 409, 429, 500, 502, 503, 504})
+# Credit exhaustion and bad credentials are permanent for the whole run, not one call. Failing
+# these soft would quietly strip the process channel and leave RDAN training as outcome-only
+# while every other metric still looked healthy, so they stop the run instead.
+FATAL_STATUS = frozenset({401, 402, 403})
+
+
+class JudgeUnavailableError(RuntimeError):
+    """Raised when the judge cannot recover: exhausted credit or rejected credentials."""
 
 
 @dataclass(frozen=True)
@@ -126,6 +134,11 @@ class OpenRouterJudge:
                 self._record(result)
                 return result
             except Exception as exc:  # noqa: BLE001 - every transport failure is retryable data
+                status = getattr(exc, "status_code", None)
+                if status in FATAL_STATUS:
+                    raise JudgeUnavailableError(
+                        f"judge rejected the request with HTTP {status}; check API credit and credentials"
+                    ) from exc
                 error = type(exc).__name__
                 if attempt == self.max_attempts or not _retryable(exc):
                     break
