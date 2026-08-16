@@ -515,7 +515,11 @@ def test_abandoned_staging_is_never_resumable(tmp_path: Path) -> None:
 
 def test_retention_keeps_recent_checkpoints_and_milestones(tmp_path: Path) -> None:
     for step in (20, 40, 60, 80, 100, 120, 140):
-        promote_checkpoint(stage_checkpoint(tmp_path, step), {"completed_step": step})
+        staging = stage_checkpoint(tmp_path, step)
+        (staging / "actor/dcp").mkdir(parents=True)
+        (staging / "actor/dcp/shard.bin").write_bytes(b"optimizer")
+        (staging / "actor/model.safetensors").write_bytes(b"weights")
+        promote_checkpoint(staging, {"completed_step": step})
 
     prune_checkpoints(tmp_path, keep_recent=2, keep_every=100)
 
@@ -524,6 +528,13 @@ def test_retention_keeps_recent_checkpoints_and_milestones(tmp_path: Path) -> No
         "step-000120",
         "step-000140",
     ]
+    # The milestone keeps its weights for evaluation but sheds the optimizer state, which is
+    # an order of magnitude larger and only useful for resuming from that exact step.
+    milestone = tmp_path / "step-000100"
+    assert (milestone / "actor/model.safetensors").is_file()
+    assert not (milestone / "actor/dcp").exists()
+    for recent in ("step-000120", "step-000140"):
+        assert (tmp_path / recent / "actor/dcp/shard.bin").is_file()
 
 
 def test_pruning_clears_abandoned_staging_directories(tmp_path: Path) -> None:

@@ -79,16 +79,21 @@ def prune_checkpoints(root: str | Path, keep_recent: int, keep_every: int) -> li
     """Delete checkpoints outside the retention window, keeping periodic milestones.
 
     ``keep_recent`` guarantees resume always has a recent checkpoint; ``keep_every`` keeps
-    milestone steps permanently so intermediate Hugging Face weights survive for evaluation.
+    milestone steps permanently so intermediate weights survive for evaluation. Milestones
+    outside the resume window shed their sharded optimizer state, which is an order of
+    magnitude larger than the weights and is useless once the run has moved past them.
     """
 
     promoted = promoted_checkpoints(root)
-    keep = set(promoted[-keep_recent:] if keep_recent > 0 else [])
-    if keep_every > 0:
-        keep.update(entry for entry in promoted if _step_of(entry) % keep_every == 0)
-    removed = [entry for entry in promoted if entry not in keep]
+    recent = set(promoted[-keep_recent:] if keep_recent > 0 else [])
+    milestones = {entry for entry in promoted if keep_every > 0 and _step_of(entry) % keep_every == 0}
+    removed = [entry for entry in promoted if entry not in recent | milestones]
     for entry in removed:
         shutil.rmtree(entry)
+    for entry in milestones - recent:
+        optimizer_state = entry / "actor" / "dcp"
+        if optimizer_state.is_dir():
+            shutil.rmtree(optimizer_state)
     for entry in Path(root).iterdir():
         if entry.is_dir() and not entry.is_symlink() and entry.name.startswith(STAGING_PREFIX):
             shutil.rmtree(entry)
