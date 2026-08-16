@@ -61,7 +61,7 @@ actor_train:
   worker_cls: rdan_grpo.workers.ResponseActorWorker
   model_args:
     model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
-    attn_implementation: flash_attention_2
+    attn_implementation: fa2
     disable_gradient_checkpointing: false
     dtype: bf16
   training_args:
