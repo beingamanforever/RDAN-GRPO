@@ -171,9 +171,11 @@ class OpenRouterJudge:
             "model": self.config["model"],
             "messages": [{"role": "user", "content": content}],
             "max_tokens": self.config["max_tokens"],
-            "reasoning_effort": self.config["reasoning_effort"],
+            "temperature": self.config["temperature"],
+            "seed": self.config["seed"],
             "response_format": self.config["response_format"],
-            "extra_body": {"provider": self.config["routing"]},
+            # Reasoning is a provider-level control OpenRouter forwards, not an OpenAI field.
+            "extra_body": {"provider": self.config["routing"], "reasoning": self.config["reasoning"]},
         }
 
     def _parse(self, completion: Any, ids: list[int], latency: float, attempts: int) -> JudgeResult:

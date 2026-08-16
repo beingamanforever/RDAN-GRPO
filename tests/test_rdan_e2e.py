@@ -314,9 +314,25 @@ def test_judge_scores_map_onto_the_signed_rubric_scale() -> None:
     result = judge.judge(make_request([1, 2]))
 
     assert result.valid
+    # A judge score of 0.5 is the midpoint of the signed rubric scale, so it maps to 0.0.
     assert [row["score"] for row in result.judgments.values()] == [0.0, 0.0]
+    price = judge_config()["price_per_million"]
     stats = aggregate_stats([judge.drain_stats()])
-    assert stats["judge/cost_usd"] == pytest.approx(100 * 0.1e-6 + 40 * 0.6e-6)
+    assert stats["judge/cost_usd"] == pytest.approx((100 * price["prompt"] + 40 * price["completion"]) / 1e6)
+
+
+def test_judge_request_disables_reasoning_and_pins_decoding() -> None:
+    """Reasoning tokens dominate judge cost and add nothing to a rubric classification."""
+
+    client = FakeClient([FakeCompletion(judgment([1]))])
+    judge = OpenRouterJudge(judge_config(), "key", client=client)
+
+    judge.judge(make_request([1]))
+
+    payload = client.calls[0]
+    assert payload["extra_body"]["reasoning"] == {"enabled": False}
+    assert payload["temperature"] == 0.0
+    assert payload["response_format"]["json_schema"]["strict"] is True
 
 
 def test_judge_batch_runs_concurrently_and_preserves_request_order() -> None:
