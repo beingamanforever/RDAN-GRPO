@@ -180,7 +180,10 @@ class RdanTrainingPipeline(BasePipeline):
                 "is_offload_states": False,
             }
         )
+        # The trainer and the rollout engine share these GPUs, so each must hand back its
+        # cached blocks, not just its tensors, before the other tries to claim them.
         self.actor_train.offload_states(blocking=True)
+        self.actor_train.rdan_release_cache(blocking=True)
         self.actor_infer.load_states(blocking=True)
         for reward in self.rewards.values():
             reward.load_states(blocking=True)
@@ -193,6 +196,7 @@ class RdanTrainingPipeline(BasePipeline):
             )
         finally:
             self.actor_infer.offload_states(blocking=True)
+            self.actor_infer.rdan_release_cache(blocking=True)
             for reward in self.rewards.values():
                 reward.offload_states(blocking=True)
             self.actor_train.load_states(blocking=True)

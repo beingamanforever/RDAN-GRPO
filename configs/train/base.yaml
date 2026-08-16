@@ -29,7 +29,7 @@ resume_from_checkpoint: false
 rpc_timeout: 3600
 
 rollout_batch_size: 64
-prompt_length: 2048
+prompt_length: 1280
 response_length: 4096
 num_return_sequences_in_group: 8
 ppo_epochs: 1
@@ -61,14 +61,14 @@ actor_train:
   worker_cls: rdan_grpo.workers.ResponseActorWorker
   model_args:
     model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
-    attn_implementation: sdpa
+    attn_implementation: flash_attention_2
     disable_gradient_checkpointing: false
     dtype: bf16
   training_args:
     learning_rate: 1.0e-6
     weight_decay: 0
-    per_device_train_batch_size: 1
-    gradient_accumulation_steps: 128
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 32
     warmup_steps: 20
     num_train_epochs: 50
   data_args:
@@ -86,7 +86,7 @@ actor_train:
   device_mapping: ${num_gpus}
   world_size: ${num_gpus}
   num_gpus_per_worker: 1
-  infer_batch_size: 4
+  infer_batch_size: 16
 
 actor_infer:
   worker_cls: rdan_grpo.workers.ResponseVLLMInferWorker
@@ -106,9 +106,9 @@ actor_infer:
   strategy_args:
     strategy_name: vllm
     strategy_config:
-      gpu_memory_utilization: 0.8
+      gpu_memory_utilization: 0.65
       block_size: 16
-      max_model_len: 8000
+      max_model_len: 5376
       load_format: auto
       sleep_level: 1
   device_mapping: ${num_gpus}

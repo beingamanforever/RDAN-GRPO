@@ -28,10 +28,14 @@ def install_rtt_runtime(explicit: str | Path | None = None) -> Path:
     """Put the RTT checkout on the import path and supply the helper its rlvr package lacks."""
 
     root = rtt_root(explicit)
-    for entry in (root, root / "mcore_adapter" / "src"):
-        text = str(entry)
-        if entry.is_dir() and text not in sys.path:
-            sys.path.insert(0, text)
+    entries = [entry for entry in (root, root / "mcore_adapter" / "src") if entry.is_dir()]
+    for entry in entries:
+        if str(entry) not in sys.path:
+            sys.path.insert(0, str(entry))
+    # Ray workers are separate processes that inherit the environment, not sys.path, and ROLL
+    # starts its cluster by shelling out to the `ray` CLI that lives beside this interpreter.
+    _prepend_env("PYTHONPATH", [str(entry) for entry in entries])
+    _prepend_env("PATH", [str(Path(sys.executable).parent)])
 
     # roll.pipeline.rlvr.rlvr_pipeline imports this name from roll.pipeline.rlvr.utils, which
     # never defines it, so the module is unimportable without the shim. RDAN does not use
@@ -41,6 +45,14 @@ def install_rtt_runtime(explicit: str | Path | None = None) -> Path:
     if not hasattr(utils, "dump_batch_to_reward_system"):
         utils.dump_batch_to_reward_system = _reject_reward_system_dump
     return root
+
+
+def _prepend_env(name: str, entries: list[str]) -> None:
+    """Prepend entries to a PATH-style environment variable without duplicating them."""
+
+    current = [value for value in os.environ.get(name, "").split(os.pathsep) if value]
+    merged = entries + [value for value in current if value not in entries]
+    os.environ[name] = os.pathsep.join(merged)
 
 
 def _reject_reward_system_dump(batch: Any, tokenizer: Any) -> None:

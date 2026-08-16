@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import gc
 import hashlib
 import json
 from pathlib import Path
@@ -129,6 +130,18 @@ class ResponseActorWorker(ActorWorker):
         torch.cuda.reset_peak_memory_stats()
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_release_cache(self) -> dict[str, int]:
+        """Return cached-but-unused GPU blocks to the driver.
+
+        Offloading moves tensors to CPU but leaves the freed segments in PyTorch's caching
+        allocator, which still owns the physical pages. vLLM maps its KV pool with the CUDA
+        virtual memory API and fails outright when those pages are unavailable, so the actor
+        must release them before the rollout engine wakes on the same device.
+        """
+
+        return _release_cache(self)
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_cuda_memory(self) -> dict[str, int]:
         """Return rank-local CUDA peak and capacity bytes."""
 
@@ -174,10 +187,27 @@ class ResponseVLLMInferWorker(InferWorker):
         torch.cuda.reset_peak_memory_stats()
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
+    def rdan_release_cache(self) -> dict[str, int]:
+        """Return cached-but-unused GPU blocks so the colocated trainer can use them."""
+
+        return _release_cache(self)
+
+    @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def rdan_cuda_memory(self) -> dict[str, int]:
         """Return rank-local CUDA peak and capacity bytes."""
 
         return _cuda_memory(self)
+
+
+def _release_cache(worker: Any) -> dict[str, int]:
+    gc.collect()
+    torch.cuda.empty_cache()
+    device = torch.cuda.current_device()
+    return {
+        "rank": _rank(worker),
+        "reserved_bytes": torch.cuda.memory_reserved(device),
+        "allocated_bytes": torch.cuda.memory_allocated(device),
+    }
 
 
 def _counters(worker: Any) -> dict[str, int]:
