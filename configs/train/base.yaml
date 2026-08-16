@@ -1,28 +1,59 @@
-defaults:
-  - qwen_scalar_train
-  - _self_
+hydra:
+  run:
+    dir: .
+  output_subdir: null
 
-exp_name: qwen-rtt-papo-response-train-s240520
-logging_dir: ./output/qwen-rtt-papo-response-train-s240520/logs
-output_dir: ./output/qwen-rtt-papo-response-train-s240520
-rollout_dump_dir: ./.local-rdan/rollouts/qwen-rtt-papo-response-train-s240520
+# GPU count for the actor and rollout engines. Override on the command line to scale,
+# e.g. `--config-override num_gpus=4`. Reward workers are CPU/API only.
+num_gpus: 2
+exp_name: rdan
+seed: 240520
+global_template: qwen3_nothinking
+logging_dir: ./output/${exp_name}/logs
+output_dir: ./output/${exp_name}
+rollout_dump_dir: ./output/${exp_name}/rollouts
 checkpoint_config: {}
 track_with: rdan_wandb
-tracker_kwargs: {}
+tracker_kwargs:
+  project: rdan-grpo-qwen3-4b
+  name: ${exp_name}
 
+num_gpus_per_node: ${num_gpus}
+max_steps: 500
+save_steps: 20
+logging_steps: 1
+resume_from_checkpoint: false
+rpc_timeout: 3600
+
+rollout_batch_size: 64
+prompt_length: 2048
+response_length: 4096
+num_return_sequences_in_group: 8
+ppo_epochs: 1
+adv_estimator: reinforce
+
+pg_clip: 0.2
+pg_clip_low: 0.2
+pg_clip_high: 0.27
+use_pg_clip_range: true
+importance_sampling: token
+dual_clip_loss: false
+whiten_rewards: false
+whiten_advantages: false
+
+# RDAN carries no reference model and no KL term: the advantage already contains both the
+# outcome and the process channel, and a KL anchor would dampen the process signal.
+init_kl_coef: 0
+enable_reference: false
+add_token_level_kl: false
+enable_old_logprobs_recompute: true
 async_pipeline: false
 async_generation_ratio: 0
 generate_opt_level: 0
 is_num_return_sequences_expand: false
-enable_reference: false
-enable_old_logprobs_recompute: true
-init_kl_coef: 0
-rollout_batch_size: 64
-num_return_sequences_in_group: 8
-max_steps: 500
-save_steps: 20
 
 pretrain: ${oc.env:RDAN_MODEL_SNAPSHOT}
+
 actor_train:
   worker_cls: rdan_grpo.workers.ResponseActorWorker
   model_args:
@@ -50,8 +81,8 @@ actor_train:
     strategy_name: fsdp2_train
     strategy_config:
       transformer_impl: huggingface
-  device_mapping: [0, 1]
-  world_size: 2
+  device_mapping: ${num_gpus}
+  world_size: ${num_gpus}
   num_gpus_per_worker: 1
   infer_batch_size: 4
 
@@ -78,15 +109,15 @@ actor_infer:
       max_model_len: 8000
       load_format: auto
       sleep_level: 1
-  device_mapping: [0, 1]
-  world_size: 2
+  device_mapping: ${num_gpus}
+  world_size: ${num_gpus}
   num_gpus_per_worker: 1
   max_concurrency: 32
   infer_batch_size: 4
 
 rewards:
   llm_judge:
-    worker_cls: rdan_grpo.reward_worker.RTTCompatibleRubricRewardWorker
+    worker_cls: rdan_grpo.reward_worker.RubricRewardWorker
     world_size: 8
     device_mapping: null
     max_concurrency: 1
@@ -98,20 +129,8 @@ rewards:
       model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
       disable_gradient_checkpointing: true
       dtype: bf16
-    generating_args:
-      max_new_tokens: 512
-      top_p: 0.01
-      top_k: 1
-      num_beams: 1
-      temperature: 0.01
-      num_return_sequences: 1
     data_args:
       template: native
     strategy_args:
       strategy_name: hf_infer
     infer_batch_size: 8
-
-rdan_response:
-  method: rtt_papo_response
-  quality_weight: 1.0
-  mix_weight: null

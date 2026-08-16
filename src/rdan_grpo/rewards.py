@@ -12,7 +12,6 @@ class RubricRewards:
 
     aon: Tensor
     csr: Tensor
-    signed_csr: Tensor
     valid: Tensor
 
 
@@ -25,38 +24,30 @@ class QualityScores:
     quality_valid: Tensor
     eligible: Tensor
 
-    @property
-    def valid(self) -> Tensor:
-        """Return soft-quality validity for compatibility with the original API."""
-        return self.quality_valid
-
 
 def score_rubrics(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor) -> RubricRewards:
-    """Compute fail-closed AON, unit CSR, and signed CSR rewards.
+    """Compute all-or-nothing and mean-satisfaction rewards over the active rubrics.
 
     Active scores must be finite and in the signed interval ``[-1, 1]``.
-    A response with no active rubric or any invalid active evaluation receives zero on every channel.
+    A response with no active rubric or any unevaluated active rubric scores zero and is invalid.
     """
 
     _check_score_inputs(scores, rubric_mask, eval_mask)
     valid = _response_valid(scores, rubric_mask, eval_mask)
     count = rubric_mask.sum(dim=-1).clamp_min(1)
     clean = torch.where(rubric_mask & eval_mask & torch.isfinite(scores), scores, 0.0)
-    unit = (clean + 1.0) / 2.0
-    unit = torch.where(rubric_mask, unit, 0.0)
+    unit = torch.where(rubric_mask, (clean + 1.0) / 2.0, 0.0)
     csr = unit.sum(dim=-1) / count
-    signed = clean.sum(dim=-1) / count
     aon = ((scores == 1) | ~rubric_mask).all(dim=-1).to(scores.dtype)
     keep = valid.to(scores.dtype)
-    return RubricRewards(aon=aon * keep, csr=csr * keep, signed_csr=signed * keep, valid=valid)
+    return RubricRewards(aon=aon * keep, csr=csr * keep, valid=valid)
 
 
 def extract_quality(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor, hard_mask: Tensor) -> QualityScores:
-    """Extract deterministic hard-pass eligibility and mean unit soft quality.
+    """Extract hard-rubric pass and mean soft-rubric quality on independent validity.
 
-    Hard-only responses can pass but are not quality-eligible because they have no soft score.
-    Soft-only responses cannot pass the independent authoritative gate and are never quality-eligible.
-    Hard evaluator failure affects only ``hard_pass`` and soft judge failure affects only ``quality_valid``.
+    Hard evaluator failure affects only ``hard_pass``; judge failure affects only ``quality_valid``.
+    A response is quality-eligible only when it passed every hard rubric and its soft judgment is intact.
     """
 
     _check_score_inputs(scores, rubric_mask, eval_mask)
@@ -65,16 +56,14 @@ def extract_quality(scores: Tensor, rubric_mask: Tensor, eval_mask: Tensor, hard
 
     hard = rubric_mask & hard_mask
     soft = rubric_mask & ~hard_mask
-    active = rubric_mask.any(dim=-1)
-    hard_valid = ((eval_mask & torch.isfinite(scores) & ((scores == -1) | (scores == 1))) | ~hard).all(dim=-1)
-    hard_pass = active & hard.any(dim=-1) & hard_valid & ((scores == 1) | ~hard).all(dim=-1)
+    hard_valid = ((eval_mask & ((scores == -1) | (scores == 1))) | ~hard).all(dim=-1)
+    hard_pass = hard_valid & ((scores == 1) | ~hard).all(dim=-1)
     quality_valid = soft.any(dim=-1) & (
         (eval_mask & torch.isfinite(scores) & (scores >= -1) & (scores <= 1)) | ~soft
     ).all(dim=-1)
     count = soft.sum(dim=-1).clamp_min(1)
     unit = torch.where(soft & torch.isfinite(scores), (scores + 1.0) / 2.0, 0.0)
-    quality = unit.sum(dim=-1) / count
-    quality = torch.where(quality_valid, quality, 0.0)
+    quality = torch.where(quality_valid, unit.sum(dim=-1) / count, 0.0)
     return QualityScores(
         hard_pass=hard_pass,
         quality=quality,

@@ -5,14 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rdan-grpo"
 version = "0.1.0"
-description = "A compact reward and advantage core for RDAN-GRPO experiments"
+description = "Rubric Decoupled Advantage Normalization GRPO for instruction following RL"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["datasets==3.1.0", "openai==2.20.0", "pyyaml>=6", "torch>=2.1"]
+dependencies = [
+    "datasets==3.1.0",
+    "matplotlib>=3.8",
+    "openai==2.20.0",
+    "pyyaml>=6",
+    "torch>=2.1",
+]
 
 [project.optional-dependencies]
-dev = ["matplotlib>=3.8", "pytest>=8", "ruff>=0.11"]
-plots = ["matplotlib>=3.8"]
+dev = ["pytest>=8", "ruff>=0.11"]
 
 [tool.ruff]
 line-length = 119
@@ -23,6 +28,4 @@ select = ["E", "F", "I", "W"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.setuptools.data-files]
-"share/doc/rdan-grpo" = ["THIRD_PARTY_NOTICES.md", "LICENSES/Apache-2.0.txt"]
+pythonpath = ["src"]

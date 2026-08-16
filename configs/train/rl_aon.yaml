@@ -1,0 +1,9 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: rl-aon-qwen3-4b
+
+# Baseline: one outcome channel, all-or-nothing over all rubrics.
+rdan_response:
+  method: rl_aon

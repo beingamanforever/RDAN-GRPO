@@ -1,27 +1,22 @@
-"""Compact reward, advantage, and loss functions for RDAN-GRPO."""
+"""RDAN-GRPO: rubric decoupled advantage normalization for instruction following RL."""
 
-from rdan_grpo.advantages import group_advantages, quality_advantages
+from rdan_grpo.advantages import group_advantages
+from rdan_grpo.bridge import assess_batch, inject_advantages, make_advantage_fn
 from rdan_grpo.loss import clipped_actor_loss
 from rdan_grpo.rewards import QualityScores, RubricRewards, extract_quality, score_rubrics
-from rdan_grpo.bridge import (
-    BatchAssessment,
-    assess_scalar_batch,
-    inject_roll_advantages,
-    install_roll_adapter,
-    make_roll_compute_advantage,
-)
+from rdan_grpo.scalar import ScalarMethod, ScalarOutput, build_scalar_output
 
 __all__ = [
-    "BatchAssessment",
     "QualityScores",
     "RubricRewards",
-    "assess_scalar_batch",
+    "ScalarMethod",
+    "ScalarOutput",
+    "assess_batch",
+    "build_scalar_output",
     "clipped_actor_loss",
     "extract_quality",
     "group_advantages",
-    "inject_roll_advantages",
-    "install_roll_adapter",
-    "make_roll_compute_advantage",
-    "quality_advantages",
+    "inject_advantages",
+    "make_advantage_fn",
     "score_rubrics",
 ]

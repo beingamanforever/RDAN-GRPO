@@ -16,3 +16,9 @@ dist/
 /data/
 /output/
 /wandb/
+
+# agent instructions and root license duplicate stay local
+CLAUDE.md
+CLAUIDE.md
+AGENTS.md
+/Apache-2.0.txt

@@ -1,0 +1,10 @@
+defaults:
+  - base
+  - _self_
+
+exp_name: rdan-grpo-qwen3-4b
+
+# Decoupled advantage: outcome over the whole group, process over hard-passing responses only.
+rdan_response:
+  method: rdan
+  quality_weight: 1.0

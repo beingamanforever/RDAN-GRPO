@@ -1,27 +1,53 @@
-"""Fail-closed deterministic RubricHub rule routes."""
+"""Deterministic hard-rubric checkers: RubricHub routes and sandboxed HIR type4 rules."""
 
 from __future__ import annotations
 
-import hashlib
-import json
+import ast
 import math
+import multiprocessing
 import numbers
+import os
+import re
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import Path
+from queue import Empty
 from typing import Any, Callable, Mapping
 
-CERTIFIED_FUNCTIONS = frozenset({"CommaChecker", "LetterFrequencyChecker"})
+RUBRICHUB_FUNCTIONS = frozenset({"CommaChecker", "LetterFrequencyChecker"})
 RELATIONS = frozenset({"at least", "less than"})
 
+# Type4 rules are Python supplied by the dataset, so they run in a killable child with no
+# builtins beyond these and only these imports. Names are deliberately not allowlisted: an
+# allowlist fitted to the rules seen so far rejects valid unseen ones during training.
+SAFE_BUILTINS = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bool": bool,
+    "enumerate": enumerate,
+    "float": float,
+    "int": int,
+    "len": len,
+    "list": list,
+    "max": max,
+    "min": min,
+    "range": range,
+    "set": set,
+    "sorted": sorted,
+    "str": str,
+    "sum": sum,
+    "zip": zip,
+}
+SAFE_IMPORTS = {"re": re, "collections": Counter}
 
-class RubricHubRuleError(ValueError):
-    """Raised when a RubricHub rule request violates the certified contract."""
+
+class RuleError(ValueError):
+    """Raised when a rule request violates the checker contract."""
 
 
 @dataclass(frozen=True)
 class RuleResult:
-    """One deterministic rule outcome with fail-closed validity."""
+    """One deterministic rule outcome. ``valid`` is false when the checker itself failed."""
 
     valid: bool
     passed: bool
@@ -29,29 +55,79 @@ class RuleResult:
 
 
 def evaluate_rubrichub_rule(function: Any, response: Any, parameters: Any) -> RuleResult:
-    """Evaluate one certified route and return a fail-closed result."""
+    """Evaluate one RubricHub checker route."""
 
     try:
-        if not isinstance(function, str) or function not in CERTIFIED_FUNCTIONS:
-            raise RubricHubRuleError("uncertified_rule_route")
+        if not isinstance(function, str) or function not in RUBRICHUB_FUNCTIONS:
+            raise RuleError("unsupported_rule_route")
         if not isinstance(response, str):
-            raise RubricHubRuleError("response_must_be_string")
-        checker = _CHECKERS[function]
-        return RuleResult(True, checker(response, parameters), None)
+            raise RuleError("response_must_be_string")
+        return RuleResult(True, _CHECKERS[function](response, parameters), None)
     except Exception as error:
-        message = str(error) if isinstance(error, RubricHubRuleError) else "rule_evaluation_failed"
-        return RuleResult(False, False, message)
+        return RuleResult(False, False, str(error) if isinstance(error, RuleError) else "rule_evaluation_failed")
+
+
+def evaluate_python_rule(code: str, instruction: str, response: str, timeout_seconds: float = 2.0) -> RuleResult:
+    """Run a dataset-supplied ``check_following`` rule in an isolated child process."""
+
+    try:
+        validate_python_rule(code)
+    except RuleError as error:
+        return RuleResult(False, False, str(error))
+    context = multiprocessing.get_context("fork" if "fork" in multiprocessing.get_all_start_methods() else "spawn")
+    queue = context.Queue(maxsize=1)
+    process = context.Process(target=_run_rule, args=(code, instruction, response, queue))
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        process.kill()
+        process.join()
+        return RuleResult(False, False, "timeout")
+    try:
+        value = queue.get_nowait()
+    except Empty:
+        return RuleResult(False, False, "rule_process_died")
+    if not isinstance(value, bool):
+        return RuleResult(False, False, str(value))
+    return RuleResult(True, value, None)
+
+
+def validate_python_rule(code: str) -> ast.Module:
+    """Parse a type4 rule and reject dunder access and unapproved imports."""
+
+    if not isinstance(code, str) or not code.strip():
+        raise RuleError("rule_source_empty")
+    if "__" in code:
+        raise RuleError("rule_source_uses_dunder")
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as error:
+        raise RuleError(f"rule_syntax_invalid:{error.msg}") from error
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+    if len(functions) != 1 or functions[0].name != "check_following":
+        raise RuleError("rule_must_define_one_check_following")
+    if any(not isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef)) for node in tree.body):
+        raise RuleError("rule_module_has_top_level_statement")
+    for node in tree.body:
+        if isinstance(node, ast.Import) and any(alias.name not in SAFE_IMPORTS for alias in node.names):
+            raise RuleError("rule_imports_unapproved_module")
+        if isinstance(node, ast.ImportFrom) and node.module not in SAFE_IMPORTS:
+            raise RuleError("rule_imports_unapproved_module")
+    if [argument.arg for argument in functions[0].args.args] != ["instruction", "response"]:
+        raise RuleError("check_following_signature_invalid")
+    return tree
 
 
 def comma_checker(response: str, parameters: Any) -> bool:
     """Return whether the response contains no ASCII comma."""
 
-    _empty_parameters(parameters)
+    if not isinstance(parameters, Mapping) or parameters:
+        raise RuleError("comma_parameters_must_be_empty")
     return "," not in response
 
 
 def letter_frequency_checker(response: str, parameters: Any) -> bool:
-    """Check one ASCII letter count against the certified relation."""
+    """Check one ASCII letter count against the requested relation."""
 
     normalized = normalize_letter_parameters(parameters)
     count = Counter(response.lower())[normalized["letter"]]
@@ -64,75 +140,50 @@ def normalize_letter_parameters(parameters: Any) -> dict[str, str | int]:
     """Validate and normalize LetterFrequencyChecker parameters."""
 
     if not isinstance(parameters, Mapping) or set(parameters) != {"letter", "let_frequency", "let_relation"}:
-        raise RubricHubRuleError("letter_parameters_schema_invalid")
+        raise RuleError("letter_parameters_schema_invalid")
     letter = parameters["letter"]
-    if (
-        not isinstance(letter, str)
-        or len(letter) != 1
-        or letter not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    ):
-        raise RubricHubRuleError("letter_must_be_one_ascii_alphabetic_character")
+    if not isinstance(letter, str) or len(letter) != 1 or not letter.isascii() or not letter.isalpha():
+        raise RuleError("letter_must_be_one_ascii_alphabetic_character")
     relation = parameters["let_relation"]
     if not isinstance(relation, str) or relation not in RELATIONS:
-        raise RubricHubRuleError("let_relation_invalid")
-    frequency = _frequency(parameters["let_frequency"])
-    return {"letter": letter.lower(), "let_frequency": frequency, "let_relation": relation}
-
-
-def implementation_sha256() -> str:
-    """Return the exact implementation file hash."""
-
-    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-
-
-def verify_rule_certificate(path: str | Path, source: Mapping[str, Any]) -> dict[str, Any]:
-    """Verify a compact checker certificate against this implementation."""
-
-    certificate_path = Path(path)
-    try:
-        payload = json.loads(certificate_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise RubricHubRuleError("checker_certificate_unreadable") from error
-    expected_source = {
-        "dataset": source["dataset"],
-        "revision": source["revision"],
-        "file": source["file"],
-        "sha256": source["sha256"],
-        "records": source["records"],
+        raise RuleError("let_relation_invalid")
+    return {
+        "letter": letter.lower(),
+        "let_frequency": _frequency(parameters["let_frequency"]),
+        "let_relation": relation,
     }
-    if payload.get("schema_version") != 1 or payload.get("status") != "certified":
-        raise RubricHubRuleError("checker_certificate_status_invalid")
-    if payload.get("source") != expected_source:
-        raise RubricHubRuleError("checker_certificate_source_invalid")
-    routes = payload.get("routes")
-    if (
-        not isinstance(routes, list)
-        or len(routes) != len(CERTIFIED_FUNCTIONS)
-        or not all(isinstance(route, dict) for route in routes)
-        or {route.get("function") for route in routes} != set(CERTIFIED_FUNCTIONS)
-    ):
-        raise RubricHubRuleError("checker_certificate_routes_invalid")
-    digest = implementation_sha256()
-    if any(route.get("implementation_sha256") != digest for route in routes):
-        raise RubricHubRuleError("checker_certificate_implementation_stale")
-    return payload
 
 
 def _frequency(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, numbers.Real):
-        raise RubricHubRuleError("let_frequency_must_be_numeric_integer")
+        raise RuleError("let_frequency_must_be_numeric_integer")
     numeric = float(value)
-    if not math.isfinite(numeric) or not numeric.is_integer():
-        raise RubricHubRuleError("let_frequency_must_be_finite_integer")
-    frequency = int(numeric)
-    if not 1 <= frequency <= 20:
-        raise RubricHubRuleError("let_frequency_out_of_range")
-    return frequency
+    if not math.isfinite(numeric) or not numeric.is_integer() or not 1 <= numeric <= 20:
+        raise RuleError("let_frequency_out_of_range")
+    return int(numeric)
 
 
-def _empty_parameters(parameters: Any) -> None:
-    if not isinstance(parameters, Mapping) or parameters:
-        raise RubricHubRuleError("comma_parameters_must_be_empty")
+def _run_rule(code: str, instruction: str, response: str, queue: Any) -> None:
+    """Child entry point: apply resource limits, execute the rule, and report one value."""
+
+    try:
+        os.environ.clear()
+        try:
+            import resource
+
+            resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+            resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
+            resource.setrlimit(resource.RLIMIT_NOFILE, (16, 16))
+        except (ImportError, OSError, ValueError):
+            pass
+        tree = validate_python_rule(code)
+        tree.body = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+        scope: dict[str, Any] = {"__builtins__": SAFE_BUILTINS, "re": re, "Counter": Counter}
+        exec(compile(tree, "<type4-rule>", "exec"), scope)
+        value = scope["check_following"](instruction, response)
+        queue.put(value if isinstance(value, bool) else "rule_returned_non_boolean")
+    except BaseException as error:
+        queue.put(f"{type(error).__name__}: {error}")
 
 
 _CHECKERS: dict[str, Callable[[str, Any], bool]] = {
