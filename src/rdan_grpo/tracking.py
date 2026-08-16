@@ -56,8 +56,12 @@ class RdanTracker:
         with self.metrics_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
         if self.run is not None:
-            # step=None keeps W&B's own index monotonic across a resume; the true pipeline
-            # step travels in STEP_METRIC and is configured as the x-axis at init.
+            # Make W&B's own step index the pipeline step, so every panel plots correctly on
+            # the default axis. A custom x-axis needs define_metric to associate each metric
+            # with it, and a "*" glob there also captures the axis metric itself, which leaves
+            # the axis self-referential and every panel empty.
+            if step is None and isinstance(row.get(STEP_METRIC), (int, float)):
+                step = int(row[STEP_METRIC])
             self.run.log(dict(row), step=step, **kwargs)
 
     def finish(self) -> None:
@@ -135,7 +139,4 @@ def _start_wandb(config: Mapping[str, Any], log_dir: Path, kwargs: dict[str, Any
         print(f"W&B unavailable ({type(error).__name__}: {error}); metrics go to {log_dir / METRICS_FILE} only")
         return None
     run.config.update(dict(config), allow_val_change=True)
-    # Put every curve on the true pipeline step so a resume does not compress the x-axis.
-    run.define_metric(STEP_METRIC)
-    run.define_metric("*", step_metric=STEP_METRIC)
     return run

@@ -600,6 +600,31 @@ def test_tracker_mirrors_metrics_to_disk_and_plots_curves(tmp_path: Path, monkey
     assert (tmp_path / "curves/judge.png").is_file()
 
 
+def test_tracker_uses_the_pipeline_step_as_the_wandb_step(tmp_path: Path) -> None:
+    """W&B's own step index must be the pipeline step, so default panels plot correctly."""
+
+    logged: list[tuple[dict[str, Any], int | None]] = []
+
+    class FakeRun:
+        def log(self, values: dict[str, Any], step: int | None = None, **_: Any) -> None:
+            logged.append((values, step))
+
+        def finish(self) -> None:
+            pass
+
+    monkey = FakeRun()
+    tracker = RdanTracker.__new__(RdanTracker)
+    tracker.metrics_path = tmp_path / "metrics.jsonl"
+    tracker.run = monkey
+
+    tracker.log({"system/step": 7.0, "reward/selected_mean": 0.5})
+
+    assert logged[0][1] == 7
+    # An explicit step from the caller still wins.
+    tracker.log({"system/step": 8.0}, step=99)
+    assert logged[1][1] == 99
+
+
 def test_curves_can_be_rebuilt_from_the_mirror_alone(tmp_path: Path) -> None:
     metrics = tmp_path / "metrics.jsonl"
     metrics.write_text(
