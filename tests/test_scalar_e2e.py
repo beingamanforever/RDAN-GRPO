@@ -121,12 +121,10 @@ def test_invalid_evaluator_fails_closed_without_scalar_credit(method: str, weigh
     )
 
     assert not output.response_valid[2]
-    assert output.response_advantage[2] == 0
+    # A_out spans the whole group like PAPO, so the invalid response is denied credit by the
+    # composition rather than by being dropped from the group statistics.
     assert output.scalar_advantage[2] == 0
-    assert torch.equal(
-        output.response_advantage,
-        group_advantages(output.selected_raw_reward, 4, valid=output.response_valid),
-    )
+    assert torch.equal(output.response_advantage, group_advantages(output.selected_raw_reward, 4))
     assert not output.training_ready
     assert output.diagnostics["invalid_response_count"] == 1
     assert output.diagnostics["finite"] is True

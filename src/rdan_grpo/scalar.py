@@ -106,7 +106,10 @@ def build_scalar_output(
         quality_eligible = hard_pass & quality.quality_valid
     response_valid = rewards.valid & all_rewards.valid
     selected = _select_reward(method, rewards.aon, rewards.csr, mix)
-    response_advantage = group_advantages(selected, group_size, valid=response_valid)
+    # PAPO normalizes the outcome advantage over the whole group and the process advantage
+    # over the correct subset only, so A_out sees every response and invalid ones are zeroed
+    # after composition rather than excluded from the group statistics.
+    response_advantage = group_advantages(selected, group_size)
     quality_advantage = torch.zeros_like(response_advantage)
     scalar_advantage = response_advantage
     if method in QUALITY_METHODS:

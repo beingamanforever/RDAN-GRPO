@@ -36,42 +36,6 @@ def group_advantages(
     return out.reshape_as(rewards)
 
 
-def token_advantages(
-    values: Tensor,
-    rubric_mask: Tensor,
-    token_mask: Tensor,
-    valid: Tensor,
-    eps: float = 1e-6,
-) -> Tensor:
-    """Normalize each response-rubric token sequence, then average active rubrics.
-
-    ``values`` contains reward-weighted token relevance with shape ``[responses, rubrics, tokens]``.
-    Statistics use only unpadded tokens and population standard deviation.
-    """
-
-    if not values.is_floating_point() or values.ndim != 3:
-        raise ValueError("values must be a floating tensor with shape [responses, rubrics, tokens]")
-    if rubric_mask.dtype != torch.bool or rubric_mask.shape != values.shape[:2]:
-        raise ValueError("rubric_mask must be boolean with shape [responses, rubrics]")
-    if token_mask.dtype != torch.bool or token_mask.shape != (values.shape[0], values.shape[2]):
-        raise ValueError("token_mask must be boolean with shape [responses, tokens]")
-    if valid.dtype != torch.bool or valid.shape != (values.shape[0],):
-        raise ValueError("valid must be boolean with shape [responses]")
-    active_rubric = rubric_mask & valid.unsqueeze(-1)
-    active = active_rubric.unsqueeze(-1) & token_mask.unsqueeze(1)
-    if not bool((torch.isfinite(values) | ~active).all()):
-        raise ValueError("active token values must be finite")
-
-    safe = torch.where(active, values, 0.0)
-    mask = active.to(values.dtype)
-    count = mask.sum(dim=-1, keepdim=True).clamp_min(1)
-    mean = safe.sum(dim=-1, keepdim=True) / count
-    var = ((safe - mean).square() * mask).sum(dim=-1, keepdim=True) / count
-    std = var.sqrt()
-    norm = torch.where((std > eps) & active, (values - mean) / (std + eps), 0.0)
-    rubrics = active_rubric.sum(dim=-1, keepdim=True).clamp_min(1)
-    return norm.sum(dim=1) / rubrics * token_mask.to(values.dtype)
-
 
 def quality_advantages(
     quality: Tensor,
@@ -108,27 +72,6 @@ def quality_advantages(
     out = torch.where(use & selected, (groups - mean) / (std + eps), 0.0)
     return out.reshape_as(quality)
 
-
-def compose_advantages(
-    response: Tensor,
-    token: Tensor,
-    quality: Tensor,
-    token_mask: Tensor,
-    beta: float = 1.0,
-    quality_weight: float = 1.0,
-) -> Tensor:
-    """Compose ``A_res + beta * A_tok + quality_weight * A_qual`` on response tokens."""
-
-    if response.ndim != 1 or quality.shape != response.shape:
-        raise ValueError("response and quality must have matching shape [responses]")
-    if token.ndim != 2 or token.shape[0] != response.shape[0]:
-        raise ValueError("token must have shape [responses, tokens]")
-    if token_mask.dtype != torch.bool or token_mask.shape != token.shape:
-        raise ValueError("token_mask must be boolean and match token")
-    if not response.is_floating_point() or not token.is_floating_point() or not quality.is_floating_point():
-        raise ValueError("advantages must be floating tensors")
-    out = response.unsqueeze(-1) + beta * token + quality_weight * quality.unsqueeze(-1)
-    return out * token_mask.to(out.dtype)
 
 
 def _groups(values: Tensor, group_size: int) -> Tensor:

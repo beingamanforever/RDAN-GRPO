@@ -24,7 +24,7 @@ save_steps: 20
 
 pretrain: ${oc.env:RDAN_MODEL_SNAPSHOT}
 actor_train:
-  worker_cls: rdan_grpo.roll_response_workers.ResponseActorWorker
+  worker_cls: rdan_grpo.workers.ResponseActorWorker
   model_args:
     model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
     attn_implementation: sdpa
@@ -39,7 +39,7 @@ actor_train:
     num_train_epochs: 50
   data_args:
     template: qwen3_nothinking
-    file_name: [data/qwen_hir_rubrichub_if_hybrid.jsonl]
+    file_name: [data/hybrid.jsonl]
     domain_interleave_probs:
       llm_judge: 1.0
     dataset_dir: .
@@ -56,7 +56,7 @@ actor_train:
   infer_batch_size: 4
 
 actor_infer:
-  worker_cls: rdan_grpo.roll_response_workers.ResponseVLLMInferWorker
+  worker_cls: rdan_grpo.workers.ResponseVLLMInferWorker
   model_args:
     model_name_or_path: ${oc.env:RDAN_MODEL_SNAPSHOT}
     attn_implementation: sdpa
@@ -86,7 +86,7 @@ actor_infer:
 
 rewards:
   llm_judge:
-    worker_cls: rdan_grpo.roll_reward.RTTCompatibleRubricRewardWorker
+    worker_cls: rdan_grpo.reward_worker.RTTCompatibleRubricRewardWorker
     world_size: 8
     device_mapping: null
     max_concurrency: 1

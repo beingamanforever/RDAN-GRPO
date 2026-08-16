@@ -212,8 +212,8 @@
   "outputs": {
     "rubrichub_archive": "data/RubricHub_v1_instruction_following_rdan.jsonl",
     "rubrichub_eligible": "data/RubricHub_v1_instruction_following_rl_eligible.jsonl",
-    "merged_archive": "data/qwen_hir_rubrichub_if_merged.jsonl",
-    "merged_eligible": "data/qwen_hir_rubrichub_if_hybrid.jsonl",
+    "merged_archive": "data/merged.jsonl",
+    "merged_eligible": "data/hybrid.jsonl",
     "manifest": "configs/artifacts/qwen_merged_rl_data_manifest.json"
   }
 }

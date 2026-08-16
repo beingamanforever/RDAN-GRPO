@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 DEFAULT_CONFIG = ROOT / "configs/roll/qwen_rtt_papo_response_train.yaml"
-DEFAULT_DATA = ROOT / "data/qwen_hir_rubrichub_if_hybrid.jsonl"
+DEFAULT_DATA = ROOT / "data/hybrid.jsonl"
 RTT_ROOT_ENV = "RTT_ROOT"
 REQUIRED_SECRETS = ("OPENROUTER_API_KEY", "WANDB_API_KEY")
 

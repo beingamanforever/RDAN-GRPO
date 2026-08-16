@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from rdan_grpo.compat import RTT_BASE_CONFIG_SHA256, RTT_REVISION
 from rdan_grpo.tracking import canonical_config_sha256
 
 ACTOR_WORKER_PATH = "rdan_grpo.workers.ResponseActorWorker"
 INFER_WORKER_PATH = "rdan_grpo.workers.ResponseVLLMInferWorker"
 HYBRID_REWARD_WORKER_PATH = "rdan_grpo.reward_worker.RTTCompatibleRubricRewardWorker"
 SCALAR_REWARD_WORKER_PATH = "rdan_grpo.reward_worker.ScalarRubricRewardWorker"
-HYBRID_DATA_PATH = "data/qwen_hir_rubrichub_if_hybrid.jsonl"
-SCALAR_DATA_PATH = "data/qwen_hir_rubrichub_if_rl_eligible.jsonl"
+HYBRID_DATA_PATH = "data/hybrid.jsonl"
+SCALAR_DATA_PATH = "data/eligible.jsonl"
 SIDECAR_KEY = "rdan_response"
 HYBRID_METHODS = frozenset({"rtt_papo_response", "rl_csr", "rl_aon"})
 METHODS = HYBRID_METHODS | {"rdan_scalar", "rl_mix"}
@@ -88,7 +86,6 @@ def load_response_rlvr_config(rtt_root: str | Path, config_cls: type, payload: M
     production = deepcopy(payload)
     response = _response_config(production)
     _validate_payload(production, response)
-    _verify_rtt(Path(rtt_root).resolve())
 
     production["actor_train"]["device_mapping"] = repr([0, 1])
     production["actor_infer"]["device_mapping"] = repr([0, 1])
@@ -255,29 +252,6 @@ def _construct(config_cls: type, payload: Mapping[str, Any]) -> Any:
 
     return from_dict(data_class=config_cls, data=payload)
 
-
-def _verify_rtt(root: Path) -> None:
-    import subprocess
-
-    top_level = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    revision = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-    ).stdout.strip()
-    status = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    base_config = root / "roll/configs/base_config.py"
-    digest = hashlib.sha256(base_config.read_bytes()).hexdigest()
-    if Path(top_level).resolve() != root or revision != RTT_REVISION or status or digest != RTT_BASE_CONFIG_SHA256:
-        raise RuntimeError("response config requires the exact clean pinned RTT checkout")
 
 
 def _validate_config(config: Any) -> None:

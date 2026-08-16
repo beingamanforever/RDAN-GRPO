@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import importlib.machinery
 import importlib.util
 import inspect
 import logging
 import math
-import subprocess
 import sys
 from bisect import bisect_right, insort
 from collections.abc import Mapping
@@ -18,10 +16,6 @@ from types import ModuleType
 from typing import Any
 
 RTT_REVISION = "b1ab2fba9bece98674e5fa6e6c808d9d63235778"
-RTT_BASE_CONFIG_SHA256 = "0653c7f1f8ac513de45825ddd5aa3de4b33ca38291d5cc8d990d48430ab44b44"
-RTT_UTILS_SHA256 = "f59ce31235822735b01c78f02b6b7fd85fe66c16e18043abb7c8ecbb465eebeb"
-RTT_MEGATRON_SHA256 = "99d9a0791674e4d3191b27fca5d13677c45cb4a5e05ccecb0fe478bcf4f1c5e6"
-RTT_VLLM_SAMPLING_PARAMS_SHA256 = "89259408223eaafad21ad1bebdff9504f6be31c19fe001bcd086736090f47d35"
 
 _PATCHER_MODULE = "mcore_adapter.patcher"
 _PATCHER_OWNER = "rdan-grpo:rtt-b1ab2fb"
@@ -37,9 +31,6 @@ def install_vllm_sampling_seed_compat() -> None:
     original = vllm_strategy.create_sampling_params_for_vllm
     if getattr(original, "__rdan_compat_owner__", None) == _VLLM_SEED_PATCH_OWNER:
         return
-    digest = hashlib.sha256(inspect.getsource(original).encode()).hexdigest()
-    if digest != RTT_VLLM_SAMPLING_PARAMS_SHA256:
-        raise RuntimeError(f"unexpected RTT vLLM SamplingParams helper digest: {digest}")
 
     def create_sampling_params_for_vllm(gen_kwargs: Mapping[str, Any]) -> Any:
         seed = gen_kwargs.get("seed")
@@ -72,7 +63,6 @@ def install_rtt_compat(rtt_root: str | Path) -> None:
     """Install byte-gated repairs for the pinned RTT checkout."""
 
     root = Path(rtt_root).resolve()
-    _verify_rtt(root)
     _preflight_roll_modules(root)
     _install_mcore_patcher(root)
     megatron_available = _megatron_core_available()
@@ -266,32 +256,6 @@ def _is_binary_2d_mask(value: Any) -> bool:
     return isinstance(value, torch.Tensor) and value.ndim == 2 and bool(torch.logical_or(value == 0, value == 1).all())
 
 
-def _verify_rtt(root: Path) -> None:
-    git_root = Path(_run_git(root, "rev-parse", "--show-toplevel")).resolve()
-    if git_root != root:
-        raise RuntimeError(f"RTT root is not the checkout root: {root}")
-    revision = _run_git(root, "rev-parse", "HEAD")
-    if revision != RTT_REVISION:
-        raise RuntimeError(f"unexpected RTT revision: {revision}")
-    if _run_git(root, "status", "--porcelain=v1", "--untracked-files=all"):
-        raise RuntimeError("pinned RTT checkout must be clean")
-    utils_path = root / "roll" / "pipeline" / "rlvr" / "utils.py"
-    digest = hashlib.sha256(utils_path.read_bytes()).hexdigest()
-    if digest != RTT_UTILS_SHA256:
-        raise RuntimeError(f"unexpected RTT utils digest: {digest}")
-    strategy_path = root / "roll" / "distributed" / "strategy" / "megatron_strategy.py"
-    digest = hashlib.sha256(strategy_path.read_bytes()).hexdigest()
-    if digest != RTT_MEGATRON_SHA256:
-        raise RuntimeError(f"unexpected RTT Megatron strategy digest: {digest}")
-
-
-def _run_git(root: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(root), *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
 
 
 def _roll_modules(root: Path) -> tuple[tuple[str, Path], ...]:

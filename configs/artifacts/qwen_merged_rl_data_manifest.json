@@ -107,7 +107,7 @@
     "source_priority": "HIR before RubricHub",
     "source_rows": 95173
   },
-  "id": "qwen_hir_rubrichub_if_hybrid_v1",
+  "id": "hybrid_v1",
   "language_gate": {
     "accepted_english_rows": 77746,
     "certificate": {
@@ -139,14 +139,14 @@
     "merged_archive": {
       "bytes": 671969815,
       "format": "jsonl",
-      "path": "data/qwen_hir_rubrichub_if_merged.jsonl",
+      "path": "data/merged.jsonl",
       "records": 94713,
       "sha256": "d9f47657450c37aefc940cb3f66ffd3f46844f71d2fc41b66b0adbb3b89a205e"
     },
     "merged_eligible": {
       "bytes": 125963635,
       "format": "jsonl",
-      "path": "data/qwen_hir_rubrichub_if_hybrid.jsonl",
+      "path": "data/hybrid.jsonl",
       "records": 18096,
       "sha256": "1e617fbea5935b258a1172a59a1eb6ccc83bb879b02992b1aeaf642b79708dfe"
     },

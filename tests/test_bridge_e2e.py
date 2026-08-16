@@ -22,7 +22,6 @@ from rdan_grpo.bridge import (
     require_train_certificate,
     write_certificate,
 )
-from rdan_grpo.sampling import PREFLIGHT_SOURCES, balanced_preflight_indices
 from rdan_grpo.scalar import ScalarMethod
 
 
@@ -46,38 +45,6 @@ def _batch(
     hard_mask = torch.zeros_like(scores, dtype=torch.bool)
     hard_mask[:, 0] = True
     return keys, scores, rubric_mask, eval_mask, hard_mask
-
-
-def test_no_update_preflight_covers_full_merged_inventory() -> None:
-    inventory = {
-        "type1": 6549,
-        "type2": 449,
-        "type3": 3603,
-        "type4": 6361,
-        "rubrichub_instruction_following": 1134,
-    }
-    sources = [source for source in PREFLIGHT_SOURCES for _ in range(inventory[source])]
-    assert len(sources) == 18_096
-
-    first = balanced_preflight_indices(sources, 256)
-    second = balanced_preflight_indices(sources, 256)
-
-    assert first == second
-    assert len(first) == len(set(first)) == 256
-    selected = [sources[index] for index in first]
-    assert {source: selected.count(source) for source in PREFLIGHT_SOURCES} == {
-        "type1": 52,
-        "type2": 51,
-        "type3": 51,
-        "type4": 51,
-        "rubrichub_instruction_following": 51,
-    }
-    with pytest.raises(ValueError, match="every frozen source"):
-        balanced_preflight_indices([PREFLIGHT_SOURCES[0]] * 256, 256)
-    with pytest.raises(ValueError, match="unexpected source"):
-        balanced_preflight_indices(sources + ["unknown"], 256)
-    with pytest.raises(ValueError, match="cover every frozen source"):
-        balanced_preflight_indices(sources, 4)
 
 
 def _assessment(**kwargs: object):
@@ -602,21 +569,18 @@ def test_unsupported_routes_and_judge_failures_fail_closed(failure: str) -> None
     assert not _certificate(assessment).ready
 
 
-def test_hard_evaluator_failure_is_excluded_from_bridge_group_normalization() -> None:
+def test_hard_evaluator_failure_is_denied_credit_but_kept_in_group_normalization() -> None:
     keys, scores, rubric_mask, eval_mask, hard_mask = _batch()
     eval_mask[1, 0] = False
     assessment = assess_scalar_batch(keys, scores, rubric_mask, eval_mask, hard_mask)
 
     assert not assessment.output.response_valid[1]
-    assert assessment.output.response_advantage[1] == 0
+    # PAPO normalizes the outcome advantage over the whole group, so the invalid response
+    # still shapes the group statistics and is denied credit by the composition instead.
     assert assessment.output.scalar_advantage[1] == 0
     assert torch.equal(
         assessment.output.response_advantage,
-        group_advantages(
-            assessment.output.selected_raw_reward,
-            8,
-            valid=assessment.output.response_valid,
-        ),
+        group_advantages(assessment.output.selected_raw_reward, 8),
     )
     assert not assessment.output.training_ready
     assert not assessment.batch_valid

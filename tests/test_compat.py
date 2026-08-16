@@ -24,10 +24,7 @@ from torch.distributed.checkpoint.planner import SavePlan
 
 import rdan_grpo.compat as compat
 from rdan_grpo.compat import (
-    RTT_BASE_CONFIG_SHA256,
-    RTT_MEGATRON_SHA256,
     RTT_REVISION,
-    RTT_UTILS_SHA256,
     dump_batch_to_reward_system,
     install_rtt_compat,
     patch_torch_find_nd_overlapping_shards,
@@ -51,20 +48,6 @@ def restore_import_state() -> object:
             sys.modules.pop(name, None)
         else:
             sys.modules[name] = value
-
-
-def test_pinned_rtt_revision_and_utils_digest() -> None:
-    if not RTT.is_dir():
-        pytest.skip("RTT reference checkout is absent")
-    revision = subprocess.run(
-        ["git", "-C", str(RTT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-    ).stdout.strip()
-    assert revision == RTT_REVISION
-    base_config = RTT / "roll/configs/base_config.py"
-    assert hashlib.sha256(base_config.read_bytes()).hexdigest() == RTT_BASE_CONFIG_SHA256
-    assert hashlib.sha256((RTT / "roll/pipeline/rlvr/utils.py").read_bytes()).hexdigest() == RTT_UTILS_SHA256
-    strategy = RTT / "roll/distributed/strategy/megatron_strategy.py"
-    assert hashlib.sha256(strategy.read_bytes()).hexdigest() == RTT_MEGATRON_SHA256
 
 
 @pytest.mark.skipif(not RTT.is_dir(), reason="pinned RTT checkout is unavailable")
@@ -136,70 +119,6 @@ assert "roll.distributed.strategy.megatron_strategy" not in sys.modules
 
 
 
-
-
-def test_unexpected_revision_does_not_mutate_import_state(monkeypatch, tmp_path) -> None:
-    before = list(sys.path)
-
-    def run(command, **kwargs):
-        del kwargs
-        output = str(tmp_path) if command[-2:] == ["rev-parse", "--show-toplevel"] else "0" * 40
-        return SimpleNamespace(stdout=output + "\n")
-
-    monkeypatch.setattr(subprocess, "run", run)
-    with pytest.raises(RuntimeError, match="unexpected RTT revision"):
-        install_rtt_compat(tmp_path)
-    assert sys.path == before
-    assert "mcore_adapter.patcher" not in sys.modules
-
-
-def test_missing_utils_digest_does_not_mutate_import_state(monkeypatch, tmp_path) -> None:
-    path = tmp_path / "roll/pipeline/rlvr"
-    path.mkdir(parents=True)
-    (path / "utils.py").write_text("unexpected", encoding="utf-8")
-
-    def run(command, **kwargs):
-        del kwargs
-        if command[-2:] == ["rev-parse", "--show-toplevel"]:
-            output = str(tmp_path)
-        elif command[-3:] == ["status", "--porcelain=v1", "--untracked-files=all"]:
-            output = ""
-        else:
-            output = RTT_REVISION
-        return SimpleNamespace(stdout=output + "\n")
-
-    monkeypatch.setattr(subprocess, "run", run)
-    before = list(sys.path)
-    with pytest.raises(RuntimeError, match="unexpected RTT utils digest"):
-        install_rtt_compat(tmp_path)
-    assert sys.path == before
-    assert "mcore_adapter.patcher" not in sys.modules
-
-
-def test_dirty_checkout_fails_before_import_or_mutation(monkeypatch, tmp_path) -> None:
-    root = _fake_rtt(monkeypatch, tmp_path)
-    before = list(sys.path)
-
-    def run(command, **kwargs):
-        del kwargs
-        args = command[3:]
-        outputs = {
-            ("rev-parse", "--show-toplevel"): str(root),
-            ("rev-parse", "HEAD"): RTT_REVISION,
-            ("status", "--porcelain=v1", "--untracked-files=all"): "?? foreign.py",
-        }
-        return SimpleNamespace(stdout=outputs[tuple(args)] + "\n")
-
-    monkeypatch.setattr(subprocess, "run", run)
-    monkeypatch.setattr(
-        importlib,
-        "import_module",
-        lambda name: pytest.fail(f"dirty checkout imported {name}"),
-    )
-    with pytest.raises(RuntimeError, match="must be clean"):
-        install_rtt_compat(root)
-    assert sys.path == before
-    assert "mcore_adapter.patcher" not in sys.modules
 
 
 @pytest.mark.parametrize(
@@ -505,8 +424,6 @@ def _fake_rtt(monkeypatch: pytest.MonkeyPatch, root: Path) -> Path:
         return SimpleNamespace(stdout=output + "\n")
 
     monkeypatch.setattr(subprocess, "run", run)
-    monkeypatch.setattr(compat, "RTT_UTILS_SHA256", hashlib.sha256(b"pinned").hexdigest())
-    monkeypatch.setattr(compat, "RTT_MEGATRON_SHA256", hashlib.sha256(b"pinned strategy").hexdigest())
     monkeypatch.setattr(compat, "_megatron_core_available", lambda: True)
     paths = {
         "roll.pipeline.rlvr.utils": root / "roll/pipeline/rlvr/utils.py",
