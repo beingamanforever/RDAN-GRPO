@@ -22,15 +22,16 @@ mean satisfaction respectively, with no process channel.
 
 ## Setup
 
-Requires a checkout of RTT, which supplies the ROLL distributed RL runtime.
+Requires a checkout of RTT, which supplies the ROLL distributed RL runtime. On a fresh CUDA
+host the setup script installs everything, including the pieces whose absence produces
+misleading errors (Python headers for Triton, a flash-attn wheel matching the local torch
+build, and a wandb new enough for current API keys):
 
 ```bash
-pip install -r requirements.txt && pip install -e .
-export RTT_ROOT=/path/to/Rubrics-To-Tokens
-export RDAN_MODEL_SNAPSHOT=/path/to/Qwen3-4B-Instruct-2507
-export OPENROUTER_API_KEY=...
-export WANDB_API_KEY=...        # optional, runs offline without it
+scripts/setup_env.sh /path/to/Rubrics-To-Tokens /path/to/Qwen3-4B-Instruct-2507
 ```
+
+Then fill in `OPENROUTER_API_KEY` and `WANDB_API_KEY` in the generated `.env`.
 
 ## Preflight
 
@@ -57,10 +58,13 @@ python scripts/train.py --config rl_csr
 python scripts/train.py --config rl_aon
 ```
 
-Hydra overrides are positional, so scaling GPUs or shortening a run needs no config edit:
+Hydra overrides are positional, so scaling GPUs or shortening a run needs no config edit.
+The global batch is `per_device_train_batch_size x gradient_accumulation_steps x world_size`
+and must divide `rollout_batch_size x num_return_sequences_in_group`, so doubling the GPUs
+means halving the accumulation:
 
 ```bash
-python scripts/train.py --config rdan num_gpus=4 max_steps=200
+python scripts/train.py --config rdan num_gpus=4 actor_train.training_args.gradient_accumulation_steps=16
 ```
 
 Resume from the latest checkpoint, or from a specific one:
@@ -68,6 +72,27 @@ Resume from the latest checkpoint, or from a specific one:
 ```bash
 python scripts/train.py --config rdan --resume
 ```
+
+## Cost and wall clock
+
+Measured on 2x A100 80GB with Qwen3-4B-Instruct-2507, 64 prompts x 8 samples per step:
+
+| phase | time per step |
+|---|---|
+| actor update | 195s |
+| log-prob recompute | 54s |
+| generation and reward | 66s |
+| offload and weight sync | 14s |
+| **total** | **~5.5 min** |
+
+That is ~1.9 days for 500 steps on 2 GPUs, and roughly 1 day on 4. Judge spend is about
+$0.02 per step, so around $10 for a full run against `qwen/qwen3.7-flash`.
+
+Sequence length is the dominant cost, and both bounds are set from measurement rather than
+convention: prompts are mean 225 and p99.5 1280 tokens, and 97.2 percent of responses finish
+under 2048, so a row costs 3328 tokens instead of the 6144 the defaults implied. Watch
+`length/cap_hit_rate` on the curves; if it climbs well above the measured 2 percent the
+response cap is truncating real work and should go back up.
 
 ## Outputs
 
@@ -84,6 +109,7 @@ Under `output/<exp_name>/`:
 
 | Path | Role |
 |---|---|
+| `scripts/setup_env.sh` | reproducible environment build on a fresh CUDA host |
 | `src/rdan_grpo/advantages.py` | masked group standardization, shared by both channels |
 | `src/rdan_grpo/rewards.py` | rubric scoring and hard/soft channel extraction |
 | `src/rdan_grpo/scalar.py` | RDAN advantage composition and the baseline methods |
@@ -94,6 +120,7 @@ Under `output/<exp_name>/`:
 | `src/rdan_grpo/pipeline.py` | training loop, checkpointing, metrics |
 | `src/rdan_grpo/train_step.py` | one optimizer transaction over a rewarded batch |
 | `src/rdan_grpo/workers.py` | FSDP2 actor and seeded vLLM rollout workers |
+| `src/rdan_grpo/checkpoint.py` | atomic checkpoint promotion, resume lookup, retention |
 
 ## Failure handling
 
@@ -105,6 +132,9 @@ Long RL runs on paid APIs fail in specific ways, so these are handled rather tha
   statistics instead of being scored zero.
 - A non-finite gradient skips the update and increments `skipped_updates` rather than ending the run.
 - W&B being unreachable degrades to offline mode and then to the JSONL mirror.
+- The trainer and the rollout engine share the same GPUs, so each releases its cached blocks
+  at the handoff. Offloading tensors alone leaves the pages with PyTorch's allocator, and
+  vLLM's KV pool cannot be mapped around them.
 
 ## Tests
 
