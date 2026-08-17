@@ -21,17 +21,19 @@ _CLIP = "_rdan_clip_fractions"
 _STEP = "_rdan_generation_step"
 _ORDINAL = "_rdan_generation_ordinal"
 CLIP_METRIC = "rdan/response_token_clipfrac"
+ENTROPY_METRIC = "actor/entropy"
 
 
 class ResponseActorWorker(ActorWorker):
     """Train through ROLL RLVR while tracking optimizer state for checkpoint and resume."""
 
     def loss_func(self, data: DataProto, output_tensor: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
-        """Record the PPO clipping fraction alongside the actor loss."""
+        """Record the PPO clipping fraction and response entropy alongside the actor loss."""
 
         loss, metrics = super().loss_func(data, output_tensor)
         value = _clip_fraction(self, data, output_tensor)
         metrics[CLIP_METRIC] = value
+        metrics[ENTROPY_METRIC] = _response_entropy(self, data, output_tensor)
         getattr(self, _CLIP).append(value)
         return loss, metrics
 
@@ -243,6 +245,23 @@ def _clip_fraction(worker: Any, data: DataProto, output_tensor: torch.Tensor) ->
     low, high = _clip_bounds(worker.pipeline_config)
     clipped = ((ratio < 1 - low) | (ratio > 1 + high)) & mask
     return float(clipped.sum().div(mask.sum().clamp_min(1)).item())
+
+
+def _response_entropy(worker: Any, data: DataProto, output_tensor: torch.Tensor) -> float:
+    """Mean policy entropy over response tokens.
+
+    ROLL only computes entropy when it is an actual loss term, but it is the clearest early
+    warning of policy collapse: a diverging run's entropy climbs by orders of magnitude while
+    a stable one stays flat. Computed under no_grad so the vocabulary-sized softmax is freed
+    immediately rather than held for the backward pass.
+    """
+
+    with torch.no_grad():
+        entropy = worker.strategy.op_compute_entropy(
+            logits=output_tensor.detach(), attention_mask=data.batch["response_mask"]
+        )
+        mask = data.batch["final_response_mask"].to(entropy.dtype)
+        return float((entropy * mask).sum().div(mask.sum().clamp_min(1)).item())
 
 
 def _clip_bounds(config: Any) -> tuple[float, float]:

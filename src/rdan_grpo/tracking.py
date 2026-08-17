@@ -21,7 +21,7 @@ STEP_METRIC = "system/step"
 CURVE_PANELS = {
     "reward": ("reward/selected_mean", "reward/valid_rate", "reward/process_quality_mean"),
     "advantage": ("advantage/mean", "advantage/std", "advantage/zero_rate"),
-    "policy": ("rdan/response_token_clipfrac", "actor/pg_loss", "actor/entropy"),
+    "policy": ("rdan/response_token_clipfrac", "actor/entropy", "actor/kl_loss", "actor/pg_loss"),
     "length": ("length/mean", "length/cap_hit_rate"),
     "judge": ("judge/failure_rate", "judge/latency_p95", "judge/cost_usd"),
 }

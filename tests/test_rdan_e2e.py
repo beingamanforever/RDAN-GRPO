@@ -24,7 +24,9 @@ from rdan_grpo.checkpoint import (
     read_state,
     stage_checkpoint,
 )
+from rdan_grpo.compat import install_rtt_runtime
 from rdan_grpo.config import ResponseConfig, load_config, updates_per_step
+from rdan_grpo.distillation import rank, select_pairs, select_sft
 from rdan_grpo.judge import JudgeRequest, JudgeUnavailableError, OpenRouterJudge, aggregate_stats
 from rdan_grpo.rewards import extract_quality, score_rubrics
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
@@ -752,8 +754,14 @@ def test_updates_per_step_follows_the_actor_global_batch() -> None:
 
 @pytest.fixture(scope="module")
 def reward_worker_module() -> Any:
-    pytest.importorskip("ray", reason="ROLL runtime is only available on the training host")
-    from rdan_grpo import reward_worker
+    # ROLL lives in the RTT checkout rather than site-packages, so importing the worker needs
+    # the same path installation the runtime does. Its own dependencies being present says
+    # nothing about whether that checkout is here.
+    try:
+        install_rtt_runtime()
+        from rdan_grpo import reward_worker
+    except (ImportError, ValueError) as error:
+        pytest.skip(f"ROLL runtime is unavailable: {error}")
 
     return reward_worker
 
@@ -799,3 +807,73 @@ def test_soft_rubric_ids_are_one_based_positions(reward_worker_module: Any) -> N
     result = reward_worker_module._evaluate_hard_rubrics("p", "r", rubrics, "type4", truth)
 
     assert [rubric["id"] for rubric in result["judge_rubrics"]] == [1, 2]
+
+
+# --------------------------------------------------------------------------------------
+# Distillation selection
+
+
+def _sample(text: str, hard_pass: bool, quality: float, quality_valid: bool = True) -> dict[str, Any]:
+    return {
+        "text": text,
+        "hard_pass": hard_pass,
+        "quality": quality,
+        "quality_valid": quality_valid,
+        "rank": rank(hard_pass, quality),
+    }
+
+
+PROMPTS = {"p1": {"prompt": "write it", "source": "type1"}}
+
+
+def test_a_hard_pass_outranks_any_amount_of_soft_quality() -> None:
+    assert rank(True, 0.0) > rank(False, 1.0)
+
+
+def test_sft_takes_the_best_sample_and_masks_the_instruction() -> None:
+    groups = {"p1": [_sample("weak", True, 0.4), _sample("strong", True, 0.9)]}
+
+    rows = select_sft(groups, PROMPTS, min_quality=0.3)
+
+    assert len(rows) == 1
+    assert rows[0]["completion"] == [{"role": "assistant", "content": "strong"}]
+    assert rows[0]["prompt"] == [{"role": "user", "content": "write it"}]
+
+
+def test_sft_drops_a_prompt_whose_best_sample_breaks_a_hard_rubric() -> None:
+    groups = {"p1": [_sample("pretty but wrong", False, 1.0), _sample("also wrong", False, 0.9)]}
+
+    assert select_sft(groups, PROMPTS, min_quality=0.0) == []
+
+
+def test_sft_drops_a_hard_passing_sample_the_judge_scored_below_the_floor() -> None:
+    groups = {"p1": [_sample("correct but poor", True, 0.2)]}
+
+    assert select_sft(groups, PROMPTS, min_quality=0.7) == []
+    assert len(select_sft(groups, PROMPTS, min_quality=0.1)) == 1
+
+
+def test_sft_keeps_an_all_hard_prompt_that_no_judge_scored() -> None:
+    groups = {"p1": [_sample("constraints satisfied", True, 0.0, quality_valid=False)]}
+
+    assert len(select_sft(groups, PROMPTS, min_quality=0.7)) == 1
+
+
+def test_pairs_prefer_the_hard_passing_sample_over_the_violating_one() -> None:
+    groups = {"p1": [_sample("violates", False, 1.0), _sample("satisfies", True, 0.5)]}
+
+    rows = select_pairs(groups, PROMPTS, min_gap=0.2)
+
+    assert rows[0]["chosen"] == [{"role": "assistant", "content": "satisfies"}]
+    assert rows[0]["rejected"] == [{"role": "assistant", "content": "violates"}]
+
+
+def test_pairs_need_a_separation_the_rubrics_actually_measured() -> None:
+    groups = {"p1": [_sample("a", True, 0.80), _sample("b", True, 0.85)]}
+
+    assert select_pairs(groups, PROMPTS, min_gap=0.2) == []
+    assert len(select_pairs(groups, PROMPTS, min_gap=0.01)) == 1
+
+
+def test_pairs_skip_a_prompt_with_a_single_sample() -> None:
+    assert select_pairs({"p1": [_sample("only", True, 1.0)]}, PROMPTS, min_gap=0.0) == []
