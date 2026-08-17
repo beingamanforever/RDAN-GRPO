@@ -24,6 +24,9 @@ CURVE_PANELS = {
     "policy": ("rdan/response_token_clipfrac", "actor/entropy", "actor/kl_loss", "actor/pg_loss"),
     "length": ("length/mean", "length/cap_hit_rate"),
     "judge": ("judge/failure_rate", "judge/latency_p95", "judge/cost_usd"),
+    # Fine-tuning baselines log through the Trainer, so these carry its metric names.
+    "finetune": ("loss", "grad_norm", "learning_rate", "mean_token_accuracy"),
+    "preference": ("rewards/accuracies", "rewards/margins", "rewards/chosen", "rewards/rejected"),
 }
 _SECRET = re.compile(r"(?:sk-or-v1-[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{20,}|[0-9a-f]{40})")
 _SECRET_KEYS = frozenset({"api_key", "apikey", "authorization", "password", "secret", "token", "credential"})

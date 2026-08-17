@@ -1,0 +1,15 @@
+# Fine-tuning environment for scripts/finetune.py, kept apart from requirements.txt because
+# TRL needs transformers 5 and accelerate 1.x while the ROLL runtime pins transformers 4.57
+# and accelerate 0.34. The two environments never load together.
+#
+# torch is pinned to 2.8.0 because the default wheel for anything newer is built against
+# CUDA 13, which needs a 580+ driver; the training hosts run 570.
+accelerate==1.14.0
+datasets==5.0.1
+flash-attn==2.8.3
+matplotlib==3.11.1
+peft==0.20.0
+torch==2.8.0
+transformers==5.15.0
+trl==1.10.0
+wandb==0.28.2

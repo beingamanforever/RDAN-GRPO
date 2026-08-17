@@ -27,7 +27,11 @@ echo "==> python environment"
 command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 [ -d .venv ] || uv venv --python 3.12 .venv
-uv pip install -q --python .venv/bin/python -r requirements.txt
+# flash-attn publishes no wheel for this torch build and its sdist imports torch at build
+# time, which uv's isolated build environment does not have. Everything else installs first;
+# the matching prebuilt wheel goes in below.
+grep -v '^flash-attn' requirements.txt > "${TMPDIR:-/tmp}/rdan-requirements.txt"
+uv pip install -q --python .venv/bin/python -r "${TMPDIR:-/tmp}/rdan-requirements.txt"
 uv pip install -q --python .venv/bin/python -e .
 
 echo "==> flash-attn wheel matching this torch build"

@@ -56,6 +56,7 @@ class JudgeResult:
     completion_tokens: int = 0
     latency_seconds: float = 0.0
     attempts: int = 1
+    reported_cost: float | None = None
 
 
 @dataclass
@@ -67,6 +68,8 @@ class JudgeStats:
     retries: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    reported_cost: float = 0.0
+    reported_calls: int = 0
     latencies: list[float] = field(default_factory=list)
     errors: dict[str, int] = field(default_factory=dict)
 
@@ -165,7 +168,10 @@ class OpenRouterJudge:
             "completion_tokens": stats.completion_tokens,
             "latencies": stats.latencies,
             "errors": stats.errors,
-            "cost_usd": (stats.prompt_tokens * price["prompt"] + stats.completion_tokens * price["completion"])
+            "reported_cost": stats.reported_cost,
+            "reported_calls": stats.reported_calls,
+            # Fallback only for calls the provider priced silently.
+            "table_cost": (stats.prompt_tokens * price["prompt"] + stats.completion_tokens * price["completion"])
             / 1_000_000,
         }
 
@@ -195,6 +201,9 @@ class OpenRouterJudge:
         usage = getattr(completion, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        # OpenRouter reports what the call actually cost. Prefer it over the configured price
+        # table, which silently drifts when prices change or a fallback provider serves.
+        cost = _usage_cost(usage)
         try:
             content = completion.choices[0].message.content
             rows = json.loads(content)["rubrics"]
@@ -203,7 +212,7 @@ class OpenRouterJudge:
             return JudgeResult(
                 {}, False, f"schema_{type(exc).__name__}", prompt_tokens, completion_tokens, latency, attempts
             )
-        return JudgeResult(judgments, True, None, prompt_tokens, completion_tokens, latency, attempts)
+        return JudgeResult(judgments, True, None, prompt_tokens, completion_tokens, latency, attempts, cost)
 
     def _record(self, result: JudgeResult) -> None:
         with self._lock:
@@ -211,6 +220,9 @@ class OpenRouterJudge:
             self.stats.retries += result.attempts - 1
             self.stats.prompt_tokens += result.prompt_tokens
             self.stats.completion_tokens += result.completion_tokens
+            if result.reported_cost is not None:
+                self.stats.reported_cost += result.reported_cost
+                self.stats.reported_calls += 1
             self.stats.latencies.append(result.latency_seconds)
             if not result.valid:
                 self.stats.failures += 1
@@ -238,9 +250,32 @@ def aggregate_stats(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
         "judge/latency_p95": _quantile(latencies, 0.95),
         "judge/prompt_tokens": float(tokens["prompt_tokens"]),
         "judge/completion_tokens": float(tokens["completion_tokens"]),
-        "judge/cost_usd": float(sum(row.get("cost_usd", 0.0) for row in rows)),
+        "judge/cost_usd": _batch_cost(rows),
         **{f"judge/error_{name}": float(count) for name, count in errors.items()},
     }
+
+
+def _usage_cost(usage: Any) -> float | None:
+    """Read the cost OpenRouter charged for one call, when it reported one."""
+
+    value = getattr(usage, "cost", None)
+    if value is None and hasattr(usage, "model_extra"):
+        extra = usage.model_extra
+        value = extra.get("cost") if isinstance(extra, Mapping) else None
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _batch_cost(rows: Sequence[Mapping[str, Any]]) -> float:
+    """Total spend, preferring the provider's own figure over the configured price table."""
+
+    reported = sum(float(row.get("reported_cost", 0.0)) for row in rows)
+    priced = sum(int(row.get("reported_calls", 0)) for row in rows)
+    calls = sum(int(row.get("calls", 0)) for row in rows)
+    if priced >= calls:
+        return reported
+    # Charge the unpriced remainder at the table rate rather than reporting it as free.
+    table = sum(float(row.get("table_cost", 0.0)) for row in rows)
+    return reported + table * (1 - priced / calls) if calls else reported
 
 
 def _validate_rows(rows: Any, ids: list[int]) -> dict[int, dict[str, Any]]:

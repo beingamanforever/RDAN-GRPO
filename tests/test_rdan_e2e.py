@@ -268,7 +268,9 @@ class FakeCompletion:
     def __init__(self, payload: Any, prompt_tokens: int = 100, completion_tokens: int = 40) -> None:
         content = payload if isinstance(payload, str) else json.dumps(payload)
         self.choices = [type("Choice", (), {"message": type("Message", (), {"content": content})()})()]
-        self.usage = type("Usage", (), {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens})()
+        self.usage = type(
+            "Usage", (), {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "cost": None}
+        )()
 
 
 class FakeStatusError(Exception):
@@ -307,6 +309,19 @@ def judgment(ids: list[int], score: float = 1) -> dict[str, Any]:
 
 def make_request(ids: list[int]) -> JudgeRequest:
     return JudgeRequest("instruction", "response", tuple({"id": value, "text": "rubric"} for value in ids))
+
+
+def test_judge_prefers_the_cost_the_provider_reported() -> None:
+    """The price table drifts when prices change or a fallback provider serves the call."""
+
+    completion = FakeCompletion(judgment([1]))
+    completion.usage.cost = 0.00042
+    judge = OpenRouterJudge(judge_config(), "key", client=FakeClient([completion]))
+
+    result = judge.judge(make_request([1]))
+
+    assert result.reported_cost == pytest.approx(0.00042)
+    assert aggregate_stats([judge.drain_stats()])["judge/cost_usd"] == pytest.approx(0.00042)
 
 
 def test_judge_scores_map_onto_the_signed_rubric_scale() -> None:
@@ -469,7 +484,9 @@ def test_step_stats_combine_counters_across_reward_workers() -> None:
             "completion_tokens": 10,
             "latencies": [1.0],
             "errors": {"APITimeoutError": 1},
-            "cost_usd": 0.01,
+            "reported_cost": 0.01,
+            "reported_calls": 10,
+            "table_cost": 0.5,
         },
         {
             "calls": 90,
@@ -479,7 +496,9 @@ def test_step_stats_combine_counters_across_reward_workers() -> None:
             "completion_tokens": 90,
             "latencies": [3.0],
             "errors": {},
-            "cost_usd": 0.09,
+            "reported_cost": 0.09,
+            "reported_calls": 90,
+            "table_cost": 4.5,
         },
     ]
 
@@ -489,8 +508,22 @@ def test_step_stats_combine_counters_across_reward_workers() -> None:
     # A naive per-worker average of failure rate would give 0.05, not the true 0.01.
     assert stats["judge/failure_rate"] == pytest.approx(0.01)
     assert stats["judge/retry_rate"] == pytest.approx(0.09)
+    # Every call was priced by the provider, so the price table is ignored entirely.
     assert stats["judge/cost_usd"] == pytest.approx(0.10)
     assert stats["judge/error_APITimeoutError"] == 1.0
+
+
+def test_step_cost_falls_back_to_the_table_only_for_unpriced_calls() -> None:
+    """A provider that reports no cost must not make those calls look free."""
+
+    priced_only = aggregate_stats([{"calls": 4, "reported_cost": 0.04, "reported_calls": 4, "table_cost": 1.0}])
+    assert priced_only["judge/cost_usd"] == pytest.approx(0.04)
+
+    none_priced = aggregate_stats([{"calls": 4, "reported_cost": 0.0, "reported_calls": 0, "table_cost": 1.0}])
+    assert none_priced["judge/cost_usd"] == pytest.approx(1.0)
+
+    half_priced = aggregate_stats([{"calls": 4, "reported_cost": 0.02, "reported_calls": 2, "table_cost": 1.0}])
+    assert half_priced["judge/cost_usd"] == pytest.approx(0.02 + 0.5)
 
 
 def test_step_stats_are_empty_when_no_response_needed_a_judge() -> None:

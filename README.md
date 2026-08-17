@@ -73,6 +73,74 @@ Resume from the latest checkpoint, or from a specific one:
 python scripts/train.py --config rdan --resume
 ```
 
+## Distilled baselines
+
+The datasets carry prompts and rubrics but no reference answers, so the SFT and DPO baselines
+are built by sampling a stronger model and keeping what the rubrics accept. Every sample is
+scored through the same checkers and the same judge the RL reward uses, so all three methods
+optimize against one definition of a good response.
+
+```bash
+python scripts/distill.py --samples 6 --budget 12
+```
+
+```bash
+python scripts/build_preferences.py
+```
+
+`distill.py` appends to its output file and treats it as the resume log, so an interrupted run
+or an exhausted budget picks up where it stopped.
+
+`build_preferences.py` scores each surviving sample and ranks it as `2 * hard_pass + quality`,
+where `hard_pass` means every deterministic checker returned true and `quality` is the mean
+judge score over the soft rubrics, in `[0, 1]`. The weight makes a satisfied constraint worth
+more than any amount of prose, so the two datasets can never prefer a well-written violation.
+Samples are discarded before ranking when the teacher errored, the response hit the token cap,
+or the prompt had soft rubrics the judge never returned: an unjudged sample has an unknown
+quality, not a low one.
+
+The best sample per prompt becomes an SFT target, and only if it passed the hard rubrics
+outright. The best and worst become a preference pair, kept when the chosen sample passed and
+the two are separated by at least `--min-gap`. In practice the separation is one of two kinds:
+the rejected sample broke a constraint the chosen one satisfied, which is a gap of at least 2,
+or both satisfied the constraints and the judge scored them materially apart.
+
+Fine-tuning runs in a separate environment, because TRL needs transformers 5 while the ROLL
+runtime pins transformers 4.57:
+
+```bash
+uv pip install -r requirements-sft.txt
+```
+
+```bash
+python scripts/finetune.py --stage sft --data data/distill/sft.jsonl --out output/sft
+```
+
+DPO runs as two arms. Chained, which is the order the two objectives are meant to compose in:
+
+```bash
+python scripts/finetune.py --stage dpo --data data/distill/dpo.jsonl --out output/dpo-sft \
+  --model output/sft/merged
+```
+
+And straight from the base model, which isolates what the preference signal is worth on its
+own. Without this arm a gain over base cannot be attributed to DPO rather than to the SFT
+imitation underneath it:
+
+```bash
+python scripts/finetune.py --stage dpo --data data/distill/dpo.jsonl --out output/dpo-base
+```
+
+Both stages train a rank-32 LoRA in bf16. Full fine-tuning is not an option on one 24GB card:
+a 4B model with Adam state needs roughly 60GB, and LoRA additionally lets DPO hold its
+reference policy by disabling the adapter rather than loading a second copy of the weights.
+Measured peak on an A10G is 14.2GB for DPO, which is the heavier of the two.
+
+Each stage writes its adapter to `--out` and the same weights folded into the base model
+under `--out/merged`. The merged copy is what the next stage and the evaluation harness load,
+since vLLM takes full weights rather than an adapter. Pass `--skip-merge` to keep only the
+adapter.
+
 ## Cost and wall clock
 
 Measured on 2x A100 80GB with Qwen3-4B-Instruct-2507, 64 prompts x 8 samples per step:
@@ -110,6 +178,10 @@ Under `output/<exp_name>/`:
 | Path | Role |
 |---|---|
 | `scripts/setup_env.sh` | reproducible environment build on a fresh CUDA host |
+| `scripts/distill.py` | teacher sampling through OpenRouter, resumable and budget-capped |
+| `scripts/build_preferences.py` | rubric scoring of teacher samples into SFT and DPO datasets |
+| `scripts/finetune.py` | LoRA SFT and DPO baselines from the distilled data |
+| `src/rdan_grpo/distillation.py` | sample ranking and the SFT/preference selection rules |
 | `src/rdan_grpo/advantages.py` | masked group standardization, shared by both channels |
 | `src/rdan_grpo/rewards.py` | rubric scoring and hard/soft channel extraction |
 | `src/rdan_grpo/scalar.py` | RDAN advantage composition and the baseline methods |
