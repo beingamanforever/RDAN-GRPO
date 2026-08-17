@@ -23,6 +23,7 @@ from rdan_grpo.checkpoint import (
     prune_checkpoints,
     read_state,
     stage_checkpoint,
+    start_upload,
 )
 from rdan_grpo.compat import install_rtt_runtime
 from rdan_grpo.config import ResponseConfig, load_config, updates_per_step
@@ -624,6 +625,26 @@ def test_retention_keeps_recent_checkpoints_and_milestones(tmp_path: Path) -> No
     assert not (milestone / "actor/dcp").exists()
     for recent in ("step-000120", "step-000140"):
         assert (tmp_path / recent / "actor/dcp/shard.bin").is_file()
+
+
+def test_upload_is_skipped_when_the_hub_is_not_configured(tmp_path: Path) -> None:
+    """Local-only is the default; an unset repo or token must not raise."""
+
+    assert start_upload(tmp_path, 100, None, "token") is None
+    assert start_upload(tmp_path, 100, "org/repo", None) is None
+    assert start_upload(tmp_path, 100, "", "") is None
+
+
+def test_upload_failure_never_propagates_into_training(tmp_path: Path, capsys: Any) -> None:
+    """The Hub being unreachable must cost a checkpoint copy, not the whole run."""
+
+    # No network and a bogus token, so the upload thread is guaranteed to fail.
+    thread = start_upload(tmp_path, 100, "definitely/not-a-real-repo", "invalid-token")
+    assert thread is not None
+    thread.join(timeout=60)
+
+    assert not thread.is_alive()
+    assert "failed" in capsys.readouterr().out
 
 
 def test_pruning_clears_abandoned_staging_directories(tmp_path: Path) -> None:

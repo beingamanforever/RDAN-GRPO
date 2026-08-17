@@ -59,7 +59,7 @@ def _score(samples: list[dict[str, Any]], prompts: dict[str, dict[str, Any]]) ->
     import torch
 
     from rdan_grpo.distillation import rank
-    from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, load_judge_config
+    from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats, load_judge_config
     from rdan_grpo.reward_worker import JUDGE_CONFIG, _evaluate_hard_rubrics
     from rdan_grpo.rewards import extract_quality
 
@@ -100,7 +100,7 @@ def _score(samples: list[dict[str, Any]], prompts: dict[str, dict[str, Any]]) ->
     hard = torch.tensor([row["hard"] for row in rows], dtype=torch.bool) & active
     quality = extract_quality(torch.where(active, scores, torch.zeros_like(scores)), active, evaluated, hard)
 
-    print(f"judge cost ${judge.drain_stats()['cost_usd']:.2f}")
+    print(f"judge cost ${aggregate_stats([judge.drain_stats()])['judge/cost_usd']:.2f}")
     return [
         {
             **sample,

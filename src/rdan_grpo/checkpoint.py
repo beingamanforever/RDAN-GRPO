@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -98,6 +99,48 @@ def prune_checkpoints(root: str | Path, keep_recent: int, keep_every: int) -> li
         if entry.is_dir() and not entry.is_symlink() and entry.name.startswith(STAGING_PREFIX):
             shutil.rmtree(entry)
     return removed
+
+
+def upload_checkpoint(checkpoint: Path, step: int, repo: str, token: str) -> None:
+    """Publish one checkpoint's Hugging Face weights to a private Hub repo.
+
+    Only the weights and tokenizer go up. The sharded optimizer state is four times larger
+    and is useful solely for resuming that exact step, which a remote copy cannot serve.
+    """
+
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token)
+    api.create_repo(repo_id=repo, private=True, exist_ok=True)
+    api.upload_folder(
+        repo_id=repo,
+        folder_path=str(checkpoint / "actor"),
+        path_in_repo=f"step-{step:0{STEP_DIGITS}d}",
+        ignore_patterns=["dcp/*", "rdan-counters-*.json"],
+        commit_message=f"RDAN-GRPO checkpoint at step {step}",
+    )
+
+
+def start_upload(checkpoint: Path, step: int, repo: str | None, token: str | None) -> threading.Thread | None:
+    """Upload a checkpoint in the background, or return None when the Hub is not configured.
+
+    Training must not stall on a multi-gigabyte transfer, and must not die because the Hub is
+    unreachable; a failed upload leaves the local checkpoint untouched and logs the reason.
+    """
+
+    if not repo or not token:
+        return None
+
+    def run() -> None:
+        try:
+            upload_checkpoint(checkpoint, step, repo, token)
+            print(f"uploaded step {step} to https://huggingface.co/{repo}")
+        except Exception as error:  # noqa: BLE001 - publishing must never end a training run
+            print(f"checkpoint upload for step {step} failed ({type(error).__name__}: {error})")
+
+    thread = threading.Thread(target=run, name=f"upload-{step}", daemon=False)
+    thread.start()
+    return thread
 
 
 def write_json(path: Path, payload: Any) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ from rdan_grpo.checkpoint import (
     prune_checkpoints,
     read_state,
     stage_checkpoint,
+    start_upload,
 )
 from rdan_grpo.config import ResponseConfig, updates_per_step
 from rdan_grpo.dataset import load_response_dataset
@@ -34,6 +36,12 @@ from rdan_grpo.train_step import TrainStepResult, run_train_step
 # Hugging Face weights survive for evaluation after the run.
 KEEP_RECENT_CHECKPOINTS = 2
 KEEP_EVERY_STEPS = 100
+# Milestone checkpoints are published here when both are set, so the trained weights outlive
+# the machine that produced them. Unset means local-only, which is the default.
+HF_REPO_ENV = "RDAN_HF_REPO"
+HF_TOKEN_ENV = "HF_TOKEN"
+# A milestone upload is tens of gigabytes, so give it room to finish before the run exits.
+UPLOAD_JOIN_SECONDS = 3600
 
 
 @dataclass(frozen=True)
@@ -66,6 +74,7 @@ class RdanTrainingPipeline(BasePipeline):
         self.updates_per_step = updates_per_step(pipeline_config)
         self.checkpoint_root = Path(checkpoint_root).resolve()
         self.stop_after_step = stop_after_step or pipeline_config.max_steps
+        self.uploads: list[Any] = []
 
         self.resume_path = _resume_path(resume, self.checkpoint_root)
         self.completed_step = int(read_state(self.resume_path)["completed_step"]) if self.resume_path else 0
@@ -150,6 +159,8 @@ class RdanTrainingPipeline(BasePipeline):
         finally:
             # Shut down either way, but never let a cleanup error replace the training error
             # that caused it.
+            for upload in self.uploads:
+                upload.join(timeout=UPLOAD_JOIN_SECONDS)
             shutdown_error = _shutdown(self.scheduler, self.tracker)
             if shutdown_error is not None and not failed:
                 raise shutdown_error
@@ -263,6 +274,10 @@ class RdanTrainingPipeline(BasePipeline):
             },
         )
         prune_checkpoints(self.checkpoint_root, KEEP_RECENT_CHECKPOINTS, KEEP_EVERY_STEPS)
+        if step % KEEP_EVERY_STEPS == 0:
+            upload = start_upload(promoted, step, os.environ.get(HF_REPO_ENV), os.environ.get(HF_TOKEN_ENV))
+            if upload is not None:
+                self.uploads.append(upload)
         return promoted
 
     def _restore(self, checkpoint: Path) -> None:
