@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -146,17 +147,15 @@ def _score_google_style(
         for row, response in zip(rows, responses, strict=True):
             handle.write(json.dumps({"prompt": row["prompt"], "response": response}, ensure_ascii=False) + "\n")
 
-    subprocess.run(
+    _run_scorer(
+        args,
         [
-            str(args.benchmark_python),
             spec["entry"],
             f"--input_data={args.rtt_root / spec['data']}",
             f"--input_response_data={payload}",
             f"--output_dir={native}",
         ],
-        cwd=args.rtt_root / spec["cwd"],
-        check=True,
-        capture_output=True,
+        args.rtt_root / spec["cwd"],
     )
     metrics: dict[str, float] = {}
     for mode in ("strict", "loose"):
@@ -184,14 +183,29 @@ def _score_muldimif(
             handle.write(json.dumps(item, ensure_ascii=False) + "\n")
 
     save = run_dir / "muldimif_score.json"
-    subprocess.run(
-        [str(args.benchmark_python), "Code/evaluation/evaluation.py", f"--file_path={payload}", f"--save_path={save}"],
-        cwd=args.rtt_root / "Benchmark/MulDimIF",
-        check=True,
-        capture_output=True,
+    _run_scorer(
+        args,
+        ["Code/evaluation/evaluation.py", f"--file_path={payload}", f"--save_path={save}"],
+        args.rtt_root / "Benchmark/MulDimIF",
     )
     score = json.loads(save.read_text(encoding="utf-8"))
     return {key: float(value) for key, value in _flatten(score).items() if isinstance(value, (int, float))}
+
+
+def _run_scorer(args: argparse.Namespace, command: list[str], cwd: Path) -> None:
+    """Invoke a benchmark's own evaluator from the directory its imports expect.
+
+    Running a script puts that script's directory on sys.path rather than the working
+    directory, so an evaluator importing itself as a package needs its parent on PYTHONPATH.
+    """
+
+    subprocess.run(
+        [str(args.benchmark_python), *command],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        env={**os.environ, "PYTHONPATH": str(cwd)},
+    )
 
 
 def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
