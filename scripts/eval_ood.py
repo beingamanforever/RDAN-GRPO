@@ -46,7 +46,8 @@ def main() -> int:
             rows = BENCHMARKS[benchmark]["load"](args.data_root)
             run_dir = args.out / name / benchmark
             print(f"\n=== {name} on {benchmark}: {len(rows)} questions ===", flush=True)
-            responses = _generate(Path(path), [row["prompt"] for row in rows], run_dir, args)
+            budget = BENCHMARKS[benchmark]["max_new_tokens"] if args.max_new_tokens is None else args.max_new_tokens
+            responses = _generate(Path(path), [row["prompt"] for row in rows], run_dir, args, budget)
             score = BENCHMARKS[benchmark]["score"](rows, responses, run_dir)
             results[name][benchmark] = score
             print(f"{name}/{benchmark}: {score:.4f}", flush=True)
@@ -55,7 +56,9 @@ def main() -> int:
     return 0
 
 
-def _generate(model: Path, prompts: list[str], run_dir: Path, args: argparse.Namespace) -> list[str]:
+def _generate(
+    model: Path, prompts: list[str], run_dir: Path, args: argparse.Namespace, max_new_tokens: int
+) -> list[str]:
     """Generate one response per question, caching so a rerun costs nothing."""
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -82,10 +85,10 @@ def _generate(model: Path, prompts: list[str], run_dir: Path, args: argparse.Nam
     engine = LLM(
         model=str(model),
         dtype="bfloat16",
-        max_model_len=args.max_new_tokens + 2048,
+        max_model_len=max_new_tokens + 2048,
         gpu_memory_utilization=args.gpu_memory_utilization,
     )
-    outputs = engine.generate(rendered, SamplingParams(temperature=0.0, max_tokens=args.max_new_tokens))
+    outputs = engine.generate(rendered, SamplingParams(temperature=0.0, max_tokens=max_new_tokens))
     texts = [output.outputs[0].text for output in outputs]
 
     with cache.open("w", encoding="utf-8") as handle:
@@ -93,12 +96,10 @@ def _generate(model: Path, prompts: list[str], run_dir: Path, args: argparse.Nam
             handle.write(json.dumps({"prompt": prompt, "response": text}, ensure_ascii=False) + "\n")
     truncated = sum(1 for output in outputs if output.outputs[0].finish_reason == "length")
     (run_dir / "generation.json").write_text(
-        json.dumps(
-            {"questions": len(prompts), "truncated": truncated, "max_new_tokens": args.max_new_tokens}, indent=2
-        ),
+        json.dumps({"questions": len(prompts), "truncated": truncated, "max_new_tokens": max_new_tokens}, indent=2),
         encoding="utf-8",
     )
-    print(f"  {truncated}/{len(prompts)} truncated at {args.max_new_tokens} tokens")
+    print(f"  {truncated}/{len(prompts)} truncated at {max_new_tokens} tokens")
     return texts
 
 
@@ -209,10 +210,12 @@ def _score_math(rows: list[dict[str, Any]], responses: list[str], run_dir: Path)
     return correct / len(rows)
 
 
+# Token budgets differ by benchmark: a truncated chain of thought is scored wrong rather than
+# skipped, so MATH-500 needs room to finish its working while the choice tasks do not.
 BENCHMARKS: dict[str, dict[str, Any]] = {
-    "math500": {"load": _load_math500, "score": _score_math},
-    "gpqa": {"load": _load_gpqa, "score": _score_choice},
-    "mmlu_pro": {"load": _load_mmlu_pro, "score": _score_choice},
+    "math500": {"load": _load_math500, "score": _score_math, "max_new_tokens": 4096},
+    "gpqa": {"load": _load_gpqa, "score": _score_choice, "max_new_tokens": 2048},
+    "mmlu_pro": {"load": _load_mmlu_pro, "score": _score_choice, "max_new_tokens": 2048},
 }
 
 
@@ -241,8 +244,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--benchmark", action="append", choices=sorted(BENCHMARKS), help="repeatable, default all")
     parser.add_argument("--out", type=Path, default=ROOT / "output/ood-eval")
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.85)
-    # Reasoning benchmarks need room for a chain of thought before the final answer.
-    parser.add_argument("--max-new-tokens", type=int, default=2048)
+    # Defaults to each benchmark's own budget; set this to override all of them.
+    parser.add_argument("--max-new-tokens", type=int, default=None)
     args = parser.parse_args()
     if any("=" not in entry for entry in args.model):
         raise ValueError("--model takes NAME=PATH")
