@@ -210,12 +210,14 @@ def _score_math(rows: list[dict[str, Any]], responses: list[str], run_dir: Path)
     return correct / len(rows)
 
 
-# Token budgets differ by benchmark: a truncated chain of thought is scored wrong rather than
-# skipped, so MATH-500 needs room to finish its working while the choice tasks do not.
+# Token budgets differ by benchmark, because a truncated chain of thought is scored wrong
+# rather than skipped. Being multiple choice buys nothing here: GPQA is graduate-level science
+# whose reasoning runs longer than MATH-500's, and at 2048 tokens more than half its responses
+# never reached an answer line at all.
 BENCHMARKS: dict[str, dict[str, Any]] = {
     "math500": {"load": _load_math500, "score": _score_math, "max_new_tokens": 4096},
-    "gpqa": {"load": _load_gpqa, "score": _score_choice, "max_new_tokens": 2048},
-    "mmlu_pro": {"load": _load_mmlu_pro, "score": _score_choice, "max_new_tokens": 2048},
+    "gpqa": {"load": _load_gpqa, "score": _score_choice, "max_new_tokens": 8192},
+    "mmlu_pro": {"load": _load_mmlu_pro, "score": _score_choice, "max_new_tokens": 4096},
 }
 
 
