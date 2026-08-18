@@ -266,8 +266,21 @@ BENCHMARKS: dict[str, dict[str, Any]] = {
 
 
 def _write(out: Path, results: dict[str, Any]) -> None:
+    """Merge into the metrics file rather than replacing it.
+
+    Disk on the evaluation host holds one checkpoint at a time, so each model is scored by a
+    separate process. Overwriting would leave the comparison file holding only whichever model
+    happened to run last.
+    """
+
     out.mkdir(parents=True, exist_ok=True)
-    (out / "if_metrics.json").write_text(json.dumps(results, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path = out / "if_metrics.json"
+    merged: dict[str, Any] = {}
+    if path.exists():
+        merged = json.loads(path.read_text(encoding="utf-8"))
+    for model, benchmarks in results.items():
+        merged.setdefault(model, {}).update(benchmarks)
+    path.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _report(results: dict[str, dict[str, dict[str, float]]], benchmarks: list[str]) -> None:
