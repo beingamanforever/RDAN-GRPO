@@ -1,0 +1,37 @@
+{
+  "rows": 18096,
+  "sources": {
+    "type1": 6549,
+    "type4": 6361,
+    "type3": 3603,
+    "rubrichub_instruction_following": 1134,
+    "type2": 449
+  },
+  "rows_with_soft_rubrics": 7495,
+  "share_with_soft_rubrics": 0.4142,
+  "rubrics_per_row": {
+    "mean": 6.923,
+    "p50": 6,
+    "p90": 10,
+    "max": 17
+  },
+  "hard_rubrics_per_row": {
+    "mean": 4.289,
+    "p50": 5,
+    "p90": 7,
+    "max": 13
+  },
+  "soft_rubrics_per_row": {
+    "mean": 2.634,
+    "p50": 0,
+    "p90": 8,
+    "max": 12
+  },
+  "total_rubrics": 125278,
+  "total_hard_rubrics": 77615,
+  "total_soft_rubrics": 47663,
+  "rubrichub_rule_functions": {
+    "LetterFrequencyChecker": 787,
+    "CommaChecker": 403
+  }
+}

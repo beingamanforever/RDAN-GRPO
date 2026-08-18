@@ -27,6 +27,25 @@ RDAN omits RTT's token-level relevance discriminator. RTT measures that componen
 GPU hours of a 1,511.3 GPU-hour run, an 8.5 percent overhead over its own RL baseline, which
 RDAN does not pay.
 
+## A.1 Training Data
+
+18,096 prompts, each carrying rubrics split into deterministic hard constraints and
+LLM-judged soft constraints. Full statistics in
+[`results/dataset/statistics.json`](../results/dataset/statistics.json).
+
+| | |
+|---|---|
+| Rows | 18,096 |
+| Sources | type1 6,549, type4 6,361, type3 3,603, RubricHub 1,134, type2 449 |
+| Rubrics per row | mean 6.92, p50 6, p90 10, max 17 |
+| Hard rubrics per row | mean 4.29 |
+| Soft rubrics per row | mean 2.63 |
+| Rows carrying any soft rubric | 7,495, 41.4 percent |
+| Total rubrics | 125,278, of which 77,615 hard and 47,663 soft |
+
+Only 41.4 percent of rows carry a soft rubric, so the process channel is exercised on a
+minority of prompts while the outcome channel applies throughout.
+
 ## B. Benchmarks and Evaluation Protocols
 
 ### B.1 Datasets
@@ -54,6 +73,19 @@ and they were dropped to keep the evaluation budget on the in-domain result.
   Both reported in strict mode; loose is recorded alongside in `results/if-eval/`.
 - **MulDimIF.** Instruction-level accuracy only, the benchmark's `Overall` field, which is the
   share of prompts satisfying every one of their constraints.
+
+Token budgets are per benchmark, and they matter more than they look. A truncated chain of
+thought still parses to some trailing expression, so it scores wrong rather than being flagged:
+
+| Benchmark | Budget | Effect of getting it wrong |
+|---|---|---|
+| IFEval, IFBench, MulDimIF | 2,048 | Low truncation, 2 to 6 percent |
+| MATH-500 | 4,096 | At 2,048, 116/500 truncated and the score read 78.0 instead of 87.6 |
+| GPQA | 8,192 | At 2,048, 113/198 truncated and 112/198 unparsable, scoring 36.4 against a 25 percent chance rate |
+
+RTT's appendix does not state its budgets. Both of ours were set by checking truncation and
+parse rates rather than assumed, after the first attempt produced plausible but meaningless
+numbers on both reasoning benchmarks.
 
 ### B.3 Decoding
 

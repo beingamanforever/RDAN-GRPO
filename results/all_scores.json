@@ -1,0 +1,256 @@
+{
+  "base": {
+    "gpqa": {
+      "max_new_tokens": 8192,
+      "questions": 198,
+      "truncated": 31,
+      "unparsed": 21
+    },
+    "ifbench": {
+      "instruction_loose": 0.373134328358209,
+      "instruction_strict": 0.33432835820895523,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.3401360544217687,
+      "prompt_strict": 0.30952380952380953,
+      "prompts": 294,
+      "truncated": 37
+    },
+    "ifeval": {
+      "instruction_loose": 0.9016786570743405,
+      "instruction_strict": 0.8836930455635491,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.8576709796672828,
+      "prompt_strict": 0.8299445471349353,
+      "prompts": 541,
+      "truncated": 12
+    },
+    "math500": {
+      "max_new_tokens": 4096,
+      "questions": 500,
+      "truncated": 57,
+      "unparsed": 0
+    },
+    "muldimif": {
+      "breakdown": {
+        "constraint_category_list": {
+          "Content": 0.8714285714285714,
+          "Format": 0.6938519447929736,
+          "Language": 0.7727930535455861,
+          "Length": 0.7540322580645161
+        },
+        "constraint_category_second_list": {
+          "Content_Identifiers": 0.6,
+          "Content_Keywords": 0.9453836150845254,
+          "Content_Punctuation": 0.8478802992518704,
+          "Format_Json": 0.6470588235294118,
+          "Format_Markdown": 0.7305295950155763,
+          "Format_Table": 0.8388278388278388,
+          "Format_XML": 1.0,
+          "Language_Chinese": 0.9,
+          "Language_English": 0.7719298245614035,
+          "Length_Paragraphs": 0.7419354838709677,
+          "Length_Sentences": 0.8641425389755011,
+          "Length_Words": 0.7987117552334944
+        },
+        "constraint_difficulty_list": {
+          "Level 1": 0.86,
+          "Level 2": 0.6566666666666666,
+          "Level 3": 0.4666666666666667,
+          "Level 4": 0.30333333333333334
+        },
+        "constraint_pattern_list": {
+          "Example": 0.645,
+          "Incorporation": 0.5025,
+          "Listing": 0.5675
+        }
+      },
+      "max_new_tokens": 2048,
+      "overall": 0.5716666666666667,
+      "prompts": 1200,
+      "truncated": 12
+    }
+  },
+  "step-000100": {
+    "ifbench": {
+      "instruction_loose": 0.417910447761194,
+      "instruction_strict": 0.373134328358209,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.3843537414965986,
+      "prompt_strict": 0.3435374149659864,
+      "prompts": 294,
+      "truncated": 39
+    },
+    "ifeval": {
+      "instruction_loose": 0.9160671462829736,
+      "instruction_strict": 0.8980815347721822,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.878003696857671,
+      "prompt_strict": 0.8521256931608133,
+      "prompts": 541,
+      "truncated": 20
+    },
+    "math500": {
+      "max_new_tokens": 4096,
+      "questions": 500,
+      "truncated": 58,
+      "unparsed": 0
+    },
+    "muldimif": {
+      "breakdown": {
+        "constraint_category_list": {
+          "Content": 0.8844155844155844,
+          "Format": 0.767879548306148,
+          "Language": 0.9609261939218524,
+          "Length": 0.7916666666666666
+        },
+        "constraint_category_second_list": {
+          "Content_Identifiers": 0.8,
+          "Content_Keywords": 0.94148244473342,
+          "Content_Punctuation": 0.8703241895261845,
+          "Format_Json": 0.6470588235294118,
+          "Format_Markdown": 0.8068535825545171,
+          "Format_Table": 0.8736263736263736,
+          "Format_XML": 1.0,
+          "Language_Chinese": 0.9,
+          "Language_English": 0.9619883040935673,
+          "Length_Paragraphs": 0.7419354838709677,
+          "Length_Sentences": 0.8685968819599109,
+          "Length_Words": 0.8405797101449275
+        },
+        "constraint_difficulty_list": {
+          "Level 1": 0.8866666666666667,
+          "Level 2": 0.71,
+          "Level 3": 0.6466666666666666,
+          "Level 4": 0.5133333333333333
+        },
+        "constraint_pattern_list": {
+          "Example": 0.7275,
+          "Incorporation": 0.6475,
+          "Listing": 0.6925
+        }
+      },
+      "max_new_tokens": 2048,
+      "overall": 0.6891666666666667,
+      "prompts": 1200,
+      "truncated": 19
+    }
+  },
+  "step-000200": {
+    "ifbench": {
+      "instruction_loose": 0.43283582089552236,
+      "instruction_strict": 0.382089552238806,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.4013605442176871,
+      "prompt_strict": 0.35714285714285715,
+      "prompts": 294,
+      "truncated": 34
+    },
+    "ifeval": {
+      "instruction_loose": 0.9316546762589928,
+      "instruction_strict": 0.9124700239808153,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.8983364140480592,
+      "prompt_strict": 0.8706099815157117,
+      "prompts": 541,
+      "truncated": 15
+    },
+    "muldimif": {
+      "breakdown": {
+        "constraint_category_list": {
+          "Content": 0.8909090909090909,
+          "Format": 0.821831869510665,
+          "Language": 0.9652677279305355,
+          "Length": 0.8051075268817204
+        },
+        "constraint_category_second_list": {
+          "Content_Identifiers": 0.8,
+          "Content_Keywords": 0.9401820546163849,
+          "Content_Punctuation": 0.8877805486284289,
+          "Format_Json": 0.5882352941176471,
+          "Format_Markdown": 0.8504672897196262,
+          "Format_Table": 0.9084249084249084,
+          "Format_XML": 1.0,
+          "Language_Chinese": 0.9,
+          "Language_English": 0.966374269005848,
+          "Length_Paragraphs": 0.7419354838709677,
+          "Length_Sentences": 0.8619153674832962,
+          "Length_Words": 0.8663446054750402
+        },
+        "constraint_difficulty_list": {
+          "Level 1": 0.9,
+          "Level 2": 0.7633333333333333,
+          "Level 3": 0.66,
+          "Level 4": 0.58
+        },
+        "constraint_pattern_list": {
+          "Example": 0.74,
+          "Incorporation": 0.695,
+          "Listing": 0.7425
+        }
+      },
+      "max_new_tokens": 2048,
+      "overall": 0.7258333333333333,
+      "prompts": 1200,
+      "truncated": 20
+    }
+  },
+  "step-000300": {
+    "ifbench": {
+      "instruction_loose": 0.42686567164179107,
+      "instruction_strict": 0.36716417910447763,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.3979591836734694,
+      "prompt_strict": 0.3469387755102041,
+      "prompts": 294,
+      "truncated": 47
+    },
+    "ifeval": {
+      "instruction_loose": 0.935251798561151,
+      "instruction_strict": 0.9100719424460432,
+      "max_new_tokens": 2048,
+      "prompt_loose": 0.9038817005545287,
+      "prompt_strict": 0.866913123844732,
+      "prompts": 541,
+      "truncated": 18
+    },
+    "muldimif": {
+      "breakdown": {
+        "constraint_category_list": {
+          "Content": 0.8987012987012987,
+          "Format": 0.8268506900878294,
+          "Language": 0.9652677279305355,
+          "Length": 0.8104838709677419
+        },
+        "constraint_category_second_list": {
+          "Content_Identifiers": 0.6,
+          "Content_Keywords": 0.9466840052015605,
+          "Content_Punctuation": 0.8927680798004988,
+          "Format_Json": 0.5882352941176471,
+          "Format_Markdown": 0.8598130841121495,
+          "Format_Table": 0.9102564102564102,
+          "Format_XML": 1.0,
+          "Language_Chinese": 0.9,
+          "Language_English": 0.966374269005848,
+          "Length_Paragraphs": 0.7741935483870968,
+          "Length_Sentences": 0.8641425389755011,
+          "Length_Words": 0.8663446054750402
+        },
+        "constraint_difficulty_list": {
+          "Level 1": 0.9033333333333333,
+          "Level 2": 0.7533333333333333,
+          "Level 3": 0.6633333333333333,
+          "Level 4": 0.61
+        },
+        "constraint_pattern_list": {
+          "Example": 0.7325,
+          "Incorporation": 0.705,
+          "Listing": 0.76
+        }
+      },
+      "max_new_tokens": 2048,
+      "overall": 0.7325,
+      "prompts": 1200,
+      "truncated": 15
+    }
+  }
+}

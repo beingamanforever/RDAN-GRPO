@@ -1,0 +1,146 @@
+{
+  "counts": {
+    "fixed_total": 37,
+    "broken_total": 15,
+    "prompts": 541
+  },
+  "examples": {
+    "fixed": [
+      {
+        "prompt": "Write a short blog post about a trip to Japan using less than 300 words.",
+        "instruction_ids": [
+          "length_constraints:number_words"
+        ],
+        "base_response": "**A Quiet Journey Through Japan**\n\nLast month, I traveled to Japan—a country that feels both ancient and futuristic. I began in Kyoto, where the cherry blossoms were in full bloom. Walking through the Arashiyama Bamboo Grove, the towering stalks swayed gently in the breeze, casting dappled shadows on the stone paths. I sat on a moss-covered bench, sipping matcha tea, and felt time slow down.\n\nNext, I visited Tokyo, where neon lights danced over quiet alleyways. I wandered through Shinjuku’s bustling streets, then found peace in a tiny temple tucked between a convenience store and a ramen shop. The stillness there was unexpected—yet profound.\n\nOne of my favorite moments came in a rural village near Nara. I met an elderly woman who taught me how to make *mochi*—soft, chewy rice cakes. Her hands moved with quiet grace, and her smile warmed the cold morning air. We shared a simple meal of miso soup and pickled vegetables, and for a moment, I felt truly connected.\n\nJapan’s blend of tradition and innovation left a lasting impression. From the precision of a train station to the artistry of a tea ceremony, every detail felt intentional. Even the silence—between trains, in gardens, in the quiet of a shop—had meaning.\n\nWhat surprised me most wasn’t the technology or the food, but the deep respect for nature and people. In a world that often rushes, Japan teaches patience. It reminds us that beauty can be found in stillness, in a single bowl of soup, or in the way sunlight hits a temple’s roof.\n\nThis trip wasn’t just about seeing places—it was about feeling presence. Japan showed me ",
+        "base_followed": [
+          false
+        ],
+        "rdan_response": "A trip to Japan was more than I imagined—it was a quiet revolution of order, beauty, and stillness.  \n\nI arrived in Kyoto in early spring, when cherry blossoms painted the streets in soft pink. Walking through the Arashiyama Bamboo Grove felt like stepping into a dream—silence, green, and the rustle of wind through tall stalks. I sat on a stone bench, sipping matcha, and watched time slow.  \n\nIn Tokyo, the contrast was electric. Neon lights flickered along the streets, but beneath the buzz, there was a deep calm. I took a bullet train from Shinjuku to Hakone, the windows glowing with the soft glow of the mountains. At a tiny ramen shop in Shibuya, I tried a bowl so rich and warm it felt like comfort from another world.  \n\nOne morning, I visited a temple in Nara, where deer wandered freely, unbothered by tourists. A monk offered a simple bow—no words, just presence. It reminded me how peace can be found in stillness.  \n\nEvenings brought quiet moments: a tea ceremony in a traditional house, where every movement was deliberate, every gesture meaningful. I learned to appreciate the *wabi-sabi*—the beauty in imperfection, in impermanence.  \n\nJapan taught me that beauty doesn’t always shout. Sometimes, it whispers through a quiet garden, a steaming cup of tea, or a deer’s calm gaze.  \n\nThis trip didn’t just show me a country—it showed me a way of living. Simple. Respectful. Present.  \n\nI left with a notebook full of sketches, a small stone from a river, and a quiet sense of belonging.  \n\nJapan didn’t change me. It reminded me of what I already carried.  \n\n—A quiet journey, deeply",
+        "rdan_followed": [
+          true
+        ]
+      },
+      {
+        "prompt": "Can you elaborate on the following text: \"Increased axle weight increased the damage to the road\"? Your response must contain a title wrapped in double angular brackets, i.e. <<title>>. Use less than 5 sentences.",
+        "instruction_ids": [
+          "detectable_format:title",
+          "length_constraints:number_sentences"
+        ],
+        "base_response": "<<The Impact of Increased Axle Weight on Roads>>  \nIncreased axle weight places greater stress on road surfaces, leading to faster deterioration of pavement materials. This results in more cracks, potholes, and surface degradation over time. Heavier loads reduce the lifespan of roads and increase maintenance costs. The damage is especially severe on bridges and weak road sections. Therefore, exceeding weight limits significantly accelerates road wear and tear.",
+        "base_followed": [
+          true,
+          false
+        ],
+        "rdan_response": "<<The Impact of Axle Weight on Roads>>  \nIncreased axle weight places greater stress on road surfaces, leading to faster deterioration of pavement, cracks, and potholes. Heavier loads cause more significant deformation in the road material over time. This results in higher maintenance costs and reduced road lifespan. Therefore, excessive axle weight directly correlates with increased road damage.",
+        "rdan_followed": [
+          true,
+          true
+        ]
+      },
+      {
+        "prompt": "Which of the following is not a fish: salmon or avocado? Answer this easy question first, then expand into an interesting article about salmon and avocado. Use some words in all caps in your response, but those all-caps words should appear at most 10 times.",
+        "instruction_ids": [
+          "change_case:capital_word_frequency",
+          "change_case:capital_word_frequency"
+        ],
+        "base_response": "Avocado is not a fish. Salmon is a fish.  \n\n---\n\n**Salmon and Avocado: A Tale of Two Nature’s Delights**\n\nWhen you think of the ocean, you might picture schools of fish darting through the waves—glittering, powerful, and full of life. Among them, SALMON stands out as a symbol of resilience, migration, and culinary excellence. A member of the salmon family, it’s a cold-water fish known for its rich flavor, vibrant color, and remarkable journey from freshwater rivers to the open sea and back again.  \n\nOn the other hand, avocado—though often mistaken for a fruit or even a vegetable—belongs to the plant kingdom. It’s a member of the laurel family, and its creamy, buttery flesh is a staple in modern cuisine. While it doesn’t swim or breathe underwater, it plays a vital role in nutrition, offering heart-healthy fats, fiber, and essential vitamins.  \n\nSo, while salmon is a FISH that thrives in aquatic ecosystems, avocado is a plant that grows on trees, often in warm climates. Their worlds may seem far apart, but they share a surprising connection in the kitchen.  \n\nSalmon, with its omega-3 fatty acids, is celebrated for supporting brain health and reducing inflammation. Avocado, with its monounsaturated fats, helps balance cholesterol and supports skin health. Together, they form a powerhouse duo in salads, bowls, and even smoothies.  \n\nInterestingly, both have cultural significance. Salmon has been a cornerstone of Indigenous diets for thousands of years, especially in North America. Avocado, native to Mexico and Central America, has long been a symbol of fertility and abundance ",
+        "base_followed": [
+          false,
+          true
+        ],
+        "rdan_response": "AVOCADO is not a fish.  \n\nSalmon is a fish. Avocado is a fruit.  \n\nNow, let’s dive into something more interesting.  \n\nSalmon, a FAMOUS fish, thrives in cold, clear waters and is known for its rich flavor and vibrant color. It’s not just a tasty meal—it’s a symbol of resilience. Salmon migrate from the ocean to freshwater rivers to spawn, a journey that can span hundreds of miles. This behavior is a marvel of nature, showing how animals adapt and survive.  \n\nOn the other hand, avocado—though not a fish—has its own kind of magic. It’s a fruit, rich in healthy fats, and has been a staple in diets for centuries. From guacamole to smoothies, it’s a versatile, nutritious choice.  \n\nInterestingly, both salmon and avocado are often found together in modern cuisine. A salmon avocado toast is a popular breakfast, combining the omega-3s of salmon with the creamy texture of avocado. It’s a perfect balance of flavor and nutrition.  \n\nSo while one is a fish and the other a fruit, both have a strong presence in our food culture. They may not share the same biology, but they both bring VALUE to our tables.  \n\nIn nature, salmon teaches us about perseverance. In the kitchen, avocado teaches us about balance.  \n\nBoth are worth celebrating.  \n\nFISH, FRUIT, NUTRITION, BALANCE, VALUE.  \n\n(Only 10 all-caps words used.)",
+        "rdan_followed": [
+          true,
+          true
+        ]
+      },
+      {
+        "prompt": "A colt is 5 feet tall. It will grow 6 inches every month. How tall will it be in 3 years? Think step-by-step, then give your answer. Separate your thinking and the final answer by a line with just three \"*\" symbols: ***\nAt the end of your response, please explicitly add a postscript starting with P.P.S",
+        "instruction_ids": [
+          "length_constraints:number_paragraphs",
+          "detectable_content:postscript"
+        ],
+        "base_response": "We are given:\n\n- A colt is initially 5 feet tall.\n- It grows 6 inches every month.\n- We want to know how tall it will be in 3 years.\n\nStep 1: Convert the growth per month to feet.\n6 inches = 0.5 feet (since 12 inches = 1 foot)\n\nStep 2: Calculate the number of months in 3 years.\n3 years = 3 × 12 = 36 months\n\nStep 3: Calculate total growth over 36 months.\nGrowth per month = 0.5 feet  \nTotal growth = 0.5 feet/month × 36 months = 18 feet\n\nStep 4: Add the growth to the initial height.\nInitial height = 5 feet  \nFinal height = 5 feet + 18 feet = 23 feet\n\n***\n23 feet",
+        "base_followed": [
+          true,
+          false
+        ],
+        "rdan_response": "Step 1: Determine how many months are in 3 years.  \nThere are 12 months in a year, so:  \n3 years × 12 months/year = 36 months.\n\nStep 2: The colt grows 6 inches every month.  \nSo over 36 months, the growth is:  \n36 months × 6 inches/month = 216 inches.\n\nStep 3: Convert the initial height to inches.  \nThe colt is initially 5 feet tall.  \nSince 1 foot = 12 inches:  \n5 feet × 12 inches/foot = 60 inches.\n\nStep 4: Add the growth to the initial height.  \n60 inches + 216 inches = 276 inches.\n\nStep 5: Convert the final height back to feet and inches (optional, but helpful for understanding).  \n276 inches ÷ 12 = 23 feet.  \n(276 ÷ 12 = 23 exactly.)\n\nSo, the colt will be 23 feet tall in 3 years.\n\n***\n23 feet\n\nP.P.S This calculation assumes continuous growth at a constant rate and no biological limits or changes in growth patterns.",
+        "rdan_followed": [
+          true,
+          true
+        ]
+      }
+    ],
+    "broken": [
+      {
+        "prompt": "Write me a resume for Matthias Algiers. Use words with all capital letters to highlight key abilities, but make sure that words with all capital letters appear less than 10 times. Wrap the entire response with double quotation marks.",
+        "instruction_ids": [
+          "change_case:capital_word_frequency",
+          "change_case:capital_word_frequency",
+          "startend:quotation"
+        ],
+        "base_response": "\"MATTHIAS ALGIERS  \nSenior Project Manager | Strategic Planning | Cross-Functional Leadership  \n\nExperience:  \nProject Manager, Innovatech Solutions – Led end-to-end development of scalable software platforms, delivering 30% improvement in operational efficiency.  \nOperations Director, Global Reach Inc. – Streamlined supply chain processes, reducing costs by 18% and increasing on-time delivery rates.  \n\nEducation:  \nMBA, Stanford Graduate School of Business  \nBSc in Engineering Management, ETH Zurich  \n\nKey Skills:  \nAnalytical thinking, team collaboration, agile execution, risk assessment, process optimization  \n\nAchievements:  \nRecognized as a Top Performer in 2022 by the National Project Management Association.  \nPioneered a digital transformation initiative adopted across five regional offices.\"",
+        "base_followed": [
+          true,
+          true,
+          true
+        ],
+        "rdan_response": "\"MATTHIAS ALGIERS  \nPROFESSIONAL SUMMARY  \nDedicated and ADAPTABLE professional with extensive experience in strategic planning and team leadership. PROVEN ability to deliver results in fast-paced environments. SKILLED in problem-solving and cross-functional collaboration. Aims to contribute with integrity and focus.  \nEXPERIENCE  \nSenior Project Manager – Tech Solutions Inc.  \nLed initiatives that improved operational efficiency by 30%. Collaborated with stakeholders to define goals and implement scalable solutions.  \n\nProject Coordinator – Innovation Group  \nManaged timelines, resources, and communication across departments. Ensured timely delivery of key deliverables.  \n\nEDUCATION  \nBachelor of Science in Business Administration – University of Applied Sciences  \n\nSKILLS  \nORGANIZATION, COMMUNICATION, ANALYTICS\"",
+        "rdan_followed": [
+          false,
+          true,
+          true
+        ]
+      },
+      {
+        "prompt": "How did a man named John of Brienne become the King of Jerusalem? Explain in a Zen-like style. Your answer should use all lowercase letters and must also contain exactly 3 bullet points in markdown format. Use * to indicate bullets, like:\n* xyz\n* abc\n* opq",
+        "instruction_ids": [
+          "detectable_format:number_bullet_lists",
+          "change_case:english_lowercase"
+        ],
+        "base_response": "* the wind does not speak of kings, only of stillness—john of brienne arrived not with thunder, but with silence, stepping into a land that had long forgotten how to breathe  \n* a crown is not earned by force, but by the willingness to serve—john offered not gold or glory, but presence, and in that offering, the kingdom found a new kind of truth  \n* like a leaf that falls without resistance, john let go of the need to hold power, and in letting go, he became the quiet center of a kingdom that had been waiting to remember itself",
+        "base_followed": [
+          true,
+          true
+        ],
+        "rdan_response": "* the wind does not speak of kings, only of stillness and the passing of shadows  \n* john of brienne did not rule with force, but with a quiet presence, like a leaf drifting to water  \n* in the end, the throne was not won—it simply became available, as breath becomes air  \n\n*  \n*  \n*",
+        "rdan_followed": [
+          false,
+          true
+        ]
+      },
+      {
+        "prompt": "Create a table with a 7 day trip itinerary for India, and a 7 day trip itinerary for China. Separate them with exactly 6 asterisks symbols: *******",
+        "instruction_ids": [
+          "combination:two_responses"
+        ],
+        "base_response": "**7-Day India Itinerary**\n\n*Day 1: Arrival in Delhi*  \nArrive in New Delhi. Check into a hotel in the city center. Evening stroll through the Red Fort and Jama Masjid. Dinner at a local restaurant serving North Indian cuisine.\n\n*Day 2: Delhi – Agra*  \nMorning train or taxi ride to Agra (approx. 3 hours). Visit the iconic Taj Mahal in the early morning to avoid crowds. Afternoon at the Agra Fort and Fateh Singh Garden. Return to Delhi in the evening.\n\n*Day 3: Delhi – Jaipur*  \nTravel to Jaipur (approx. 6 hours by train or flight). Check into a hotel in the city. Visit Amber Fort and Hawa Mahal in the afternoon. Evening at the City Palace and local food market.\n\n*Day 4: Jaipur – Udaipur*  \nTravel to Udaipur (approx. 4 hours by road). Check into a lakeside hotel. Explore the Lake Palace and City Palace. Enjoy a boat ride on Lake Pichola in the evening.\n\n*Day 5: Udaipur – Rishikesh*  \nTravel to Rishikesh (approx. 5 hours). Check into a guesthouse. Visit the Triveni Ghat and explore the spiritual atmosphere. Optional yoga or meditation session.\n\n*Day 6: Rishikesh – Delhi*  \nReturn to Delhi via train or flight. Visit the Lotus Temple in the afternoon. Evening at a local food street for street food and snacks.\n\n*Day 7: Departure*  \nCheck out of hotel. Depart Delhi for home.\n\n---\n\n*******  \n\n**7-Day China Itinerary**\n\n*Day 1: Arrival in Beijing*  \nArrive in Beijing. Check into a hotel in the city center. Evening visit to the Forbidden City and the Great Wall (early morning visit to avoid crowds). Dinner at a local Beijing restaurant (try Peking duck).\n\n*Day 2: Beijing – Xi’an*  \nTr",
+        "base_followed": [
+          true
+        ],
+        "rdan_response": "**7-Day India Itinerary**\n\n| Day | Activity | Location |\n|-----|---------|----------|\n| 1 | Arrival in Delhi; visit the Red Fort and Qutub Minar; evening at Jama Masjid | Delhi |\n| 2 | Explore the historic city of Agra; visit the Taj Mahal in the morning; afternoon at Agra Fort | Agra |\n| 3 | Travel to Jaipur; visit Amber Fort, Hawa Mahal, and City Palace | Jaipur |\n| 4 | Day trip to Ranthambore National Park (optional safari); return to Jaipur | Ranthambore (near Jaipur) |\n| 5 | Travel to Udaipur; explore Lake Pichola, City Palace, and Jag Mandir | Udaipur |\n| 6 | Visit Pushkar; explore the Pushkar Fair (if held), temples, and camel rides | Pushkar |\n| 7 | Departure from Udaipur; return to Delhi or fly home | Delhi/Udaipur |\n\n******\n\n*******  \n\n**7-Day China Itinerary**\n\n| Day | Activity | Location |\n|-----|---------|----------|\n| 1 | Arrival in Beijing; visit the Forbidden City, Tiananmen Square, and the Great Wall (Morning section) | Beijing |\n| 2 | Explore the Temple of Heaven and the Summer Palace; evening at the Beijing Opera | Beijing |\n| 3 | Travel to Xi'an; visit the Terracotta Army and the Ancient City Wall | Xi'an |\n| 4 | Day trip to the Banpo Museum and the Ming Tombs (optional) | Xi'an |\n| 5 | Travel to Hangzhou; visit West Lake and the Lingyin Temple | Hangzhou |\n| 6 | Explore the Suzhou gardens and the classical water towns; visit the classical architecture | Suzhou |\n| 7 | Departure from Suzhou; return to Beijing or fly home | Suzhou/Beijing |",
+        "rdan_followed": [
+          false
+        ]
+      },
+      {
+        "prompt": "Write a letter to your friend who recently moved away. Your entire response should be in English, and in all capital letters. The letter o should appear at least 40 times.",
+        "instruction_ids": [
+          "change_case:english_capital",
+          "keywords:letter_frequency"
+        ],
+        "base_response": "DEAR FRIEND,  \n\nI HOPE THIS LETTER FINDS YOU WELL AND FULL OF HOPE. I HAVE BEEN THINKING OF YOU SO MUCH SINCE YOU MOVED AWAY. EVERY DAY, I SEE THE SUN RISE, AND I SMILE BECAUSE I REMEMBER OUR OLD HABITS, OUR LAUGHTER, OUR LONG WALKS, AND OUR ODD, OVERTHROWING DREAMS. WE USED TO GO TO THE PARK, AND WE ALWAYS SAW THE OAK TREES, THE OSTRICHES, THE ORANGEOAKS, AND THE OCEAN OF ODDS. I STILL REMEMBER HOW WE WOULD SIT ON THE ROOFTOP, TALKING ABOUT OUR FUTURES, OUR FAVORITE FOODS, OUR FEAR OF THE FOG, AND OUR FONDNESS FOR OMELETS, OIL, ORANGES, AND OAKS.  \n\nEVERYTHING ABOUT YOU IS ODDLY BEAUTIFUL. YOUR SMILE, YOUR VOICE, YOUR OPEN HEART—EVERYTHING IS OVERTHROWING. I MISS OUR ODD COFFEE BREAKS, OUR ODD JOKE, OUR ODD DANCE IN THE KITCHEN, AND OUR ODDLY SILENT MOMENTS WHEN WE JUST WATCHED THE STARS. I STILL HEAR YOUR LAUGHTER, EVEN IN THE QUIET OF MY ROOM.  \n\nI KNOW YOU HAVE A NEW HOME, NEW FRIENDS, NEW ROUTES, AND NEW ODDS. BUT I REMEMBER HOW WE USED TO SHARE OUR OVEN, OUR OATS, OUR OBLIGATIONS, AND OUR OBLIGATIONS TO EACH OTHER. I HOPE YOU ARE HAPPY, THAT YOU ARE SAFE, AND THAT YOU STILL FIND OCEANS OF JOY IN YOUR DAILY ROUTINE.  \n\nPLEASE KEEP ME IN YOUR THOUGHTS. I WILL ALWAYS BE HERE, OVERTHROWING MY LIFE TO REMEMBER YOU. WE MAY BE FAR, BUT OUR OBLIGATIONS TO EACH OTHER STAY. I WILL ALWAYS BE YOUR FRIEND, YOUR ODD, YOUR OAK, YOUR OCEAN, YOUR OBLIGATION, YOUR OVERTHROWING HOPE.  \n\nSEE YOU SOON, IN A WORLD FULL OF O, OF ODDS, OF OCEANS, OF OAKS, OF OMELETS, OF OBLIGATIONS, OF OVERTHROWING LAUGHTER, OF ODDNESS, OF OCEANIC WINDS, OF OAKEN HILLS, OF ODDLY BEAUTIFUL MOMENTS.  \n\nWITH AL",
+        "base_followed": [
+          true,
+          true
+        ],
+        "rdan_response": "DEAR FRIEND,  \n\nO, HOW I MISS YOU! O, THE DAYS WE SPENT TOGETHER ARE STILL OVERTAKING MY MIND. O, EVERYTHING ABOUT OUR TIME TOGETHER IS STILL OVERTHROWING MY HEART. O, I THINK OF OUR LAUGHS, OUR ODD JOKE, OUR OCEAN-BOUND WALKS, OUR OVERTHROWN EXCITEMENT, OUR ODDLY PERFECT MOMENTS. O, I SEE YOU IN EVERY OAK, IN EVERY ODDLY SHAPED ROCK, IN EVERY OMINOUS SUNSET. O, THE WORLD SEEMS TO BE WITHOUT YOU, AND THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT O, THAT",
+        "rdan_followed": [
+          false,
+          true
+        ]
+      }
+    ]
+  }
+}
