@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -129,7 +130,26 @@ def _merge(base_model: str, adapter_dir: Path, tokenizer: Any) -> None:
     merged = PeftModel.from_pretrained(base, str(adapter_dir)).merge_and_unload()
     merged.save_pretrained(str(merged_dir))
     tokenizer.save_pretrained(str(merged_dir))
+    _copy_tokenizer(base_model, merged_dir)
     print(f"saved merged weights to {merged_dir}")
+
+
+def _copy_tokenizer(base_model: str, merged_dir: Path) -> None:
+    """Carry the base tokenizer across verbatim instead of leaving the re-serialized one.
+
+    transformers 5 writes ``extra_special_tokens`` as a list and splits the chat template into
+    its own file, and transformers 4 can read neither. vLLM and the ROLL runtime are pinned to
+    transformers 4, so a checkpoint keeping the re-serialized tokenizer cannot be evaluated or
+    trained against there. LoRA adds no tokens, so the base tokenizer is the correct one.
+    """
+
+    source = Path(base_model)
+    if not source.is_dir():
+        return
+    for name in ("tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt"):
+        if (source / name).is_file():
+            shutil.copyfile(source / name, merged_dir / name)
+    (merged_dir / "chat_template.jinja").unlink(missing_ok=True)
 
 
 def _build_trainer(args: argparse.Namespace, data: Any, tokenizer: Any, peft_config: Any) -> Any:
