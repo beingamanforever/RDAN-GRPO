@@ -62,9 +62,17 @@ All three ship deterministic scorers. Generation happens in `scripts/eval_if.py`
 shells out to each benchmark's own evaluator, so the numbers are the benchmarks' own rather
 than a reimplementation of their rules.
 
-Out-of-domain reasoning benchmarks (MATH-500, GPQA, MMLU-Pro, AIME, HMMT) were **not** run.
-RDAN trains only on instruction following, so those measure regression rather than improvement,
-and they were dropped to keep the evaluation budget on the in-domain result.
+Out-of-domain reasoning benchmarks measure whether instruction-following training cost the
+model reasoning it already had, so flat is the good outcome:
+
+| Benchmark | Questions | Scorer |
+|---|---|---|
+| MATH-500 | 500 | `math_verify`, so equivalent renderings of one value still match |
+| GPQA Diamond | 198 | answer-letter extraction, options permuted under a fixed seed |
+| MMLU-Pro | 12,032 | answer-letter extraction |
+
+AIME and HMMT were dropped: they are 30 questions each, which needs many samples per question
+to be readable, and a non-thinking 4B model scores near the floor on both.
 
 ### B.2 Metrics
 
@@ -97,7 +105,7 @@ numbers on both reasoning benchmarks.
 | top-p | 0.8 | n/a |
 | top-k | 20 | n/a |
 | completions per instance | 5, averaged | **1** |
-| max new tokens | not stated | 2,048 |
+| max new tokens | not stated | per benchmark, see above |
 
 RTT follows the Qwen3 Tech Report recipe and averages five sampled completions. We generate one
 greedy completion, which is each benchmark's own published protocol and is deterministic, but it
@@ -107,8 +115,9 @@ between our own checkpoints are unaffected, since every model is decoded identic
 Prompt templates use each model's own chat template with thinking disabled, matching the
 `qwen3_nothinking` template the policy was trained under.
 
-Truncation at the 2,048 token cap, recorded because a truncated response fails nearly every
-constraint and would otherwise be mistaken for an instruction-following failure:
+Truncation on the instruction-following benchmarks at their 2,048 cap, recorded because a
+truncated response fails nearly every constraint and would otherwise be mistaken for an
+instruction-following failure:
 
 | Model | IFEval | IFBench | MulDimIF |
 |---|---|---|---|
