@@ -1,0 +1,34 @@
+{
+  "constraint_pattern_list": {
+    "Listing": "304/400=0.76",
+    "Incorporation": "282/400=0.705",
+    "Example": "293/400=0.7325"
+  },
+  "constraint_category_list": {
+    "Format": "659/797=0.8268506900878294",
+    "Length": "603/744=0.8104838709677419",
+    "Language": "667/691=0.9652677279305355",
+    "Content": "692/770=0.8987012987012987"
+  },
+  "constraint_category_second_list": {
+    "Format_XML": "5/5=1.0",
+    "Format_Table": "497/546=0.9102564102564102",
+    "Length_Words": "538/621=0.8663446054750402",
+    "Language_English": "661/684=0.966374269005848",
+    "Length_Sentences": "388/449=0.8641425389755011",
+    "Content_Keywords": "728/769=0.9466840052015605",
+    "Format_Json": "10/17=0.5882352941176471",
+    "Content_Punctuation": "358/401=0.8927680798004988",
+    "Format_Markdown": "552/642=0.8598130841121495",
+    "Language_Chinese": "9/10=0.9",
+    "Content_Identifiers": "3/5=0.6",
+    "Length_Paragraphs": "24/31=0.7741935483870968"
+  },
+  "constraint_difficulty_list": {
+    "Level 1": "271/300=0.9033333333333333",
+    "Level 2": "226/300=0.7533333333333333",
+    "Level 3": "199/300=0.6633333333333333",
+    "Level 4": "183/300=0.61"
+  },
+  "Overall": "879/1200=0.7325"
+}

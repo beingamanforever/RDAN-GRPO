@@ -17,6 +17,14 @@ dist/
 /output/
 /wandb/
 
+# Per-prompt generations and the raw worker logs. Scores, curves and metrics are committed;
+# these are 140MB and regenerate from the published checkpoints.
+results/**/responses.jsonl
+results/**/scored_input.jsonl
+results/**/native/
+results/training/wandb/
+results/training/*.log
+
 # agent instructions and root license duplicate stay local
 CLAUDE.md
 CLAUIDE.md

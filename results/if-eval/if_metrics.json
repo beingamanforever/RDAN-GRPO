@@ -1,0 +1,202 @@
+{
+  "step-000100": {
+    "ifbench": {
+      "instruction_loose": 0.417910447761194,
+      "instruction_strict": 0.373134328358209,
+      "prompt_loose": 0.3843537414965986,
+      "prompt_strict": 0.3435374149659864
+    },
+    "ifeval": {
+      "instruction_loose": 0.9160671462829736,
+      "instruction_strict": 0.8980815347721822,
+      "prompt_loose": 0.878003696857671,
+      "prompt_strict": 0.8521256931608133
+    },
+    "muldimif": {
+      "Overall": 0.6891666666666667,
+      "constraint_category_list.Content": 0.8844155844155844,
+      "constraint_category_list.Format": 0.767879548306148,
+      "constraint_category_list.Language": 0.9609261939218524,
+      "constraint_category_list.Length": 0.7916666666666666,
+      "constraint_category_second_list.Content_Identifiers": 0.8,
+      "constraint_category_second_list.Content_Keywords": 0.94148244473342,
+      "constraint_category_second_list.Content_Punctuation": 0.8703241895261845,
+      "constraint_category_second_list.Format_Json": 0.6470588235294118,
+      "constraint_category_second_list.Format_Markdown": 0.8068535825545171,
+      "constraint_category_second_list.Format_Table": 0.8736263736263736,
+      "constraint_category_second_list.Format_XML": 1.0,
+      "constraint_category_second_list.Language_Chinese": 0.9,
+      "constraint_category_second_list.Language_English": 0.9619883040935673,
+      "constraint_category_second_list.Length_Paragraphs": 0.7419354838709677,
+      "constraint_category_second_list.Length_Sentences": 0.8685968819599109,
+      "constraint_category_second_list.Length_Words": 0.8405797101449275,
+      "constraint_difficulty_list.Level 1": 0.8866666666666667,
+      "constraint_difficulty_list.Level 2": 0.71,
+      "constraint_difficulty_list.Level 3": 0.6466666666666666,
+      "constraint_difficulty_list.Level 4": 0.5133333333333333,
+      "constraint_pattern_list.Example": 0.7275,
+      "constraint_pattern_list.Incorporation": 0.6475,
+      "constraint_pattern_list.Listing": 0.6925
+    }
+  },
+  "step-000200": {
+    "ifbench": {
+      "instruction_loose": 0.43283582089552236,
+      "instruction_strict": 0.382089552238806,
+      "prompt_loose": 0.4013605442176871,
+      "prompt_strict": 0.35714285714285715
+    },
+    "ifeval": {
+      "instruction_loose": 0.9316546762589928,
+      "instruction_strict": 0.9124700239808153,
+      "prompt_loose": 0.8983364140480592,
+      "prompt_strict": 0.8706099815157117
+    },
+    "muldimif": {
+      "Overall": 0.7258333333333333,
+      "constraint_category_list.Content": 0.8909090909090909,
+      "constraint_category_list.Format": 0.821831869510665,
+      "constraint_category_list.Language": 0.9652677279305355,
+      "constraint_category_list.Length": 0.8051075268817204,
+      "constraint_category_second_list.Content_Identifiers": 0.8,
+      "constraint_category_second_list.Content_Keywords": 0.9401820546163849,
+      "constraint_category_second_list.Content_Punctuation": 0.8877805486284289,
+      "constraint_category_second_list.Format_Json": 0.5882352941176471,
+      "constraint_category_second_list.Format_Markdown": 0.8504672897196262,
+      "constraint_category_second_list.Format_Table": 0.9084249084249084,
+      "constraint_category_second_list.Format_XML": 1.0,
+      "constraint_category_second_list.Language_Chinese": 0.9,
+      "constraint_category_second_list.Language_English": 0.966374269005848,
+      "constraint_category_second_list.Length_Paragraphs": 0.7419354838709677,
+      "constraint_category_second_list.Length_Sentences": 0.8619153674832962,
+      "constraint_category_second_list.Length_Words": 0.8663446054750402,
+      "constraint_difficulty_list.Level 1": 0.9,
+      "constraint_difficulty_list.Level 2": 0.7633333333333333,
+      "constraint_difficulty_list.Level 3": 0.66,
+      "constraint_difficulty_list.Level 4": 0.58,
+      "constraint_pattern_list.Example": 0.74,
+      "constraint_pattern_list.Incorporation": 0.695,
+      "constraint_pattern_list.Listing": 0.7425
+    }
+  },
+  "step-000300": {
+    "ifbench": {
+      "instruction_loose": 0.42686567164179107,
+      "instruction_strict": 0.36716417910447763,
+      "prompt_loose": 0.3979591836734694,
+      "prompt_strict": 0.3469387755102041
+    },
+    "ifeval": {
+      "instruction_loose": 0.935251798561151,
+      "instruction_strict": 0.9100719424460432,
+      "prompt_loose": 0.9038817005545287,
+      "prompt_strict": 0.866913123844732
+    },
+    "muldimif": {
+      "Overall": 0.7325,
+      "constraint_category_list.Content": 0.8987012987012987,
+      "constraint_category_list.Format": 0.8268506900878294,
+      "constraint_category_list.Language": 0.9652677279305355,
+      "constraint_category_list.Length": 0.8104838709677419,
+      "constraint_category_second_list.Content_Identifiers": 0.6,
+      "constraint_category_second_list.Content_Keywords": 0.9466840052015605,
+      "constraint_category_second_list.Content_Punctuation": 0.8927680798004988,
+      "constraint_category_second_list.Format_Json": 0.5882352941176471,
+      "constraint_category_second_list.Format_Markdown": 0.8598130841121495,
+      "constraint_category_second_list.Format_Table": 0.9102564102564102,
+      "constraint_category_second_list.Format_XML": 1.0,
+      "constraint_category_second_list.Language_Chinese": 0.9,
+      "constraint_category_second_list.Language_English": 0.966374269005848,
+      "constraint_category_second_list.Length_Paragraphs": 0.7741935483870968,
+      "constraint_category_second_list.Length_Sentences": 0.8641425389755011,
+      "constraint_category_second_list.Length_Words": 0.8663446054750402,
+      "constraint_difficulty_list.Level 1": 0.9033333333333333,
+      "constraint_difficulty_list.Level 2": 0.7533333333333333,
+      "constraint_difficulty_list.Level 3": 0.6633333333333333,
+      "constraint_difficulty_list.Level 4": 0.61,
+      "constraint_pattern_list.Example": 0.7325,
+      "constraint_pattern_list.Incorporation": 0.705,
+      "constraint_pattern_list.Listing": 0.76
+    }
+  },
+  "step-000400": {
+    "ifbench": {
+      "instruction_loose": 0.4417910447761194,
+      "instruction_strict": 0.37910447761194027,
+      "prompt_loose": 0.41496598639455784,
+      "prompt_strict": 0.35374149659863946
+    },
+    "ifeval": {
+      "instruction_loose": 0.9268585131894485,
+      "instruction_strict": 0.9112709832134293,
+      "prompt_loose": 0.88909426987061,
+      "prompt_strict": 0.866913123844732
+    },
+    "muldimif": {
+      "Overall": 0.7408333333333333,
+      "constraint_category_list.Content": 0.9012987012987013,
+      "constraint_category_list.Format": 0.8306148055207027,
+      "constraint_category_list.Language": 0.9667149059334298,
+      "constraint_category_list.Length": 0.8225806451612904,
+      "constraint_category_second_list.Content_Identifiers": 0.6,
+      "constraint_category_second_list.Content_Keywords": 0.951885565669701,
+      "constraint_category_second_list.Content_Punctuation": 0.8952618453865336,
+      "constraint_category_second_list.Format_Json": 0.5294117647058824,
+      "constraint_category_second_list.Format_Markdown": 0.8644859813084113,
+      "constraint_category_second_list.Format_Table": 0.9065934065934066,
+      "constraint_category_second_list.Format_XML": 1.0,
+      "constraint_category_second_list.Language_Chinese": 0.9,
+      "constraint_category_second_list.Language_English": 0.9678362573099415,
+      "constraint_category_second_list.Length_Paragraphs": 0.7096774193548387,
+      "constraint_category_second_list.Length_Sentences": 0.8685968819599109,
+      "constraint_category_second_list.Length_Words": 0.8808373590982287,
+      "constraint_difficulty_list.Level 1": 0.9,
+      "constraint_difficulty_list.Level 2": 0.77,
+      "constraint_difficulty_list.Level 3": 0.6666666666666666,
+      "constraint_difficulty_list.Level 4": 0.6266666666666667,
+      "constraint_pattern_list.Example": 0.74,
+      "constraint_pattern_list.Incorporation": 0.715,
+      "constraint_pattern_list.Listing": 0.7675
+    }
+  },
+  "step-000420": {
+    "ifbench": {
+      "instruction_loose": 0.4298507462686567,
+      "instruction_strict": 0.3641791044776119,
+      "prompt_loose": 0.3979591836734694,
+      "prompt_strict": 0.336734693877551
+    },
+    "ifeval": {
+      "instruction_loose": 0.9316546762589928,
+      "instruction_strict": 0.9112709832134293,
+      "prompt_loose": 0.8964879852125693,
+      "prompt_strict": 0.8687615526802218
+    },
+    "muldimif": {
+      "Overall": 0.7466666666666667,
+      "constraint_category_list.Content": 0.9025974025974026,
+      "constraint_category_list.Format": 0.835633626097867,
+      "constraint_category_list.Language": 0.9638205499276411,
+      "constraint_category_list.Length": 0.8252688172043011,
+      "constraint_category_second_list.Content_Identifiers": 0.6,
+      "constraint_category_second_list.Content_Keywords": 0.9505851755526658,
+      "constraint_category_second_list.Content_Punctuation": 0.9002493765586035,
+      "constraint_category_second_list.Format_Json": 0.5294117647058824,
+      "constraint_category_second_list.Format_Markdown": 0.8644859813084113,
+      "constraint_category_second_list.Format_Table": 0.9175824175824175,
+      "constraint_category_second_list.Format_XML": 1.0,
+      "constraint_category_second_list.Language_Chinese": 0.9,
+      "constraint_category_second_list.Language_English": 0.9649122807017544,
+      "constraint_category_second_list.Length_Paragraphs": 0.7741935483870968,
+      "constraint_category_second_list.Length_Sentences": 0.8708240534521158,
+      "constraint_category_second_list.Length_Words": 0.8840579710144928,
+      "constraint_difficulty_list.Level 1": 0.91,
+      "constraint_difficulty_list.Level 2": 0.7833333333333333,
+      "constraint_difficulty_list.Level 3": 0.6766666666666666,
+      "constraint_difficulty_list.Level 4": 0.6166666666666667,
+      "constraint_pattern_list.Example": 0.7375,
+      "constraint_pattern_list.Incorporation": 0.725,
+      "constraint_pattern_list.Listing": 0.7775
+    }
+  }
+}

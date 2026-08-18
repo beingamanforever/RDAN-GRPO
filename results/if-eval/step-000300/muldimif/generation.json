@@ -1,0 +1,5 @@
+{
+  "prompts": 1200,
+  "truncated": 15,
+  "max_new_tokens": 2048
+}

@@ -215,7 +215,9 @@ Instruction-level accuracy (strict), full official datasets, greedy decoding.
 | Qwen3-4B-Instruct-2507 (base) | 82.99 | 30.95 | 57.17 |
 | RDAN step 100 | 85.21 | 34.35 | 68.92 |
 | **RDAN step 200** | **87.06** | **35.71** | 72.58 |
-| RDAN step 300 | 86.69 | 34.69 | **73.25** |
+| RDAN step 300 | 86.69 | 34.69 | 73.25 |
+| RDAN step 400 | 86.69 | 35.37 | 74.08 |
+| RDAN step 420 | 86.88 | 33.67 | **74.67** |
 
 Change from base:
 
@@ -224,27 +226,49 @@ Change from base:
 | step 100 | +2.22 | +3.40 | +11.75 |
 | step 200 | +4.07 | +4.76 | +15.42 |
 | step 300 | +3.70 | +3.74 | +16.08 |
+| step 400 | +3.70 | +4.42 | +16.91 |
+| step 420 | +3.89 | +2.72 | +17.50 |
 
 Raw per-benchmark output, including loose mode and rubric-level accuracy, is in
 [`results/if-eval/summary.json`](../results/if-eval/summary.json) and the per-model MulDimIF
 breakdowns beside it.
 
+Out-of-domain reasoning, same decoding, per-benchmark token budgets from B.2:
+
+| Model | MATH-500 | GPQA Diamond |
+|---|---|---|
+| Qwen3-4B-Instruct-2507 (base) | 87.60 | 55.05 |
+| RDAN step 100 | 88.40 | **59.09** |
+| RDAN step 200 | 88.80 | 58.08 |
+| RDAN step 300 | **89.60** | 57.58 |
+| RDAN step 400 | 86.40 | 58.59 |
+| RDAN step 420 | 87.20 | 55.56 |
+
 ### Reading these results
 
-IFEval and IFBench peak at step 200 and dip slightly at step 300. The differences are two to
-three prompts out of 541 and 294, which is within the noise of single greedy runs, so the
-honest reading is a plateau rather than a regression. MulDimIF rises monotonically and is still
-climbing at step 300; it is also the benchmark closest to the training distribution, so part of
-that larger gain is distribution overlap rather than pure generalization.
+IFEval and IFBench peak at step 200 and stay flat through 420, moving by two to six prompts out
+of 541 and 294. That is within the noise of single greedy runs, so the honest reading is a
+plateau reached by step 200 rather than continued improvement. MulDimIF is the exception: it
+rises monotonically across all five checkpoints and is still climbing at 420. It is also the
+benchmark closest to the training distribution, so part of that larger gain is distribution
+overlap rather than pure generalization.
+
+The reasoning benchmarks tell a second story. Both rise early and decay back to base by step
+420: GPQA runs 55.05 base, 59.09, 58.08, 57.58, 58.59, 55.56, and MATH-500 runs 87.60 base,
+88.40, 88.80, 89.60, 86.40, 87.20. The early GPQA gain was never better science; at step 100
+unparsable answers fell from 21/198 to 12/198 and truncations from 31 to 18, which accounts for
+it entirely. What decays is that format compliance on a long chain of thought, not reasoning.
+Training past 200 buys MulDimIF and gives back out-of-domain robustness, which makes step 200
+the checkpoint to use unless MulDimIF is the target.
 
 ## F. Artifacts
 
 | Artifact | Location |
 |---|---|
-| Checkpoints, Hugging Face weights | `beingamanforever/qwen3-rl`, private, one folder per step |
-| Benchmark scores | `results/if-eval/` |
-| Training metrics, per step | `output/<exp_name>/logs/metrics.jsonl` on the training host |
-| Training curves | `output/<exp_name>/logs/curves/*.png` |
+| Checkpoints, Hugging Face weights | `beingamanforever/Qwen3-4B-RDAN-GRPO`, private, one folder per step |
+| Benchmark scores | `results/if-eval/`, `results/ood-eval/` |
+| Training metrics, per step | `results/training/metrics.jsonl`, steps 1 to 430 |
+| Training curves | `results/training/curves/*.png` |
 | W&B run | project `rdan-grpo-qwen3-4b`, group `qwen3-4b-instruct-2507` |
 
 Checkpoints carry both Hugging Face weights, loadable with `from_pretrained`, and the sharded
@@ -261,4 +285,8 @@ times larger and can only serve a resume on the machine that wrote it.
 - **`reward/process_quality_mean` stayed flat during training** while constraint satisfaction
   rose steadily. The process channel supplies roughly half the advantage variance on every step,
   but its effect on judged quality is not yet visible in the training curve.
-- **No out-of-domain regression evidence**, since the reasoning benchmarks were not run.
+- **Training stopped at step 430 of a planned 500**, when the A100 host was released. The
+  optimizer state lived only on that host, so the run cannot be resumed.
+- **Every score is a single greedy completion**, so differences of a few prompts are not
+  separable from noise. The plateau and decay readings above rest on the direction being
+  consistent across checkpoints, not on any individual gap.
