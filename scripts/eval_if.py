@@ -256,8 +256,8 @@ BENCHMARKS: dict[str, dict[str, Any]] = {
     "muldimif": {
         "load": _load_muldimif,
         "score": _score_muldimif,
-        # Share of prompts satisfying every one of their constraints.
-        "headline": "total_acc",
+        # MulDimIF names its all-constraints-satisfied rate "Overall".
+        "headline": "Overall",
     },
 }
 
