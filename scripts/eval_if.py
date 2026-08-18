@@ -207,8 +207,10 @@ BENCHMARKS: dict[str, dict[str, Any]] = {
     "ifeval": {
         "load": _load_ifeval,
         "score": lambda a, d, r, x: _score_google_style(a, d, r, x, "ifeval"),
-        "entry": "evaluation_main.py",
-        "cwd": "Benchmark/instruction_following_eval",
+        # IFEval imports itself as a package, so it runs from Benchmark rather than from its
+        # own directory the way IFBench's flat evaluator does.
+        "entry": "instruction_following_eval/evaluation_main.py",
+        "cwd": "Benchmark",
         "data": "Benchmark/instruction_following_eval/data/input_data.jsonl",
         "headline": "prompt_strict",
     },
