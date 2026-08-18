@@ -190,7 +190,21 @@ def _score_muldimif(
         extra_paths=("Code", "Code/evaluation"),
     )
     score = json.loads(save.read_text(encoding="utf-8"))
-    return {key: float(value) for key, value in _flatten(score).items() if isinstance(value, (int, float))}
+    parsed = {key: _ratio(value) for key, value in _flatten(score).items()}
+    return {key: value for key, value in parsed.items() if value is not None}
+
+
+def _ratio(value: Any) -> float | None:
+    """Read MulDimIF's score encoding, which writes every rate as "hits/total=rate"."""
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str) and "=" in value:
+        try:
+            return float(value.rsplit("=", 1)[1])
+        except ValueError:
+            return None
+    return None
 
 
 def _run_scorer(args: argparse.Namespace, command: list[str], cwd: Path, extra_paths: tuple[str, ...] = ()) -> None:
@@ -242,7 +256,8 @@ BENCHMARKS: dict[str, dict[str, Any]] = {
     "muldimif": {
         "load": _load_muldimif,
         "score": _score_muldimif,
-        "headline": None,
+        # Share of prompts satisfying every one of their constraints.
+        "headline": "total_acc",
     },
 }
 
