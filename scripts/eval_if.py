@@ -187,24 +187,27 @@ def _score_muldimif(
         args,
         ["Code/evaluation/evaluation.py", f"--file_path={payload}", f"--save_path={save}"],
         args.rtt_root / "Benchmark/MulDimIF",
+        extra_paths=("Code", "Code/evaluation"),
     )
     score = json.loads(save.read_text(encoding="utf-8"))
     return {key: float(value) for key, value in _flatten(score).items() if isinstance(value, (int, float))}
 
 
-def _run_scorer(args: argparse.Namespace, command: list[str], cwd: Path) -> None:
-    """Invoke a benchmark's own evaluator from the directory its imports expect.
+def _run_scorer(args: argparse.Namespace, command: list[str], cwd: Path, extra_paths: tuple[str, ...] = ()) -> None:
+    """Invoke a benchmark's own evaluator with the import paths its modules expect.
 
     Running a script puts that script's directory on sys.path rather than the working
     directory, so an evaluator importing itself as a package needs its parent on PYTHONPATH.
+    MulDimIF additionally imports sibling packages from inside its own source tree.
     """
 
+    paths = [str(cwd), *(str(cwd / entry) for entry in extra_paths)]
     subprocess.run(
         [str(args.benchmark_python), *command],
         cwd=cwd,
         check=True,
         capture_output=True,
-        env={**os.environ, "PYTHONPATH": str(cwd)},
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(paths)},
     )
 
 
