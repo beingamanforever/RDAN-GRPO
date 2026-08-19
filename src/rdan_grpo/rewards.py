@@ -1,9 +1,43 @@
 """Rubric reward construction and hard-soft channel extraction."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
+
+RUBRICHUB_SOURCE = "rubrichub_instruction_following"
+# Fixed rubric axis: every batch is one dense [responses, MAX_RUBRICS] tensor.
+MAX_RUBRICS = 20
+
+
+def hard_mask(source: str, truth: Mapping[str, Any], count: int) -> list[bool]:
+    """Return which of a row's rubrics are deterministically checkable.
+
+    An explicit mask wins over the source's own convention, so a row can carry judged rubrics
+    appended after its checkers. Checkers are looked up by position, so appended rubrics must
+    come last and must be marked soft here, or a checker lookup runs off the end of its array.
+    """
+
+    if "hard_mask" in truth and source != RUBRICHUB_SOURCE:
+        mask = truth["hard_mask"]
+        if not isinstance(mask, list) or len(mask) != count or any(not isinstance(value, bool) for value in mask):
+            raise ValueError("hard mask is malformed")
+        return list(mask)
+    if source in {"type1", "type2", "type3"}:
+        return [True] * count
+    if source == "type4":
+        checkers = truth.get("checker")
+        if not isinstance(checkers, list) or len(checkers) != count:
+            raise ValueError("type4 checker metadata does not match the rubric count")
+        return [isinstance(checker, str) and checker.startswith("[rule]") for checker in checkers]
+    if source == RUBRICHUB_SOURCE:
+        mask = truth.get("hard_mask")
+        if not isinstance(mask, list) or len(mask) != count or any(not isinstance(value, bool) for value in mask):
+            raise ValueError("RubricHub hard mask is malformed")
+        return list(mask)
+    raise ValueError(f"unsupported reward source: {source}")
 
 
 @dataclass(frozen=True)

@@ -28,13 +28,11 @@ from roll.pipeline.rlvr.rewards.rubrics_llm_judge_reward_worker import (
 )
 
 from rdan_grpo.judge import JudgeRequest, OpenRouterJudge, aggregate_stats, load_judge_config
+from rdan_grpo.rewards import MAX_RUBRICS, RUBRICHUB_SOURCE, hard_mask
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
 
 ROOT = Path(__file__).resolve().parents[2]
 JUDGE_CONFIG = ROOT / "configs/judges/openrouter.json"
-RUBRICHUB_SOURCE = "rubrichub_instruction_following"
-# Fixed rubric axis: every batch is one dense [responses, MAX_RUBRICS] tensor.
-MAX_RUBRICS = 20
 INACTIVE = -100.0
 
 
@@ -100,7 +98,7 @@ def _evaluate_hard_rubrics(
 
     if not isinstance(rubrics, list) or not 1 <= len(rubrics) <= MAX_RUBRICS:
         raise ValueError(f"rubrics must contain between 1 and {MAX_RUBRICS} entries")
-    hard_mask = _hard_mask(source, truth, len(rubrics))
+    mask = hard_mask(source, truth, len(rubrics))
     routes = _rubrichub_routes(truth, len(rubrics)) if source == RUBRICHUB_SOURCE else None
 
     scores = [INACTIVE] * MAX_RUBRICS
@@ -109,7 +107,7 @@ def _evaluate_hard_rubrics(
     judge_rubrics: list[dict[str, Any]] = []
     checker_failures = 0
     for index, rubric in enumerate(rubrics):
-        if not hard_mask[index]:
+        if not mask[index]:
             judge_rubrics.append(_soft_rubric(rubric, index))
             scores[index] = 0.0
             continue
@@ -251,22 +249,6 @@ def _prompt_keys(data: DataProto) -> list[str]:
     if ids is not None:
         return [str(value) for value in ids]
     return [hashlib.sha256(str(prompt).encode()).hexdigest() for prompt in data.non_tensor_batch["prompt"]]
-
-
-def _hard_mask(source: str, truth: Mapping[str, Any], count: int) -> list[bool]:
-    if source in {"type1", "type2", "type3"}:
-        return [True] * count
-    if source == "type4":
-        checkers = truth.get("checker")
-        if not isinstance(checkers, list) or len(checkers) != count:
-            raise ValueError("type4 checker metadata does not match the rubric count")
-        return [isinstance(checker, str) and checker.startswith("[rule]") for checker in checkers]
-    if source == RUBRICHUB_SOURCE:
-        mask = truth.get("hard_mask")
-        if not isinstance(mask, list) or len(mask) != count or any(not isinstance(value, bool) for value in mask):
-            raise ValueError("RubricHub hard mask is malformed")
-        return list(mask)
-    raise ValueError(f"unsupported reward source: {source}")
 
 
 def _rubrichub_routes(truth: Mapping[str, Any], count: int) -> list[dict[str, Any]]:

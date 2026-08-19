@@ -29,7 +29,7 @@ from rdan_grpo.compat import install_rtt_runtime
 from rdan_grpo.config import ResponseConfig, load_config, updates_per_step
 from rdan_grpo.distillation import rank, select_pairs, select_sft
 from rdan_grpo.judge import JudgeRequest, JudgeUnavailableError, OpenRouterJudge, aggregate_stats
-from rdan_grpo.rewards import extract_quality, score_rubrics
+from rdan_grpo.rewards import extract_quality, hard_mask, score_rubrics
 from rdan_grpo.rules import evaluate_python_rule, evaluate_rubrichub_rule
 from rdan_grpo.scalar import build_scalar_output
 from rdan_grpo.tracking import RdanTracker, plot_curves, redact
@@ -250,6 +250,24 @@ def test_soft_only_response_carries_no_outcome_signal_but_full_process_signal() 
     assert output.raw_aon.tolist() == [1.0] * GROUP_SIZE
     assert output.response_advantage.abs().max().item() == 0.0
     assert output.quality_advantage.abs().sum().item() > 0
+
+
+def test_appended_rubrics_are_judged_without_disturbing_checker_positions() -> None:
+    """A row may carry judged rubrics appended after its checkers.
+
+    Checkers are looked up by position, so the expanded dataset relies on an explicit mask
+    marking the appended rubrics soft. Were they classified hard, every checker lookup past the
+    original count would run off the end of its array.
+    """
+
+    truth = {"instruction_id_list": ["a", "b"], "kwargs": [{}, {}], "hard_mask": [True, True, False, False]}
+    assert hard_mask("type1", truth, 4) == [True, True, False, False]
+
+    # Without an explicit mask the source's own convention still governs, unchanged.
+    assert hard_mask("type1", {"instruction_id_list": ["a", "b"], "kwargs": [{}, {}]}, 2) == [True, True]
+
+    with pytest.raises(ValueError, match="hard mask is malformed"):
+        hard_mask("type1", {"hard_mask": [True, False]}, 3)
 
 
 def test_score_rubrics_and_quality_reject_malformed_inputs() -> None:
